@@ -1,0 +1,6 @@
+{
+  "name": "RMA Flow & Triagem de Estoque",
+  "description": "Sistema avançado de gestão logística de devoluções (RMA), triagem com fotos categorizadas, rich text e controle de estoque para Mercado Livre, Shopee e outros.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

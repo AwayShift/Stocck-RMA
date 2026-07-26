@@ -1,0 +1,139 @@
+{
+  "productName": "RMA Flow - Web Logística & Segurança",
+  "version": "2.4.0",
+  "date": "2026-07-26",
+  "description": "Especificação completa de requisitos de produto, arquitetura, coleção do Firestore, regras de RBAC e casos de testes de segurança e automação para a aplicação RMA Flow.",
+  "roles": [
+    {
+      "role": "admin",
+      "description": "Acesso irrestrito a todas as funcionalidades, inclusão/edição/exclusão de SKUs do catálogo, exclusão de registros de RMA e reset do banco de dados."
+    },
+    {
+      "role": "operator",
+      "description": "Acesso a triagens de RMA, estoque físico, baixas de estoque, acompanhamento de casos de disputas e relatórios. Leitura simples do catálogo base de produtos."
+    }
+  ],
+  "collections": [
+    {
+      "name": "users",
+      "path": "/users/{uid}",
+      "fields": {
+        "uid": "string",
+        "email": "string",
+        "name": "string",
+        "role": "admin | operator",
+        "createdAt": "ISO 8601 string"
+      }
+    },
+    {
+      "name": "base_products",
+      "path": "/base_products/{id}",
+      "fields": {
+        "id": "string",
+        "sku": "string",
+        "name": "string",
+        "category": "string",
+        "brand": "string",
+        "barcodes": "array of string",
+        "minStock": "number",
+        "notes": "string",
+        "createdAt": "ISO 8601 string"
+      }
+    },
+    {
+      "name": "triage_units",
+      "path": "/triage_units/{id}",
+      "fields": {
+        "id": "string",
+        "trackingCode": "string",
+        "platform": "Mercado Livre | Shopee | Amazon | Kabum | FAVS",
+        "baseProductId": "string",
+        "baseProductSku": "string",
+        "baseProductName": "string",
+        "serialNumber": "string",
+        "deviceStatus": "Em bom estado | Avariado / Quebrado | Embalagem Danificada | Peça Faltante / Incompleto",
+        "packageStatus": "Lacrado | Aberto | Sem Embalagem",
+        "destinationSector": "Estoque | Descarte / Sucata | Fornecedor / Garantia | Assistência Técnica",
+        "triageNotes": "string",
+        "images": "array of string",
+        "operatorEmail": "string",
+        "operatorName": "string",
+        "status": "Estoque | Baixado",
+        "checkoutSector": "string",
+        "checkoutDate": "ISO 8601 string",
+        "checkoutOperator": "string",
+        "createdAt": "ISO 8601 string"
+      }
+    },
+    {
+      "name": "cases",
+      "path": "/cases/{id}",
+      "fields": {
+        "id": "string",
+        "code": "string",
+        "platform": "Mercado Livre | Shopee | Amazon",
+        "createdAt": "YYYY-MM-DD",
+        "reason": "string",
+        "status": "Pendente | Resolvido",
+        "resolution": "Favorável | Não Favorável | Pago Parcial | Pendente de Resolução",
+        "value": "number",
+        "notes": "string"
+      }
+    },
+    {
+      "name": "audit_logs",
+      "path": "/audit_logs/{id}",
+      "fields": {
+        "id": "string",
+        "timestamp": "ISO 8601 string",
+        "userEmail": "string",
+        "action": "string",
+        "details": "string"
+      }
+    }
+  ],
+  "securityTestVectors": [
+    {
+      "id": "SEC-001",
+      "category": "Authentication",
+      "vector": "Direct route access without token/session",
+      "expectedBehavior": "System blocks access and renders Login screen."
+    },
+    {
+      "id": "SEC-002",
+      "category": "RBAC Bypassing",
+      "vector": "Operator attempting to delete base product SKU or reset database",
+      "expectedBehavior": "Denied by interface and Firestore security rules."
+    },
+    {
+      "id": "SEC-003",
+      "category": "Cross-Site Scripting (XSS)",
+      "vector": "Script injection in trackingCode, serialNumber, triageNotes fields (e.g. <script>alert(1)</script>)",
+      "expectedBehavior": "React automatically escapes DOM rendering. Zero JS execution."
+    },
+    {
+      "id": "SEC-004",
+      "category": "Data Type & Format Validation",
+      "vector": "Passing negative values or malformed string in dispute value field",
+      "expectedBehavior": "Parser validates numerical input and handles BRL currency formatting safely."
+    },
+    {
+      "id": "SEC-005",
+      "category": "File Upload & Media Security",
+      "vector": "Corrupted non-image payloads in evidence photo attachments",
+      "expectedBehavior": "Accepts only valid image formats and enforces size boundaries."
+    },
+    {
+      "id": "SEC-006",
+      "category": "Firestore Security Rules",
+      "vector": "Attempting client-side SDK modification of user role attribute",
+      "expectedBehavior": "Blocked by Firestore security rules preventing self privilege elevation."
+    },
+    {
+      "id": "SEC-007",
+      "category": "Concurrency & Rate Limiting",
+      "vector": "High frequency bulk checkouts via asynchronous loops",
+      "expectedBehavior": "System handles requests cleanly without client crash or state corruption."
+    }
+  ]
+}

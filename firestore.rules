@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Rules for users collection
+    match /users/{userId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for products catalog (base products)
+    match /products/{productId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for triage units
+    match /triage_units/{unitId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for cases tracking
+    match /cases/{caseId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for logs
+    match /logs/{logId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}
