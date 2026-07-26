@@ -402,7 +402,7 @@ export default function App() {
             <div className="flex items-center gap-3">
               {/* PRD Download for QA & Security Testing */}
               <a
-                href="/PRD_RMA_FLOW.md"
+                href="./PRD_RMA_FLOW.md"
                 download="PRD_RMA_FLOW.md"
                 className="hidden lg:flex items-center gap-1.5 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 rounded-lg text-xs font-black text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer shadow-sm"
                 title="Baixar o arquivo PRD completo (.MD) para testes de segurança e automação QA"
@@ -450,7 +450,7 @@ export default function App() {
       {/* Mobile Navigation Tabs (Secondary top bar) */}
       <div className="md:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-4 flex gap-1 shadow-inner items-center" id="mobile-navigation">
         <a
-          href="/PRD_RMA_FLOW.md"
+          href="./PRD_RMA_FLOW.md"
           download="PRD_RMA_FLOW.md"
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0"
         >
