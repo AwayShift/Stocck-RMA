@@ -105,6 +105,20 @@ export default function LogsAudit({ userRole }: LogsAuditProps) {
     }
   };
 
+  if (userRole !== 'admin') {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center max-w-lg mx-auto space-y-4 my-12 shadow-2xl" id="logs-access-denied">
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl w-16 h-16 mx-auto flex items-center justify-center">
+          <Lock className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-white">Acesso Restrito a Administradores</h3>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Os logs de auditoria e eventos do sistema contêm dados sensíveis de conformidade e governança, estando restritos a contas com privilégios de Administrador (RBAC).
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200" id="logs-audit-container">
       {/* Overview Block */}

@@ -34,6 +34,11 @@
 }
 
 /* Base style resets */
+html {
+  scrollbar-gutter: stable;
+  overflow-y: scroll;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: #020617;

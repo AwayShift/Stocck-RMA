@@ -307,14 +307,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
       setErrorMessage('Por favor, selecione um produto de referência do Catálogo.');
       return;
     }
-    if (destinationSector === 'Openbox' && !trackingCode.trim()) {
-      setErrorMessage('O Código STI é obrigatório para produtos direcionados ao Openbox.');
-      return;
-    }
-    if (!customerReason.trim()) {
-      setErrorMessage('Por favor, preencha o motivo/reclamação do cliente.');
-      return;
-    }
+    const finalTrackingCode = trackingCode.trim() || `STI-${Math.floor(10000 + Math.random() * 90000)}`;
 
     const refProduct = products.find(p => p.id === selectedProductId);
     if (!refProduct) {
@@ -326,7 +319,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
 
     const newTriage: TriageUnit = {
       id: 'tr-' + Date.now(),
-      trackingCode: trackingCode.trim(),
+      trackingCode: finalTrackingCode,
       baseProductId: refProduct.id,
       baseProductName: refProduct.name,
       baseProductSku: refProduct.sku,

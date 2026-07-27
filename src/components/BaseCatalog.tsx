@@ -28,9 +28,10 @@ interface BaseCatalogProps {
   products: BaseProduct[];
   onSaveProduct: (product: BaseProduct) => Promise<void>;
   onDeleteProduct: (id: string) => Promise<void>;
+  userRole?: 'admin' | 'operator' | null;
 }
 
-export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct }: BaseCatalogProps) {
+export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct, userRole }: BaseCatalogProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedVoltage, setSelectedVoltage] = useState('Todas');
@@ -450,14 +451,16 @@ export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct }
             Cadastre os produtos oficiais da empresa para padronizar e facilitar a triagem de devoluções.
           </p>
         </div>
-        <button 
-          onClick={handleAddClick}
-          className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-bold shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30 transition-all cursor-pointer"
-          id="btn-add-product"
-        >
-          <Plus className="w-4 h-4" />
-          Cadastrar Produto Master
-        </button>
+        {userRole === 'admin' && (
+          <button 
+            onClick={handleAddClick}
+            className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-bold shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30 transition-all cursor-pointer"
+            id="btn-add-product"
+          >
+            <Plus className="w-4 h-4" />
+            Cadastrar Produto Master
+          </button>
+        )}
       </div>
 
       {/* Main Catalog View */}
@@ -611,22 +614,26 @@ export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct }
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
-                        <button 
-                          onClick={() => handleEditClick(product)}
-                          className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-850 transition-colors cursor-pointer"
-                          title="Editar produto"
-                          id={`btn-edit-${product.id}`}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteClick(product.id, product.name)}
-                          className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-850 hover:border-rose-500/30 transition-colors cursor-pointer"
-                          title="Excluir produto"
-                          id={`btn-delete-${product.id}`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {userRole === 'admin' && (
+                          <>
+                            <button 
+                              onClick={() => handleEditClick(product)}
+                              className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-850 transition-colors cursor-pointer"
+                              title="Editar produto"
+                              id={`btn-edit-${product.id}`}
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteClick(product.id, product.name)}
+                              className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-850 hover:border-rose-500/30 transition-colors cursor-pointer"
+                              title="Excluir produto"
+                              id={`btn-delete-${product.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

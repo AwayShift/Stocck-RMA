@@ -67,6 +67,7 @@ export default function App() {
 
   // Cross-component communication
   const [selectedTriageUnit, setSelectedTriageUnit] = useState<TriageUnit | null>(null);
+  const [isRbacModalOpen, setIsRbacModalOpen] = useState<boolean>(false);
 
   // Listen for Authentication state
   useEffect(() => {
@@ -260,18 +261,25 @@ export default function App() {
     }
   };
 
-  // Helper to toggle role instantly inside DB for testing/evaluating RBAC constraints
+  // Helper to set specific role inside DB for testing/evaluating RBAC constraints
+  const handleSelectRole = async (targetRole: 'admin' | 'operator') => {
+    if (!user) return;
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      await updateDoc(userDocRef, { role: targetRole });
+      setUserRole(targetRole);
+      await createAuditLog('TOGGLE_DEMO_ROLE', `Alterou próprio cargo de demonstração para: ${targetRole === 'admin' ? 'Administrador' : 'Logística Sênior (Operador)'}`);
+      setIsRbacModalOpen(false);
+    } catch (err) {
+      console.error('Failed to set role:', err);
+    }
+  };
+
+  // Helper to toggle role or open role selector
   const handleToggleDemoRole = async () => {
     if (!user) return;
     const newRole = userRole === 'admin' ? 'operator' : 'admin';
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await updateDoc(userDocRef, { role: newRole });
-      setUserRole(newRole);
-      await createAuditLog('TOGGLE_DEMO_ROLE', `Alterou próprio cargo de demonstração para: ${newRole === 'admin' ? 'Administrador' : 'Operador'}`);
-    } catch (err) {
-      console.error('Failed to toggle demo role:', err);
-    }
+    await handleSelectRole(newRole);
   };
 
   const handleLogout = async () => {
@@ -334,7 +342,7 @@ export default function App() {
               <button
                 onClick={() => { setActiveTab('rma'); setSelectedTriageUnit(null); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'rma' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  activeTab === 'rma' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
                 id="nav-rma"
               >
@@ -345,7 +353,7 @@ export default function App() {
               <button
                 onClick={() => { setActiveTab('catalog'); setSelectedTriageUnit(null); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'catalog' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  activeTab === 'catalog' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
                 id="nav-catalog"
               >
@@ -356,7 +364,7 @@ export default function App() {
               <button
                 onClick={() => { setActiveTab('stock'); setSelectedTriageUnit(null); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'stock' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  activeTab === 'stock' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
                 id="nav-stock"
               >
@@ -367,7 +375,7 @@ export default function App() {
               <button
                 onClick={() => { setActiveTab('movement'); setSelectedTriageUnit(null); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'movement' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  activeTab === 'movement' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
                 id="nav-movement"
               >
@@ -378,7 +386,7 @@ export default function App() {
               <button
                 onClick={() => { setActiveTab('cases'); setSelectedTriageUnit(null); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'cases' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  activeTab === 'cases' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
                 id="nav-cases"
               >
@@ -389,7 +397,7 @@ export default function App() {
               <button
                 onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'logs' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  activeTab === 'logs' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
                 id="nav-logs"
               >
@@ -413,25 +421,31 @@ export default function App() {
 
               {/* Quick RBAC role switcher for testing */}
               <button
-                onClick={handleToggleDemoRole}
-                className="hidden lg:flex items-center gap-1.5 px-3 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-lg text-xs font-black text-slate-400 hover:text-white cursor-pointer transition-all"
-                title="Troca instantaneamente o seu cargo de teste corporativo no Firestore para avaliar as regras de segurança"
+                onClick={() => setIsRbacModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-lg text-xs font-black text-slate-400 hover:text-white cursor-pointer transition-all"
+                title="Troca o seu cargo de teste corporativo para avaliar as regras de segurança"
+                id="btn-toggle-rbac"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-sky-400 animate-spin" style={{ animationDuration: '6s' }} />
                 Alternar Cargo (RBAC)
               </button>
 
-              <div className="flex items-center gap-2.5 text-right">
+              <button 
+                onClick={() => setIsRbacModalOpen(true)}
+                className="flex items-center gap-2.5 text-right cursor-pointer hover:opacity-90 transition-opacity"
+                id="account-role-label"
+                title="Clique para alternar o cargo (Admin / Logística Sênior)"
+              >
                 <div className="hidden sm:block">
                   <span className="text-sm font-bold text-white block leading-tight">{userName}</span>
                   <span className={`text-[10px] font-black uppercase tracking-wider ${userRole === 'admin' ? 'text-rose-400' : 'text-sky-400'}`}>
-                    {userRole === 'admin' ? 'Admin' : 'Operador'}
+                    {userRole === 'admin' ? 'Admin' : 'Logística Sênior'}
                   </span>
                 </div>
                 <div className="p-2.5 bg-slate-950 border border-slate-850 rounded-xl">
                   <User className="w-5 h-5 text-slate-400" />
                 </div>
-              </div>
+              </button>
 
               {/* Secure logout */}
               <button 
@@ -460,7 +474,7 @@ export default function App() {
         <button
           onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'dashboard' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-405'
+            activeTab === 'dashboard' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
           <TrendingUp className="w-3.5 h-3.5" />
@@ -469,7 +483,7 @@ export default function App() {
         <button
           onClick={() => { setActiveTab('rma'); setSelectedTriageUnit(null); }}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'rma' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-405'
+            activeTab === 'rma' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
           <FolderMinus className="w-3.5 h-3.5" />
@@ -478,7 +492,7 @@ export default function App() {
         <button
           onClick={() => { setActiveTab('catalog'); setSelectedTriageUnit(null); }}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'catalog' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-405'
+            activeTab === 'catalog' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
           <Database className="w-3.5 h-3.5" />
@@ -487,7 +501,7 @@ export default function App() {
         <button
           onClick={() => { setActiveTab('stock'); setSelectedTriageUnit(null); }}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'stock' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-405'
+            activeTab === 'stock' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
           <Package className="w-3.5 h-3.5" />
@@ -496,7 +510,7 @@ export default function App() {
         <button
           onClick={() => { setActiveTab('movement'); setSelectedTriageUnit(null); }}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'movement' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-405'
+            activeTab === 'movement' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
           <Boxes className="w-3.5 h-3.5" />
@@ -505,7 +519,7 @@ export default function App() {
         <button
           onClick={() => { setActiveTab('cases'); setSelectedTriageUnit(null); }}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'cases' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-405'
+            activeTab === 'cases' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
@@ -514,7 +528,7 @@ export default function App() {
         <button
           onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'logs' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'text-slate-455'
+            activeTab === 'logs' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
           <ShieldAlert className="w-3.5 h-3.5" />
@@ -591,6 +605,7 @@ export default function App() {
                 products={products}
                 onSaveProduct={handleSaveProduct}
                 onDeleteProduct={handleDeleteProduct}
+                userRole={userRole}
               />
             )}
 
@@ -650,6 +665,70 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* RBAC Role Selector Modal */}
+      {isRbacModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-[100]" id="modal-rbac-picker">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-sky-400" />
+                Alternar Cargo (RBAC)
+              </h3>
+              <button 
+                onClick={() => setIsRbacModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-300">
+              Selecione o perfil de usuário para testar as permissões do sistema em tempo real:
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => handleSelectRole('admin')}
+                className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                  userRole === 'admin' 
+                    ? 'bg-rose-500/10 border-rose-500/40 text-rose-300' 
+                    : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                }`}
+                id="role-option-admin"
+              >
+                <div>
+                  <span className="font-bold text-sm block">Admin (Administrador)</span>
+                  <span className="text-[11px] text-slate-400">Acesso total: excluir itens, logs de auditoria e reset de banco</span>
+                </div>
+                {userRole === 'admin' && <span className="text-xs font-black text-rose-400">ATIVO</span>}
+              </button>
+
+              <button
+                onClick={() => handleSelectRole('operator')}
+                className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                  userRole === 'operator' 
+                    ? 'bg-sky-500/10 border-sky-500/40 text-sky-300' 
+                    : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                }`}
+                id="role-option-operator"
+              >
+                <div>
+                  <span className="font-bold text-sm block">Logística Sênior (Operador)</span>
+                  <span className="text-[11px] text-slate-400">Acesso operacional: triagem de RMA, estoque e catálogo de leitura</span>
+                </div>
+                {userRole === 'operator' && <span className="text-xs font-black text-sky-400">ATIVO</span>}
+              </button>
+            </div>
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setIsRbacModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

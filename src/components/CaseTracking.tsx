@@ -464,8 +464,8 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                       </td>
                       <td className="px-6 py-4.5 whitespace-nowrap text-right">
                         <div className="flex justify-end items-center gap-2">
-                          {/* Quick Resolution Actions */}
-                          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800" title="Marcar Resolução do Caso">
+                          {/* Quick Resolution Options */}
+                          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800" title="Opções de Resolução do Caso">
                             <button
                               onClick={() => handleResolveCase(c, 'Favorável')}
                               className={`p-1.5 rounded-lg transition-all cursor-pointer ${
@@ -474,6 +474,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                                   : 'text-slate-500 hover:text-emerald-400 hover:bg-slate-900 border border-transparent'
                               }`}
                               title="Favorável"
+                              id={`btn-resolve-fav-${c.id}`}
                             >
                               <ThumbsUp className="w-3 h-3" />
                             </button>
@@ -485,6 +486,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                                   : 'text-slate-500 hover:text-rose-400 hover:bg-slate-900 border border-transparent'
                               }`}
                               title="Não Favorável"
+                              id={`btn-resolve-unfav-${c.id}`}
                             >
                               <ThumbsDown className="w-3 h-3" />
                             </button>
@@ -496,6 +498,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                                   : 'text-slate-500 hover:text-amber-400 hover:bg-slate-900 border border-transparent'
                               }`}
                               title="Pago Parcial"
+                              id={`btn-resolve-partial-${c.id}`}
                             >
                               <Coins className="w-3 h-3" />
                             </button>
@@ -504,6 +507,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                                 onClick={() => handleResolveCase(c, 'Pendente')}
                                 className="p-1.5 rounded-lg transition-all cursor-pointer text-slate-500 hover:text-sky-400 hover:bg-slate-900 border border-transparent"
                                 title="Reabrir Caso"
+                                id={`btn-reopen-${c.id}`}
                               >
                                 <RotateCcw className="w-3 h-3" />
                               </button>
@@ -512,10 +516,12 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
 
                           <button
                             onClick={() => handleEditCase(c)}
-                            className="p-2 bg-slate-950 border border-slate-800 hover:border-slate-700 hover:bg-slate-900 rounded-lg text-slate-400 hover:text-white transition-all cursor-pointer"
+                            className="px-3 py-1.5 bg-slate-950 border border-slate-800 hover:border-slate-700 hover:bg-slate-900 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
                             title="Editar Acompanhamento"
+                            id={`btn-edit-${c.id}`}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
+                            Editar
                           </button>
                           
                           <button
@@ -697,7 +703,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                 </div>
 
                 {/* Actions Footer */}
-                <div className="pt-4 border-t border-slate-800/60 flex items-center justify-end gap-3.5">
+                <div className="pt-4 border-t border-slate-800/60 flex items-center justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => setIsFormOpen(false)}
@@ -709,6 +715,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                     type="submit"
                     disabled={isSubmitting}
                     className="px-5 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-sky-500/10 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="btn-save-case"
                   >
                     {isSubmitting ? 'Salvando...' : 'Salvar Acompanhamento'}
                   </button>

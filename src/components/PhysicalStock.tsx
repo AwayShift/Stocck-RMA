@@ -44,6 +44,9 @@ export default function PhysicalStock({
   const [activeTab, setActiveTab] = useState<'Todos' | DestinationSectorType | 'Baixado'>('Todos');
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(initialSelectedUnit?.id || null);
 
+  // Multi-select state
+  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
+
   // Quick edit/action states
   const [editingSector, setEditingSector] = useState<DestinationSectorType | ''>('');
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
@@ -77,13 +80,16 @@ export default function PhysicalStock({
   // Filter logic
   const filteredUnits = units.filter(unit => {
     // 1. Search filter
-    const term = searchTerm.toLowerCase();
-    const matchesSearch = 
-      unit.baseProductName.toLowerCase().includes(term) ||
-      unit.baseProductSku.toLowerCase().includes(term) ||
-      unit.trackingCode.toLowerCase().includes(term) ||
-      unit.platform.toLowerCase().includes(term) ||
-      unit.customerReason.toLowerCase().includes(term);
+    const term = searchTerm.toLowerCase().trim();
+    const matchesSearch = !term ||
+      (unit.baseProductName || '').toLowerCase().includes(term) ||
+      (unit.baseProductSku || '').toLowerCase().includes(term) ||
+      (unit.trackingCode || '').toLowerCase().includes(term) ||
+      (unit.platform || '').toLowerCase().includes(term) ||
+      (unit.customerReason || '').toLowerCase().includes(term) ||
+      (unit.destinationSector || '').toLowerCase().includes(term) ||
+      (unit.notes || '').toLowerCase().includes(term) ||
+      (unit.id || '').toLowerCase().includes(term);
 
     // 2. Tab sector filter
     if (activeTab === 'Todos') {
@@ -91,9 +97,54 @@ export default function PhysicalStock({
     } else if (activeTab === 'Baixado') {
       return matchesSearch && unit.status === 'Baixado';
     } else {
-      return matchesSearch && unit.status === 'Estoque' && unit.destinationSector === activeTab;
+      const matchesSector = unit.destinationSector === activeTab;
+      // If a search term is present, allow finding the matching item across active stock items
+      return unit.status === 'Estoque' && (term ? matchesSearch : (matchesSearch && matchesSector));
     }
   });
+
+  // Toggle selection for a single item
+  const handleToggleSelectUnit = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedUnitIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  // Toggle select all filtered units
+  const handleToggleSelectAll = () => {
+    const activeFilteredIds = filteredUnits.map(u => u.id);
+    const allSelected = activeFilteredIds.length > 0 && activeFilteredIds.every(id => selectedUnitIds.includes(id));
+    if (allSelected) {
+      setSelectedUnitIds(prev => prev.filter(id => !activeFilteredIds.includes(id)));
+    } else {
+      setSelectedUnitIds(prev => Array.from(new Set([...prev, ...activeFilteredIds])));
+    }
+  };
+
+  // Batch checkout execution
+  const handleBatchCheckout = () => {
+    if (selectedUnitIds.length === 0) return;
+    setConfirmConfig({
+      title: 'Confirmar Baixa em Lote',
+      message: `Deseja dar baixa em lote para ${selectedUnitIds.length} item(ns) selecionado(s) do estoque?`,
+      type: 'success',
+      onConfirm: async () => {
+        try {
+          for (const id of selectedUnitIds) {
+            await onCheckoutUnit(id);
+          }
+          setActionSuccess(`Baixa efetuada com sucesso para ${selectedUnitIds.length} item(ns)!`);
+          setTimeout(() => setActionSuccess(null), 3000);
+          setSelectedUnitIds([]);
+        } catch (err) {
+          console.error(err);
+          setActionError('Erro ao executar baixa em lote.');
+          setTimeout(() => setActionError(null), 3000);
+        }
+      }
+    });
+  };
 
   // Action: Dar Baixa (with custom confirmation)
   const handleCheckout = (id: string) => {
@@ -250,22 +301,49 @@ export default function PhysicalStock({
           </button>
         </div>
 
-        {/* Search Input bar */}
-        <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row gap-4 bg-slate-900" id="stock-search-bar">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-            <input 
-              type="text"
-              placeholder="Pesquisar por SKU, Nome, Plataforma ou Código de Rastreio..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
-              id="input-stock-search"
-            />
+        {/* Search Input and Batch Actions bar */}
+        <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-slate-900" id="stock-search-bar">
+          <div className="flex flex-1 items-center gap-4 max-w-xl">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+              <input 
+                type="text"
+                placeholder="Pesquisar por SKU, Nome, Plataforma ou Código de Rastreio..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                id="input-stock-search"
+              />
+            </div>
+            {filteredUnits.length > 0 && activeTab !== 'Baixado' && (
+              <label className="flex items-center gap-2 cursor-pointer bg-slate-950 px-3 py-2 border border-slate-800 rounded-xl hover:border-slate-700 transition-all text-xs font-bold text-slate-300 shrink-0">
+                <input 
+                  type="checkbox"
+                  checked={filteredUnits.length > 0 && filteredUnits.every(u => selectedUnitIds.includes(u.id))}
+                  onChange={handleToggleSelectAll}
+                  className="w-4 h-4 rounded text-sky-500 bg-slate-900 border-slate-700 cursor-pointer"
+                  id="checkbox-select-all"
+                />
+                <span>Selecionar Todos ({selectedUnitIds.length})</span>
+              </label>
+            )}
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Filter className="w-3.5 h-3.5 text-sky-400" />
-            <span>Mostrando <strong>{filteredUnits.length}</strong> unidades filtradas</span>
+
+          <div className="flex items-center gap-3 justify-between sm:justify-end">
+            {selectedUnitIds.length > 0 && (
+              <button
+                onClick={handleBatchCheckout}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2 cursor-pointer animate-in fade-in"
+                id="btn-batch-checkout"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Dar Baixa em Lote ({selectedUnitIds.length})</span>
+              </button>
+            )}
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Filter className="w-3.5 h-3.5 text-sky-400" />
+              <span>Mostrando <strong>{filteredUnits.length}</strong> unidades</span>
+            </div>
           </div>
         </div>
 
@@ -295,9 +373,22 @@ export default function PhysicalStock({
                   <div className="space-y-3">
                     {/* Header */}
                     <div className="flex justify-between items-start gap-2">
-                      <span className="font-mono text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded">
-                        {unit.baseProductSku}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {unit.status !== 'Baixado' && (
+                          <input 
+                            type="checkbox"
+                            checked={selectedUnitIds.includes(unit.id)}
+                            onChange={(e) => handleToggleSelectUnit(unit.id, e as any)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded text-sky-500 bg-slate-950 border-slate-700 cursor-pointer"
+                            id={`checkbox-unit-${unit.id}`}
+                            title="Selecionar unidade para ação em lote"
+                          />
+                        )}
+                        <span className="font-mono text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded">
+                          {unit.baseProductSku}
+                        </span>
+                      </div>
                       <span className="font-mono text-[10px] text-slate-500 font-bold">
                         #{unit.trackingCode}
                       </span>
