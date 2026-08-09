@@ -485,7 +485,6 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                       <option value="Shopee">Shopee</option>
                       <option value="Amazon">Amazon</option>
                       <option value="Kabum">Kabum</option>
-                      <option value="FAVS">FAVS</option>
                     </select>
                   </div>
 
@@ -638,7 +637,6 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                                 if (refProduct.imagesProduct && refProduct.imagesProduct.length > 0) {
                                   setPhotosProduct(refProduct.imagesProduct);
                                 } else {
-                                  // Fallback for legacy items with no separated categories
                                   const hasSeparated = !!(
                                     (refProduct.imagesProduct && refProduct.imagesProduct.length > 0) ||
                                     (refProduct.imagesBox && refProduct.imagesBox.length > 0) ||

@@ -154,23 +154,86 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
     return counts;
   }, [monthUnits, daysInMonth]);
 
-  // Compute entries per week (5 weeks of the month)
-  // Week 1: 1-7, Week 2: 8-14, Week 3: 15-21, Week 4: 22-28, Week 5: 29+
+  // Compute dynamic calendar weeks based on full Monday-Friday workweeks
+  const monthWeeks = useMemo(() => {
+    const weeks: {
+      index: number;
+      title: string;
+      range: string;
+      startDate: Date;
+      endDate: Date;
+    }[] = [];
+
+    const firstDayOfMonth = new Date(selectedYear, selectedMonthIdx, 1);
+    const lastDayOfMonth = new Date(selectedYear, selectedMonthIdx, daysInMonth);
+
+    // Find Monday of the week containing firstDayOfMonth
+    let currMon = new Date(firstDayOfMonth);
+    const dayOfWeek = currMon.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    currMon.setDate(currMon.getDate() + diffToMon);
+    currMon.setHours(0, 0, 0, 0);
+
+    while (currMon <= lastDayOfMonth) {
+      const friDate = new Date(currMon);
+      friDate.setDate(friDate.getDate() + 4);
+      friDate.setHours(23, 59, 59, 999);
+
+      // If Friday is before the 1st of the month, this workweek ended in the previous month
+      if (friDate < firstDayOfMonth) {
+        currMon.setDate(currMon.getDate() + 7);
+        continue;
+      }
+
+      const sunDate = new Date(currMon);
+      sunDate.setDate(sunDate.getDate() + 6);
+      sunDate.setHours(23, 59, 59, 999);
+
+      const startMonNum = currMon.getDate();
+      const startMonMonth = currMon.getMonth();
+      const endFriNum = friDate.getDate();
+      const endFriMonth = friDate.getMonth();
+
+      let rangeStr = '';
+      if (startMonMonth === endFriMonth) {
+        rangeStr = `${String(startMonNum).padStart(2, '0')} a ${String(endFriNum).padStart(2, '0')}`;
+      } else {
+        const m1 = String(startMonMonth + 1).padStart(2, '0');
+        const m2 = String(endFriMonth + 1).padStart(2, '0');
+        rangeStr = `${String(startMonNum).padStart(2, '0')}/${m1} a ${String(endFriNum).padStart(2, '0')}/${m2}`;
+      }
+
+      weeks.push({
+        index: weeks.length,
+        title: `Semana ${weeks.length + 1}`,
+        range: rangeStr,
+        startDate: new Date(currMon),
+        endDate: sunDate
+      });
+
+      // Advance to next Monday
+      currMon.setDate(currMon.getDate() + 7);
+    }
+
+    return weeks;
+  }, [selectedYear, selectedMonthIdx, daysInMonth]);
+
+  // Compute entries per week based on monthWeeks
   const weeklyCounts = useMemo(() => {
-    const counts = Array(5).fill(0);
+    const counts = Array(monthWeeks.length).fill(0);
     monthUnits.forEach(u => {
       try {
-        const uDate = new Date(u.createdAt);
-        const day = uDate.getDate();
-        if (day >= 1 && day <= 7) counts[0]++;
-        else if (day >= 8 && day <= 14) counts[1]++;
-        else if (day >= 15 && day <= 21) counts[2]++;
-        else if (day >= 22 && day <= 28) counts[3]++;
-        else if (day >= 29) counts[4]++;
+        const uTime = new Date(u.createdAt).getTime();
+        const weekIdx = monthWeeks.findIndex(
+          w => uTime >= w.startDate.getTime() && uTime <= w.endDate.getTime()
+        );
+        if (weekIdx !== -1) {
+          counts[weekIdx]++;
+        }
       } catch {}
     });
     return counts;
-  }, [monthUnits]);
+  }, [monthUnits, monthWeeks]);
 
   // Peak metrics
   const peakMetrics = useMemo(() => {
@@ -219,16 +282,10 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
         }
 
         // 3. Must match selectedWeek if set
-        if (selectedWeek !== null) {
-          const day = uDate.getDate();
-          let wIdx = -1;
-          if (day >= 1 && day <= 7) wIdx = 0;
-          else if (day >= 8 && day <= 14) wIdx = 1;
-          else if (day >= 15 && day <= 21) wIdx = 2;
-          else if (day >= 22 && day <= 28) wIdx = 3;
-          else if (day >= 29) wIdx = 4;
-
-          if (wIdx !== selectedWeek) {
+        if (selectedWeek !== null && monthWeeks[selectedWeek]) {
+          const targetWeek = monthWeeks[selectedWeek];
+          const uTime = uDate.getTime();
+          if (uTime < targetWeek.startDate.getTime() || uTime > targetWeek.endDate.getTime()) {
             return false;
           }
         }
@@ -249,7 +306,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
         return false;
       }
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [units, selectedYear, selectedMonthIdx, selectedDay, selectedWeek, searchQuery]);
+  }, [units, selectedYear, selectedMonthIdx, selectedDay, selectedWeek, searchQuery, monthWeeks]);
 
   // Counts of each sector for filtered movements
   const sectorCountsFiltered = useMemo(() => {
@@ -262,29 +319,20 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
     return counts;
   }, [filteredMovements]);
 
-  // Week titles
-  const weekLabels = [
-    { title: 'Semana 1', range: '01 a 07' },
-    { title: 'Semana 2', range: '08 a 14' },
-    { title: 'Semana 3', range: '15 a 21' },
-    { title: 'Semana 4', range: '22 a 28' },
-    { title: 'Semana 5', range: '29 a ' + daysInMonth }
-  ];
-
   // Max value of weekly and daily counts for chart scaling
   const maxWeeklyCount = Math.max(...weeklyCounts, 1);
   const maxDailyCount = Math.max(...dailyCounts, 1);
 
-  // Calendar info
+  // Calendar info for 7-day calendar grid (Dom to Sáb)
   const firstDayWeekday = new Date(selectedYear, selectedMonthIdx, 1).getDay(); // 0 is Sunday, 1 is Monday...
   const calendarDays = useMemo(() => {
     const days: ({ dayNum: number; count: number; dateStr: string } | null)[] = [];
-    
+
     // Blank padding cells for weekdays before the 1st
     for (let i = 0; i < firstDayWeekday; i++) {
       days.push(null);
     }
-    
+
     // Real day cells
     for (let d = 1; d <= daysInMonth; d++) {
       const count = dailyCounts[d - 1];
@@ -295,7 +343,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
         dateStr
       });
     }
-    
+
     return days;
   }, [firstDayWeekday, daysInMonth, dailyCounts, selectedYear, selectedMonthIdx]);
 
@@ -313,7 +361,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
     <div className="space-y-6" id="product-movements-tab">
       
       {/* Title & Introduction */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-900/40 p-6 rounded-2xl border border-slate-850 shadow-sm animate-in fade-in duration-200" id="movements-header">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-900/40 p-6 rounded-2xl border border-slate-800/50 shadow-sm animate-in fade-in duration-200" id="movements-header">
         <div>
           <div className="flex items-center gap-2 text-sky-400 font-bold text-xs uppercase tracking-wider mb-1">
             <Boxes className="w-4.5 h-4.5" />
@@ -326,7 +374,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
         </div>
 
         {/* Beautiful Month Selector & Controls */}
-        <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-850 self-start md:self-auto shadow-inner">
+        <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800/50 self-start md:self-auto shadow-inner">
           <button
             onClick={handlePrevMonth}
             className="p-2 hover:bg-slate-900 text-slate-400 hover:text-white rounded-lg transition-all cursor-pointer"
@@ -366,7 +414,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
           className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between hover:scale-[1.01] duration-300 ${
             selectedDay === null && selectedWeek === null 
               ? 'bg-sky-500/5 border-sky-500/30 shadow-md shadow-sky-500/5 ring-1 ring-sky-500/20' 
-              : 'bg-[#0f172a]/60 border-slate-850 hover:border-slate-800'
+              : 'bg-[#0f172a]/60 border-slate-800/50 hover:border-slate-800'
           }`}
           title="Clique para ver todas as entradas do mês"
         >
@@ -404,7 +452,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
           className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between hover:scale-[1.01] duration-300 ${
             selectedWeek !== null 
               ? 'bg-[#4f46e5]/5 border-[#4f46e5]/30 shadow-md shadow-[#4f46e5]/5 ring-1 ring-[#4f46e5]/20' 
-              : 'bg-[#0f172a]/60 border-slate-850 hover:border-slate-800'
+              : 'bg-[#0f172a]/60 border-slate-800/50 hover:border-slate-800'
           }`}
           title={peakMetrics.peakWeek ? `Clique para filtrar pela Semana ${peakMetrics.peakWeek.index + 1}` : undefined}
         >
@@ -448,7 +496,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
           className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between hover:scale-[1.01] duration-300 ${
             selectedDay !== null 
               ? 'bg-[#7c3aed]/5 border-[#7c3aed]/30 shadow-md shadow-[#7c3aed]/5 ring-1 ring-[#7c3aed]/20' 
-              : 'bg-[#0f172a]/60 border-slate-850 hover:border-slate-800'
+              : 'bg-[#0f172a]/60 border-slate-800/50 hover:border-slate-800'
           }`}
           title={peakMetrics.peakDay ? `Clique para filtrar pelo Dia ${peakMetrics.peakDay.index + 1}` : undefined}
         >
@@ -487,12 +535,12 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="movements-main-grid">
         
         {/* Left Column: Weekly Distribution Card (lg:col-span-4) */}
-        <div className="lg:col-span-4 bg-[#0d1527] border border-slate-850 p-6 rounded-2xl flex flex-col justify-between space-y-4 shadow-sm animate-in fade-in duration-300" id="weekly-flow-panel">
+        <div className="lg:col-span-4 bg-[#0d1527] border border-slate-800/50 p-6 rounded-2xl flex flex-col justify-between space-y-4 shadow-sm animate-in fade-in duration-300" id="weekly-flow-panel">
           <div>
             <div className="flex justify-between items-center mb-1">
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Distribuição Semanal</h3>
-              <span className="text-[10px] px-2 py-0.5 bg-slate-950 rounded border border-slate-850 text-slate-400 font-mono">
-                5 Semanas
+              <span className="text-[10px] px-2 py-0.5 bg-slate-950 rounded border border-slate-800/50 text-slate-400 font-mono">
+                {monthWeeks.length} Semanas
               </span>
             </div>
             <h4 className="text-sm font-extrabold text-white">Entradas por Semana</h4>
@@ -502,7 +550,8 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
           {/* Weekly custom bars layout */}
           <div className="space-y-3 py-3 flex-1 flex flex-col justify-center">
             {weeklyCounts.map((val, idx) => {
-              const label = weekLabels[idx];
+              const label = monthWeeks[idx];
+              if (!label) return null;
               const percentage = maxWeeklyCount > 0 ? (val / maxWeeklyCount) * 100 : 0;
               const isSelected = selectedWeek === idx;
 
@@ -516,7 +565,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
                   className={`p-3 rounded-xl border transition-all cursor-pointer group flex flex-col space-y-1.5 ${
                     isSelected 
                       ? 'bg-indigo-500/10 border-indigo-500/40 shadow-sm' 
-                      : 'bg-slate-950/40 border-slate-900/50 hover:border-slate-850'
+                      : 'bg-slate-950/40 border-slate-900/50 hover:border-slate-800/50'
                   }`}
                 >
                   <div className="flex justify-between items-center text-xs">
@@ -526,7 +575,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
                       </span>
                       <span className="text-[10px] text-slate-500 font-medium">({label.range})</span>
                     </div>
-                    <span className="font-mono font-bold text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
+                    <span className="font-mono font-bold text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800/50">
                       {val} un
                     </span>
                   </div>
@@ -550,7 +599,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
           </div>
 
           {/* Meta breakdown summary */}
-          <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/40 p-3.5 rounded-xl border border-slate-850 shrink-0">
+          <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/40 p-3.5 rounded-xl border border-slate-800/50 shrink-0">
             <div>
               <span className="text-slate-400 block text-[10px] font-bold">Unidades no Mês</span>
               <span className="font-extrabold text-white text-base mt-0.5 block">
@@ -560,24 +609,24 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
             <div>
               <span className="text-slate-400 block text-[10px] font-bold">Média Semanal</span>
               <span className="font-extrabold text-white text-base mt-0.5 block">
-                {(monthUnits.length / 5).toFixed(1)} / sem
+                {(monthUnits.length / Math.max(monthWeeks.length, 1)).toFixed(1)} / sem
               </span>
             </div>
           </div>
         </div>
 
         {/* Right Column: Daily Distribution & Calendar Grid (lg:col-span-8) */}
-        <div className="lg:col-span-8 bg-[#0d1527] border border-slate-850 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm animate-in fade-in duration-300" id="daily-flow-panel">
+        <div className="lg:col-span-8 bg-[#0d1527] border border-slate-800/50 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm animate-in fade-in duration-300" id="daily-flow-panel">
           
           {/* Header of Daily Flow with Toggle */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-850/60 pb-4 shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/50 pb-4 shrink-0">
             <div>
               <h3 className="text-sm font-black text-white">Análise Diária • {monthName}</h3>
               <p className="text-[10px] text-slate-400">Escolha o modo de visualização dos dias e clique para interagir.</p>
             </div>
 
             {/* View switcher: Calendar vs Chart */}
-            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-850 gap-0.5" id="daily-view-switcher">
+            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/50 gap-0.5" id="daily-view-switcher">
               <button
                 onClick={() => setDailyViewType('calendar')}
                 className={`px-3.5 py-1.5 rounded-lg text-[10px] font-black tracking-wide uppercase transition-all cursor-pointer ${
@@ -602,7 +651,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
             <div className="flex-1 flex flex-col justify-between" id="calendar-view-container">
               {/* Calendar Grid */}
               <div className="space-y-2">
-                {/* Weekday Headers */}
+                {/* Weekday Headers (Dom a Sáb) */}
                 <div className="grid grid-cols-7 gap-1.5 text-center">
                   {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((wd) => (
                     <div key={wd} className="text-[10px] font-black text-slate-500 uppercase tracking-widest py-1">
@@ -611,7 +660,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
                   ))}
                 </div>
 
-                {/* Day Cells Grid */}
+                {/* Day Cells Grid (7 columns) */}
                 <div className="grid grid-cols-7 gap-1.5">
                   {calendarDays.map((cell, index) => {
                     if (cell === null) {
@@ -749,7 +798,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
                 <span>
                   Filtrando por:{' '}
                   <span className="text-white bg-indigo-500/20 border border-indigo-500/30 px-2 py-0.5 rounded ml-1 font-extrabold text-[11px]">
-                    {selectedDay !== null ? `Dia ${selectedDay} de ${monthName}` : `Semana ${selectedWeek! + 1} (${weekLabels[selectedWeek!].range})`}
+                    {selectedDay !== null ? `Dia ${selectedDay} de ${monthName}` : `Semana ${selectedWeek! + 1} (${monthWeeks[selectedWeek!]?.range})`}
                   </span>
                 </span>
               </div>
@@ -770,7 +819,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
       </div>
 
       {/* Analytical History List */}
-      <div className="bg-[#0d1527] border border-slate-850 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm animate-in fade-in duration-300" id="history-panel">
+      <div className="bg-[#0d1527] border border-slate-800/50 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm animate-in fade-in duration-300" id="history-panel">
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -786,7 +835,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
           </div>
           
           {/* Active Filter counter indicator */}
-          <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-850 font-bold">
+          <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800/50 font-bold">
             {filteredMovements.length} de {monthUnits.length} localizados no mês
           </span>
         </div>
@@ -824,7 +873,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filtrar por SKU, Produto, Canal, Destino ou Rastreamento..."
-            className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 transition-all"
+            className="w-full bg-slate-950 border border-slate-800/50 rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 transition-all"
           />
           {searchQuery && (
             <button 
@@ -838,7 +887,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
 
         {/* List of Movements */}
         {filteredMovements.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center space-y-3 bg-slate-950/20 rounded-2xl border border-dashed border-slate-850" id="empty-movements-state">
+          <div className="flex flex-col items-center justify-center py-16 text-center space-y-3 bg-slate-950/20 rounded-2xl border border-dashed border-slate-800/50" id="empty-movements-state">
             <div className="p-3 bg-slate-900 rounded-xl text-slate-500">
               <Package className="w-6 h-6" />
             </div>
@@ -871,7 +920,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
               return (
                 <div 
                   key={item.id}
-                  className="p-3 bg-[#0a0f1d] border border-slate-850 hover:border-slate-800 rounded-xl flex items-center justify-between gap-4 transition-all text-xs"
+                  className="p-3 bg-[#0a0f1d] border border-slate-800/50 hover:border-slate-800 rounded-xl flex items-center justify-between gap-4 transition-all text-xs"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Colored Left Indicator Bar */}
@@ -885,7 +934,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
 
                     <div className="min-w-0 space-y-0.5">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-mono text-[10px] font-black text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-850">
+                        <span className="font-mono text-[10px] font-black text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800/50">
                           {item.baseProductSku}
                         </span>
                         <span className="text-[10px] font-bold text-slate-400">
@@ -906,7 +955,7 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
                   </div>
 
                   <div className="text-right flex flex-col items-end gap-1 shrink-0">
-                    <span className="font-mono text-[10px] text-slate-400 flex items-center gap-1 bg-slate-950/60 px-2 py-0.5 rounded border border-slate-850">
+                    <span className="font-mono text-[10px] text-slate-400 flex items-center gap-1 bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800/50">
                       {formattedDate} às {formattedTime}
                     </span>
                     <span className="text-[9px] px-1.5 py-0.5 bg-sky-950/40 text-sky-400 border border-sky-800/30 rounded font-black uppercase">

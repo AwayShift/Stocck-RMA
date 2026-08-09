@@ -391,7 +391,7 @@ export default function App() {
                 id="nav-cases"
               >
                 <Layers className="w-4.5 h-4.5" />
-                Acompanhamento
+                Contestação
               </button>
 
               <button
@@ -523,7 +523,7 @@ export default function App() {
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          Acompanhamento
+          Contestação
         </button>
         <button
           onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}

@@ -19,7 +19,10 @@ import {
   AlertTriangle,
   Info,
   Eye,
-  Clock
+  Clock,
+  LayoutGrid,
+  List,
+  Check
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType } from '../types';
 
@@ -43,6 +46,15 @@ export default function PhysicalStock({
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'Todos' | DestinationSectorType | 'Baixado'>('Todos');
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(initialSelectedUnit?.id || null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    const saved = localStorage.getItem('rma_stock_view_mode');
+    return saved === 'list' ? 'list' : 'grid';
+  });
+
+  const handleSetViewMode = (mode: 'grid' | 'list') => {
+    setViewMode(mode);
+    localStorage.setItem('rma_stock_view_mode', mode);
+  };
 
   // Multi-select state
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
@@ -227,7 +239,6 @@ export default function PhysicalStock({
       case 'Shopee': return 'bg-orange-500/10 text-orange-400 border border-orange-500/20';
       case 'Amazon': return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
       case 'Kabum': return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
-      case 'FAVS': return 'bg-orange-500/10 text-orange-400 border border-orange-500/20';
       default: return 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20';
     }
   };
@@ -316,20 +327,45 @@ export default function PhysicalStock({
               />
             </div>
             {filteredUnits.length > 0 && activeTab !== 'Baixado' && (
-              <label className="flex items-center gap-2 cursor-pointer bg-slate-950 px-3 py-2 border border-slate-800 rounded-xl hover:border-slate-700 transition-all text-xs font-bold text-slate-300 shrink-0">
-                <input 
-                  type="checkbox"
-                  checked={filteredUnits.length > 0 && filteredUnits.every(u => selectedUnitIds.includes(u.id))}
-                  onChange={handleToggleSelectAll}
-                  className="w-4 h-4 rounded text-sky-500 bg-slate-900 border-slate-700 cursor-pointer"
-                  id="checkbox-select-all"
-                />
-                <span>Selecionar Todos ({selectedUnitIds.length})</span>
-              </label>
+              <button
+                type="button"
+                onClick={handleToggleSelectAll}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer select-none shrink-0 ${
+                  filteredUnits.every(u => selectedUnitIds.includes(u.id))
+                    ? 'bg-sky-500/10 border-sky-500/40 text-sky-400 shadow-sm'
+                    : selectedUnitIds.length > 0
+                    ? 'bg-sky-950/40 border-sky-800/50 text-sky-300'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                }`}
+                id="btn-select-all"
+                title={filteredUnits.every(u => selectedUnitIds.includes(u.id)) ? "Deselecionar todos" : "Selecionar todos os produtos filtrados"}
+              >
+                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                  filteredUnits.every(u => selectedUnitIds.includes(u.id))
+                    ? 'bg-sky-500 border-sky-400 text-white shadow-sm'
+                    : selectedUnitIds.length > 0
+                    ? 'bg-sky-500/20 border-sky-500/50 text-sky-400'
+                    : 'border-slate-700 bg-slate-900'
+                }`}>
+                  {filteredUnits.every(u => selectedUnitIds.includes(u.id)) && (
+                    <Check className="w-3 h-3 stroke-[3]" />
+                  )}
+                  {!filteredUnits.every(u => selectedUnitIds.includes(u.id)) && selectedUnitIds.length > 0 && (
+                    <div className="w-1.5 h-1.5 rounded-xs bg-sky-400" />
+                  )}
+                </div>
+                <span>
+                  {filteredUnits.every(u => selectedUnitIds.includes(u.id))
+                    ? `Todos Selecionados (${selectedUnitIds.length})`
+                    : selectedUnitIds.length > 0
+                    ? `Selecionados (${selectedUnitIds.length}/${filteredUnits.length})`
+                    : `Selecionar Todos (${filteredUnits.length})`}
+                </span>
+              </button>
             )}
           </div>
 
-          <div className="flex items-center gap-3 justify-between sm:justify-end">
+          <div className="flex items-center gap-3 justify-between sm:justify-end flex-wrap">
             {selectedUnitIds.length > 0 && (
               <button
                 onClick={handleBatchCheckout}
@@ -340,6 +376,37 @@ export default function PhysicalStock({
                 <span>Dar Baixa em Lote ({selectedUnitIds.length})</span>
               </button>
             )}
+
+            {/* View switcher: Grid vs List/Linhas */}
+            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-0.5" id="stock-view-switcher">
+              <button
+                onClick={() => handleSetViewMode('grid')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === 'grid' 
+                    ? 'bg-sky-500 text-white shadow-sm' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+                title="Visualização em Grade"
+                id="btn-view-grid"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Grade</span>
+              </button>
+              <button
+                onClick={() => handleSetViewMode('list')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === 'list' 
+                    ? 'bg-sky-500 text-white shadow-sm' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+                title="Visualização em Linhas"
+                id="btn-view-list"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>Linhas</span>
+              </button>
+            </div>
+
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <Filter className="w-3.5 h-3.5 text-sky-400" />
               <span>Mostrando <strong>{filteredUnits.length}</strong> unidades</span>
@@ -347,14 +414,14 @@ export default function PhysicalStock({
           </div>
         </div>
 
-        {/* Units list Grid */}
+        {/* Units list Grid or List */}
         {filteredUnits.length === 0 ? (
           <div className="p-12 text-center bg-slate-950 flex flex-col items-center justify-center" id="stock-empty">
             <Package className="w-12 h-12 text-slate-600 mb-3" />
             <p className="text-slate-300 font-semibold text-sm">Nenhuma unidade física localizada.</p>
             <p className="text-slate-500 text-xs mt-1">Insira novas devoluções ou refine os termos de busca.</p>
           </div>
-        ) : (
+        ) : viewMode === 'grid' ? (
           <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-950" id="stock-grid">
             {filteredUnits.map((unit) => {
               const pStyle = getPlatformStyle(unit.platform);
@@ -375,15 +442,22 @@ export default function PhysicalStock({
                     <div className="flex justify-between items-start gap-2">
                       <div className="flex items-center gap-2">
                         {unit.status !== 'Baixado' && (
-                          <input 
-                            type="checkbox"
-                            checked={selectedUnitIds.includes(unit.id)}
-                            onChange={(e) => handleToggleSelectUnit(unit.id, e as any)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 rounded text-sky-500 bg-slate-950 border-slate-700 cursor-pointer"
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleSelectUnit(unit.id, e as any);
+                            }}
+                            className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                              selectedUnitIds.includes(unit.id)
+                                ? 'bg-sky-500 border-sky-400 text-white shadow-sm shadow-sky-500/20 scale-105'
+                                : 'bg-slate-950 border-slate-700 text-transparent hover:border-sky-500/50 hover:bg-slate-900'
+                            }`}
                             id={`checkbox-unit-${unit.id}`}
-                            title="Selecionar unidade para ação em lote"
-                          />
+                            title={selectedUnitIds.includes(unit.id) ? "Desmarcar unidade" : "Selecionar unidade para ação em lote"}
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          </button>
                         )}
                         <span className="font-mono text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded">
                           {unit.baseProductSku}
@@ -437,6 +511,106 @@ export default function PhysicalStock({
                     </span>
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
                       {unit.destinationSector}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* List / Linhas View */
+          <div className="p-4 space-y-2 bg-slate-950" id="stock-list-rows">
+            {filteredUnits.map((unit) => {
+              const pStyle = getPlatformStyle(unit.platform);
+              const sectorClass = getSectorBadgeClass(unit.destinationSector);
+              const photosCount = (unit.photosProduct?.length || 0) + (unit.photosBox?.length || 0) + (unit.photosAccessories?.length || 0);
+
+              return (
+                <div 
+                  key={unit.id}
+                  onClick={() => setSelectedUnitId(unit.id)}
+                  className="group bg-slate-900 border border-slate-800/80 hover:border-slate-600 rounded-xl p-3 sm:p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:shadow-lg transition-all cursor-pointer"
+                  id={`stock-unit-list-${unit.id}`}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    {unit.status !== 'Baixado' && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleSelectUnit(unit.id, e as any);
+                        }}
+                        className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                          selectedUnitIds.includes(unit.id)
+                            ? 'bg-sky-500 border-sky-400 text-white shadow-sm shadow-sky-500/20 scale-105'
+                            : 'bg-slate-950 border-slate-700 text-transparent hover:border-sky-500/50 hover:bg-slate-900'
+                        }`}
+                        id={`checkbox-unit-list-${unit.id}`}
+                        title={selectedUnitIds.includes(unit.id) ? "Desmarcar unidade" : "Selecionar unidade para ação em lote"}
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      </button>
+                    )}
+
+                    {/* Thumbnail */}
+                    <div className="w-12 h-12 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0 relative">
+                      {unit.photosProduct && unit.photosProduct.length > 0 ? (
+                        <img src={unit.photosProduct[0]} alt={unit.baseProductName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      ) : (
+                        <Package className="w-5 h-5 text-slate-600" />
+                      )}
+                      {photosCount > 0 && (
+                        <span className="absolute bottom-0.5 right-0.5 bg-black/80 text-[8px] text-slate-300 px-1 py-0.2 rounded font-mono font-bold">
+                          {photosCount}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Details */}
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded shrink-0">
+                          {unit.baseProductSku}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500 font-bold shrink-0">
+                          #{unit.trackingCode}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
+                          {unit.platform}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
+                          {unit.destinationSector}
+                        </span>
+                        {unit.status === 'Baixado' && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/80 text-rose-400 border border-rose-800/50 uppercase">
+                            Saída Efetuada
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 className="font-bold text-white text-sm line-clamp-1 group-hover:text-sky-400 transition-colors">
+                        {unit.baseProductName}
+                      </h4>
+
+                      <p className="text-xs text-slate-400 line-clamp-1">
+                        Motivo: {unit.customerReason}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Date and Action hint */}
+                  <div className="flex items-center justify-between md:justify-end gap-4 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-800/60">
+                    <p className="text-[10px] text-slate-450 font-medium flex items-center gap-1 font-mono">
+                      <Clock className="w-3.5 h-3.5 text-sky-450 shrink-0" />
+                      <span className="text-slate-400">Entrada:</span>
+                      <span className="text-slate-300 font-semibold">
+                        {new Date(unit.createdAt).toLocaleDateString('pt-BR')} {new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </p>
+
+                    <span className="text-xs text-sky-400 font-semibold group-hover:translate-x-0.5 transition-transform hidden sm:inline-flex items-center gap-1">
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Detalhes</span>
                     </span>
                   </div>
                 </div>

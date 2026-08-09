@@ -67,23 +67,22 @@ export default function Dashboard({ units, onViewUnit, onNavigateToStock, onRese
     return acc;
   }, { Principal: 0, Openbox: 0, RMA: 0 } as Record<DestinationSectorType, number>);
 
-  // Platform Breakdown (Global in stock)
-  const platformCountsGlobal = inStockUnits.reduce((acc, curr) => {
+  // Platform Breakdown (Today's Entries)
+  const platformCountsToday = todayUnits.reduce((acc, curr) => {
     acc[curr.platform] = (acc[curr.platform] || 0) + 1;
     return acc;
   }, {} as Record<PlatformType, number>);
 
-  const platforms: PlatformType[] = ['Mercado Livre', 'Shopee', 'Amazon', 'Kabum', 'FAVS'];
+  const platforms: PlatformType[] = ['Mercado Livre', 'Shopee', 'Amazon', 'Kabum'];
 
   // Platform colors & logos styling
   const getPlatformStyle = (p: PlatformType) => {
     switch(p) {
-      case 'Mercado Livre': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/30' };
-      case 'Shopee': return { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30' };
-      case 'Amazon': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' };
-      case 'Kabum': return { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/30' };
-      case 'FAVS': return { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30' };
-      default: return { bg: 'bg-zinc-500/10', text: 'text-zinc-400', border: 'border-zinc-500/30' };
+      case 'Mercado Livre': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/30', barBg: 'bg-yellow-400', dotBg: 'bg-yellow-400' };
+      case 'Shopee': return { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30', barBg: 'bg-orange-400', dotBg: 'bg-orange-400' };
+      case 'Amazon': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30', barBg: 'bg-blue-400', dotBg: 'bg-blue-400' };
+      case 'Kabum': return { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/30', barBg: 'bg-indigo-400', dotBg: 'bg-indigo-400' };
+      default: return { bg: 'bg-zinc-500/10', text: 'text-zinc-400', border: 'border-zinc-500/30', barBg: 'bg-zinc-400', dotBg: 'bg-zinc-400' };
     }
   };
 
@@ -287,33 +286,33 @@ export default function Dashboard({ units, onViewUnit, onNavigateToStock, onRese
         <div className="lg:col-span-4 space-y-6" id="dashboard-right-side">
           {/* Platform Performance metrics card */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl" id="platforms-card">
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
               <ShoppingCart className="w-5 h-5 text-sky-400" />
-              Estoque por Plataforma
+              Entradas Hoje por Plataforma
             </h3>
-            <p className="text-xs text-slate-400 mb-6">Distribuição atual dos itens de devolução ativos em estoque</p>
+            <p className="text-xs text-slate-400 mb-6">Distribuição dos itens de devolução recebidos hoje ({totalReceivedToday} {totalReceivedToday === 1 ? 'item' : 'itens'})</p>
 
             <div className="space-y-4" id="platforms-breakdown">
               {platforms.map((platform) => {
-                const count = platformCountsGlobal[platform] || 0;
-                const percent = totalInStock > 0 ? (count / totalInStock) * 100 : 0;
+                const count = platformCountsToday[platform] || 0;
+                const percent = totalReceivedToday > 0 ? (count / totalReceivedToday) * 100 : 0;
                 const style = getPlatformStyle(platform);
 
                 return (
                   <div key={platform} className="space-y-1.5" id={`platform-row-${platform.replace(' ', '-')}`}>
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${style.text.replace('text-', 'bg-')}`}></span>
+                        <span className={`w-2 h-2 rounded-full ${style.dotBg}`}></span>
                         {platform}
                       </span>
                       <span className="text-slate-400 font-mono">
                         {count} {count === 1 ? 'unid.' : 'unids.'} ({Math.round(percent)}%)
                       </span>
                     </div>
-                    <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                    <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800/80">
                       <div 
-                        className={`h-full rounded-full ${style.text.replace('text-', 'bg-')} transition-all duration-500`}
-                        style={{ width: `${percent}%` }}
+                        className={`h-full rounded-full ${style.barBg} transition-all duration-500`}
+                        style={{ width: `${count > 0 ? Math.max(percent, 3) : 0}%` }}
                       ></div>
                     </div>
                   </div>

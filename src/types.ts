@@ -19,7 +19,7 @@ export interface BaseProduct {
   category?: string;
 }
 
-export type PlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Kabum' | 'FAVS';
+export type PlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Kabum';
 export type CasePlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon';
 export type DeviceStatusType = 'Novo' | 'Usado' | 'Danificado';
 export type PackageStatusType = 'Perfeita' | 'Danificada' | 'Sem Embalagem';

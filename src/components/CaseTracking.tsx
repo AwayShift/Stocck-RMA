@@ -11,6 +11,7 @@ import {
   Trash2, 
   X, 
   Check, 
+  Copy,
   AlertCircle,
   FileText,
   Calendar,
@@ -25,7 +26,6 @@ import {
   ThumbsUp,
   ThumbsDown,
   Coins,
-  RotateCcw,
   CheckCircle2,
   Clock5
 } from 'lucide-react';
@@ -60,6 +60,8 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
   // Quick Value Modal state
   const [quickValueModalCase, setQuickValueModalCase] = useState<{ caseItem: CaseTracking; resolution: 'Favorável' | 'Não Favorável' | 'Pago Parcial' | 'Pendente' } | null>(null);
   const [quickValueInput, setQuickValueInput] = useState<string>('');
+
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -270,7 +272,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
         <div>
           <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
             <Layers className="w-5.5 h-5.5 text-sky-400" />
-            Acompanhamento de Casos
+            Contestação de Casos
           </h2>
           <p className="text-xs text-slate-400 mt-1">
             Controle e rastreabilidade de disputas, contestações e resoluções com as plataformas Mercado Livre, Shopee e Amazon.
@@ -282,7 +284,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
           id="btn-new-case"
         >
           <Plus className="w-4 h-4" />
-          Novo Acompanhamento
+          Nova Contestação
         </button>
       </div>
 
@@ -375,9 +377,9 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
               <Clock className="w-8 h-8" />
             </div>
             <div className="max-w-xs">
-              <h3 className="text-sm font-bold text-white">Nenhum caso encontrado</h3>
+              <h3 className="text-sm font-bold text-white">Nenhuma contestação encontrada</h3>
               <p className="text-xs text-slate-500 mt-1">
-                Não há registros de acompanhamento que correspondam à busca ou filtros selecionados.
+                Não há registros de contestação que correspondam à busca ou filtros selecionados.
               </p>
             </div>
           </div>
@@ -386,14 +388,14 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-slate-950/85 border-b border-slate-800 text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                  <th className="px-6 py-4">Data</th>
-                  <th className="px-6 py-4">Plataforma</th>
-                  <th className="px-6 py-4">Código / Rastreamento</th>
-                  <th className="px-6 py-4">Motivo / Razão</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Resolução</th>
-                  <th className="px-6 py-4">Observações</th>
-                  <th className="px-6 py-4 text-right">Ações</th>
+                  <th className="px-3.5 py-3">Data</th>
+                  <th className="px-3.5 py-3">Plataforma</th>
+                  <th className="px-3.5 py-3">Código / Rastreamento</th>
+                  <th className="px-3.5 py-3">Motivo / Razão</th>
+                  <th className="px-3.5 py-3">Status</th>
+                  <th className="px-3.5 py-3">Resolução</th>
+                  <th className="px-3.5 py-3">Observações</th>
+                  <th className="px-3.5 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/40">
@@ -407,28 +409,47 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                   
                   return (
                     <tr key={c.id} className="hover:bg-slate-950/30 transition-colors group">
-                      <td className="px-6 py-4.5 whitespace-nowrap">
+                      <td className="px-3.5 py-3 whitespace-nowrap">
                         <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-slate-500" />
                           {displayDate}
                         </span>
                       </td>
-                      <td className="px-6 py-4.5 whitespace-nowrap">
+                      <td className="px-3.5 py-3 whitespace-nowrap">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${getPlatformBadge(c.platform)}`}>
                           {c.platform}
                         </span>
                       </td>
-                      <td className="px-6 py-4.5 whitespace-nowrap">
-                        <span className="text-xs font-mono font-bold text-white tracking-tight group-hover:text-sky-400 transition-colors">
-                          {c.code}
-                        </span>
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-bold text-white tracking-tight group-hover:text-sky-400 transition-colors">
+                            {c.code}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(c.code);
+                              setCopiedCodeId(c.id);
+                              setTimeout(() => setCopiedCodeId(null), 2000);
+                            }}
+                            className="p-1 rounded text-slate-400 hover:text-sky-400 hover:bg-slate-800 transition-all cursor-pointer opacity-80 hover:opacity-100 flex items-center justify-center shrink-0"
+                            title="Copiar código/rastreamento"
+                            id={`btn-copy-code-${c.id}`}
+                          >
+                            {copiedCodeId === c.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
                       </td>
-                      <td className="px-6 py-4.5">
-                        <span className="text-xs font-semibold text-slate-300 block max-w-xs truncate" title={c.reason}>
+                      <td className="px-3.5 py-3">
+                        <span className="text-xs font-semibold text-slate-300 block max-w-[220px] truncate" title={c.reason}>
                           {c.reason}
                         </span>
                       </td>
-                      <td className="px-6 py-4.5 whitespace-nowrap">
+                      <td className="px-3.5 py-3 whitespace-nowrap">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
                           (c.status || 'Pendente') === 'Resolvido'
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
@@ -437,9 +458,9 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                           {c.status || 'Pendente'}
                         </span>
                       </td>
-                      <td className="px-6 py-4.5">
+                      <td className="px-3.5 py-3">
                         <div className="flex flex-col">
-                          <span className={`text-xs font-bold block max-w-xs truncate ${
+                          <span className={`text-xs font-bold block max-w-[180px] truncate ${
                             c.resolution === 'Favorável'
                               ? 'text-emerald-400' 
                               : c.resolution === 'Pago Parcial'
@@ -457,13 +478,13 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4.5">
-                        <p className="text-xs text-slate-400 font-medium max-w-sm line-clamp-1" title={c.notes || ''}>
+                      <td className="px-3.5 py-3">
+                        <p className="text-xs text-slate-400 font-medium max-w-[200px] line-clamp-1" title={c.notes || ''}>
                           {c.notes || <span className="text-slate-600 italic">Sem observações</span>}
                         </p>
                       </td>
-                      <td className="px-6 py-4.5 whitespace-nowrap text-right">
-                        <div className="flex justify-end items-center gap-2">
+                      <td className="px-3.5 py-3 whitespace-nowrap text-right">
+                        <div className="flex justify-end items-center gap-1.5">
                           {/* Quick Resolution Options */}
                           <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800" title="Opções de Resolução do Caso">
                             <button
@@ -502,36 +523,26 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
                             >
                               <Coins className="w-3 h-3" />
                             </button>
-                            {c.status === 'Resolvido' && (
-                              <button
-                                onClick={() => handleResolveCase(c, 'Pendente')}
-                                className="p-1.5 rounded-lg transition-all cursor-pointer text-slate-500 hover:text-sky-400 hover:bg-slate-900 border border-transparent"
-                                title="Reabrir Caso"
-                                id={`btn-reopen-${c.id}`}
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                              </button>
-                            )}
                           </div>
 
                           <button
                             onClick={() => handleEditCase(c)}
-                            className="px-3 py-1.5 bg-slate-950 border border-slate-800 hover:border-slate-700 hover:bg-slate-900 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
-                            title="Editar Acompanhamento"
+                            className="px-2 py-1.5 bg-slate-950 border border-slate-800 hover:border-slate-700 hover:bg-slate-900 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition-all flex items-center gap-1 cursor-pointer"
+                            title="Editar Contestação"
                             id={`btn-edit-${c.id}`}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
-                            Editar
+                            <span className="hidden xl:inline">Editar</span>
                           </button>
                           
                           <button
                             onClick={() => handleDelete(c.id, c.code)}
-                            className={`p-2 rounded-lg transition-all border cursor-pointer ${
+                            className={`p-1.5 rounded-lg transition-all border cursor-pointer ${
                               userRole === 'admin' 
                                 ? 'bg-slate-950 border-slate-800 hover:border-rose-500/30 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400'
                                 : 'bg-slate-950/40 border-transparent text-slate-600 cursor-not-allowed'
                             }`}
-                            title={userRole === 'admin' ? "Excluir Registro de Acompanhamento" : "Apenas Administradores podem excluir"}
+                            title={userRole === 'admin' ? "Excluir Contestação" : "Apenas Administradores podem excluir"}
                             disabled={userRole !== 'admin'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -563,7 +574,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
               <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
                 <h3 className="text-sm font-black text-white tracking-tight flex items-center gap-2">
                   <Layers className="w-4 h-4 text-sky-400" />
-                  {editingCase ? 'Editar Acompanhamento' : 'Novo Acompanhamento de Caso'}
+                  {editingCase ? 'Editar Contestação' : 'Nova Contestação de Caso'}
                 </h3>
                 <button
                   onClick={() => setIsFormOpen(false)}
@@ -646,7 +657,7 @@ export default function CaseTrackingComponent({ cases, onSaveCase, onDeleteCase,
 
                 {/* Status Selection instead of Resolution */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] text-slate-400 uppercase font-black tracking-wider block">Status do Acompanhamento</label>
+                  <label className="text-[10px] text-slate-400 uppercase font-black tracking-wider block">Status da Contestação</label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as 'Pendente' | 'Resolvido')}
