@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { BaseProduct } from '../types';
 import { uploadFileToStorage } from '../lib/dbService';
+import { RichTextEditor } from './RichTextEditor';
 
 interface BaseCatalogProps {
   products: BaseProduct[];
@@ -85,117 +86,6 @@ export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct, 
   const [isUploading, setIsUploading] = useState(false);
   const [isPasteFocused, setIsPasteFocused] = useState(false);
 
-  // Quill Editor refs
-  const quillContainerRef = useRef<HTMLDivElement>(null);
-  const quillInstanceRef = useRef<any>(null);
-
-  // Dynamic Quill.js CDN loader and lifecycle
-  useEffect(() => {
-    if (!isFormOpen) {
-      if (quillInstanceRef.current) {
-        quillInstanceRef.current = null;
-      }
-      return;
-    }
-
-    let quillScript: HTMLScriptElement | null = null;
-    let quillStyle: HTMLLinkElement | null = null;
-
-    const initQuill = () => {
-      if (quillContainerRef.current && (window as any).Quill && !quillInstanceRef.current) {
-        const parent = quillContainerRef.current.parentNode;
-        if (parent) {
-          const toolbars = parent.querySelectorAll('.ql-toolbar');
-          toolbars.forEach(tb => tb.remove());
-        }
-        quillContainerRef.current.innerHTML = '';
-
-        quillInstanceRef.current = new (window as any).Quill(quillContainerRef.current, {
-          theme: 'snow',
-          placeholder: 'Insira as especificações técnicas, características e detalhes gerais do produto...',
-          modules: {
-            toolbar: [
-              [{ 'header': [1, 2, 3, false] }],
-              ['bold', 'italic', 'underline', 'strike'],
-              [
-                { 'color': [
-                  '#000000', '#e60000', '#ff9900', '#ffff00', '#008a00', '#0066cc', '#9933ff',
-                  '#ffffff', '#facccc', '#ffebcc', '#ffffcc', '#cce8cc', '#cce0f5', '#ebd6ff',
-                  '#bbbbbb', '#f06666', '#ffc266', '#ffff66', '#66b966', '#66a3e0', '#c285ff',
-                  '#888888', '#a10000', '#b26b00', '#b2b200', '#006100', '#0047b2', '#6b24b2',
-                  '#444444', '#5c0000', '#663d00', '#666600', '#003700', '#002966', '#3d1466'
-                ] },
-                { 'background': [
-                  'transparent', '#e60000', '#ff9900', '#ffff00', '#008a00', '#0066cc', '#9933ff',
-                  '#ffffff', '#facccc', '#ffebcc', '#ffffcc', '#cce8cc', '#cce0f5', '#ebd6ff',
-                  '#bbbbbb', '#f06666', '#ffc266', '#ffff66', '#66b966', '#66a3e0', '#c285ff',
-                  '#888888', '#a10000', '#b26b00', '#b2b200', '#006100', '#0047b2', '#6b24b2',
-                  '#444444', '#5c0000', '#663d00', '#666600', '#003700', '#002966', '#000000'
-                ] }
-              ],
-              [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-              ['clean']
-            ]
-          }
-        });
-
-        // Set initial state
-        quillInstanceRef.current.root.innerHTML = description;
-
-        // Listen for changes
-        quillInstanceRef.current.on('text-change', () => {
-          setDescription(quillInstanceRef.current.root.innerHTML);
-        });
-
-        // Block image paste in description field
-        quillInstanceRef.current.root.addEventListener('paste', (e: ClipboardEvent) => {
-          const items = e.clipboardData?.items;
-          if (items) {
-            let hasImage = false;
-            for (let i = 0; i < items.length; i++) {
-              if (items[i].type.indexOf('image') !== -1) {
-                hasImage = true;
-                break;
-              }
-            }
-            if (hasImage) {
-              e.preventDefault();
-              e.stopPropagation();
-              setErrorMessage('Imagens não são permitidas no campo de descrição. Use a seção "Anexos e Imagens" abaixo para colar/anexar.');
-              setTimeout(() => setErrorMessage(''), 5000);
-            }
-          }
-        }, true);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      if (!(window as any).Quill) {
-        quillStyle = document.createElement('link');
-        quillStyle.rel = 'stylesheet';
-        quillStyle.href = 'https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css';
-        document.head.appendChild(quillStyle);
-
-        quillScript = document.createElement('script');
-        quillScript.src = 'https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js';
-        quillScript.async = true;
-        quillScript.onload = () => {
-          initQuill();
-        };
-        document.body.appendChild(quillScript);
-      } else {
-        initQuill();
-      }
-    }, 50);
-
-    return () => {
-      clearTimeout(timer);
-      if (quillInstanceRef.current) {
-        quillInstanceRef.current = null;
-      }
-    };
-  }, [isFormOpen]);
-
   // Image upload handler
   const handleImagesUpload = async (files: FileList | File[] | null) => {
     if (!files) return;
@@ -231,7 +121,7 @@ export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct, 
     const handleGlobalPaste = (e: ClipboardEvent) => {
       // Don't intercept if the active element is inside the description editor
       const activeEl = document.activeElement;
-      if (activeEl && activeEl.closest('.ql-editor')) {
+      if (activeEl && (activeEl.getAttribute('contenteditable') === 'true' || activeEl.closest('[contenteditable="true"]'))) {
         return;
       }
 
@@ -919,12 +809,15 @@ export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct, 
               </div>
 
               {/* Descrição / Especificações */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-300">Descrição / Especificações</label>
-                <div className="text-slate-200 relative">
-                  <div ref={quillContainerRef} id="quill-editor" className="text-sm"></div>
-                </div>
-              </div>
+              <RichTextEditor
+                value={description}
+                onChange={setDescription}
+                label="Descrição / Especificações"
+                placeholder="Insira as especificações técnicas, características e detalhes do produto..."
+                minHeight="120px"
+                maxHeight="220px"
+                id="product-description-editor"
+              />
 
               {/* Voltagem and Inclui (Acessórios) Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

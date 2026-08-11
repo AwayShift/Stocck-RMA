@@ -22,30 +22,87 @@ import {
   Clock,
   LayoutGrid,
   List,
-  Check
+  Check,
+  FileSpreadsheet,
+  Upload,
+  Pencil,
+  Save,
+  Plus,
+  RotateCcw,
+  Camera,
+  Image as ImageIcon
 } from 'lucide-react';
-import { TriageUnit, DestinationSectorType, PlatformType } from '../types';
+import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
+import ExcelImportModal from './ExcelImportModal';
+
+// Helper to compress image to base64
+const compressImageToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 600;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        } else {
+          resolve(e.target?.result as string);
+        }
+      };
+      img.onerror = () => reject(new Error('Falha ao processar imagem.'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo.'));
+    reader.readAsDataURL(file);
+  });
+};
 
 interface PhysicalStockProps {
   units: TriageUnit[];
+  products?: BaseProduct[];
   onUpdateUnit: (unit: TriageUnit) => Promise<void>;
   onDeleteUnit: (id: string) => Promise<void>;
   onCheckoutUnit: (id: string) => Promise<void>;
   initialSelectedUnit?: TriageUnit | null;
   onClearSelectedUnit?: () => void;
+  onSaveTriage?: (unit: TriageUnit) => Promise<void>;
 }
 
 export default function PhysicalStock({ 
   units, 
+  products = [],
   onUpdateUnit, 
   onDeleteUnit, 
   onCheckoutUnit,
   initialSelectedUnit,
-  onClearSelectedUnit
+  onClearSelectedUnit,
+  onSaveTriage
 }: PhysicalStockProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'Todos' | DestinationSectorType | 'Baixado'>('Todos');
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(initialSelectedUnit?.id || null);
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     const saved = localStorage.getItem('rma_stock_view_mode');
     return saved === 'list' ? 'list' : 'grid';
@@ -74,6 +131,13 @@ export default function PhysicalStock({
   // Selected unit details
   const currentUnit = units.find(u => u.id === (selectedUnitId || initialSelectedUnit?.id));
 
+  // Edit mode state for selected unit
+  const [isEditingUnit, setIsEditingUnit] = useState(false);
+  const [editForm, setEditForm] = useState<TriageUnit | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [urlInputCategory, setUrlInputCategory] = useState<'photosProduct' | 'photosBox' | 'photosAccessories'>('photosProduct');
+
   // If initialSelectedUnit changed from parent, keep local state in sync
   React.useEffect(() => {
     if (initialSelectedUnit) {
@@ -87,6 +151,68 @@ export default function PhysicalStock({
       onClearSelectedUnit();
     }
     setEditingSector('');
+    setIsEditingUnit(false);
+    setEditForm(null);
+  };
+
+  const handleStartEdit = (unit: TriageUnit) => {
+    setSelectedUnitId(unit.id);
+    setEditForm({ ...unit });
+    setIsEditingUnit(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editForm) return;
+    setIsSavingEdit(true);
+    try {
+      await onUpdateUnit(editForm);
+      setIsSavingEdit(false);
+      setIsEditingUnit(false);
+      setActionSuccess('Ficha do produto e fotos atualizados com sucesso!');
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: any) {
+      console.error('Error updating unit:', err);
+      setActionError(`Erro ao salvar alterações: ${err?.message || err}`);
+      setIsSavingEdit(false);
+      setTimeout(() => setActionError(null), 4000);
+    }
+  };
+
+  const handleAddPhotoFile = async (category: 'photosProduct' | 'photosBox' | 'photosAccessories', e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editForm || !e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    try {
+      const base64 = await compressImageToBase64(file);
+      const existing = editForm[category] || [];
+      setEditForm({
+        ...editForm,
+        [category]: [...existing, base64]
+      });
+      // Reset input value so same file can be chosen again if needed
+      e.target.value = '';
+    } catch (err) {
+      alert('Erro ao carregar a imagem.');
+    }
+  };
+
+  const handleAddPhotoUrl = (category: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
+    if (!editForm || !imageUrlInput.trim()) return;
+    const existing = editForm[category] || [];
+    setEditForm({
+      ...editForm,
+      [category]: [...existing, imageUrlInput.trim()]
+    });
+    setImageUrlInput('');
+  };
+
+  const handleRemovePhoto = (category: 'photosProduct' | 'photosBox' | 'photosAccessories', index: number) => {
+    if (!editForm) return;
+    const existing = editForm[category] || [];
+    const updated = existing.filter((_, i) => i !== index);
+    setEditForm({
+      ...editForm,
+      [category]: updated
+    });
   };
 
   // Filter logic
@@ -97,6 +223,7 @@ export default function PhysicalStock({
       (unit.baseProductName || '').toLowerCase().includes(term) ||
       (unit.baseProductSku || '').toLowerCase().includes(term) ||
       (unit.trackingCode || '').toLowerCase().includes(term) ||
+      (unit.serialNumber || '').toLowerCase().includes(term) ||
       (unit.platform || '').toLowerCase().includes(term) ||
       (unit.customerReason || '').toLowerCase().includes(term) ||
       (unit.destinationSector || '').toLowerCase().includes(term) ||
@@ -243,6 +370,23 @@ export default function PhysicalStock({
     }
   };
 
+  const handleImportBatchUnits = async (importedUnits: TriageUnit[]) => {
+    try {
+      for (const unit of importedUnits) {
+        if (onSaveTriage) {
+          await onSaveTriage(unit);
+        } else {
+          await onUpdateUnit(unit);
+        }
+      }
+      setActionSuccess(`${importedUnits.length} produtos importados do Excel e direcionados aos setores!`);
+      setTimeout(() => setActionSuccess(null), 5000);
+    } catch (err: any) {
+      setActionError(`Erro ao salvar lote de inventário: ${err?.message || err}`);
+      setTimeout(() => setActionError(null), 5000);
+    }
+  };
+
   return (
     <div className="space-y-6 relative" id="stock-manager-container">
       {/* Floating Notifications */}
@@ -264,12 +408,22 @@ export default function PhysicalStock({
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <Package className="text-sky-400 w-6 h-6" />
-            Gestão de Estoque Físico
+            Gestão de Estoque Físico & OpenBox
           </h2>
           <p className="text-sm text-slate-400 mt-1">
             Lista de itens triados e armazenados no galpão, com controle de status, galeria de laudo e despacho.
           </p>
         </div>
+
+        <button
+          onClick={() => setIsExcelModalOpen(true)}
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2 cursor-pointer shrink-0"
+          id="btn-open-excel-import"
+          title="Importar planilha Excel de inventário OpenBox e direcionar por categorias"
+        >
+          <FileSpreadsheet className="w-4.5 h-4.5 text-white" />
+          <span>Importar Tabela Excel (OpenBox)</span>
+        </button>
       </div>
 
       {/* Main Stock layout Card */}
@@ -462,6 +616,11 @@ export default function PhysicalStock({
                         <span className="font-mono text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded">
                           {unit.baseProductSku}
                         </span>
+                        {unit.serialNumber && (
+                          <span className="font-mono text-[10px] text-slate-400 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded" title="Número de Série">
+                            S/N: {unit.serialNumber}
+                          </span>
+                        )}
                       </div>
                       <span className="font-mono text-[10px] text-slate-500 font-bold">
                         #{unit.trackingCode}
@@ -509,9 +668,23 @@ export default function PhysicalStock({
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
                       {unit.platform}
                     </span>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
-                      {unit.destinationSector}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
+                        {unit.destinationSector}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(unit);
+                        }}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-sky-600/30 text-sky-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/50 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Editar nome, fotos, descrição e laudo do produto"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        <span>Editar</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -575,6 +748,11 @@ export default function PhysicalStock({
                         <span className="font-mono text-[10px] text-slate-500 font-bold shrink-0">
                           #{unit.trackingCode}
                         </span>
+                        {unit.serialNumber && (
+                          <span className="font-mono text-[10px] text-slate-400 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded shrink-0" title="Número de Série">
+                            S/N: {unit.serialNumber}
+                          </span>
+                        )}
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
                           {unit.platform}
                         </span>
@@ -608,10 +786,25 @@ export default function PhysicalStock({
                       </span>
                     </p>
 
-                    <span className="text-xs text-sky-400 font-semibold group-hover:translate-x-0.5 transition-transform hidden sm:inline-flex items-center gap-1">
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Detalhes</span>
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(unit);
+                        }}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-sky-600/30 text-sky-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/50 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Editar ficha e fotos do produto"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Editar</span>
+                      </button>
+
+                      <span className="text-xs text-slate-400 font-semibold group-hover:translate-x-0.5 transition-transform hidden sm:inline-flex items-center gap-1">
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Detalhes</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -620,7 +813,7 @@ export default function PhysicalStock({
         )}
       </div>
 
-      {/* Complete unit details Modal Sheet */}
+      {/* Complete unit details / Edit Modal Sheet */}
       {currentUnit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto" id="stock-details-modal">
           <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-8 animate-in fade-in zoom-in duration-200">
@@ -630,181 +823,560 @@ export default function PhysicalStock({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded">
-                    {currentUnit.baseProductSku}
+                    {isEditingUnit && editForm ? editForm.baseProductSku : currentUnit.baseProductSku}
                   </span>
                   <span className="font-mono text-xs text-slate-500">
-                    Caso: #{currentUnit.trackingCode}
+                    Caso: #{isEditingUnit && editForm ? editForm.trackingCode : currentUnit.trackingCode}
                   </span>
+                  {(isEditingUnit && editForm ? editForm.serialNumber : currentUnit.serialNumber) && (
+                    <span className="font-mono text-xs text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded" title="Número de Série">
+                      S/N: {isEditingUnit && editForm ? editForm.serialNumber : currentUnit.serialNumber}
+                    </span>
+                  )}
+                  {isEditingUnit && (
+                    <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-bold rounded">
+                      Modo Edição
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-base font-bold text-white mt-1">
-                  {currentUnit.baseProductName}
+                  {isEditingUnit && editForm ? editForm.baseProductName : currentUnit.baseProductName}
                 </h3>
               </div>
-              <button 
-                onClick={handleCloseDetails}
-                className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            {/* Modal Content */}
-            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
-              
-              {/* Top metadata grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-950 p-4 border border-slate-850 rounded-xl text-xs">
-                <div>
-                  <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Origem / Canal</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}>
-                    {currentUnit.platform}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Voltagem Elétrica</span>
-                  <span className="font-semibold text-slate-200 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">{currentUnit.baseProductVoltage}</span>
-                </div>
-                <div>
-                  <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Data de Triagem</span>
-                  <span className="font-semibold text-slate-300">{new Date(currentUnit.createdAt).toLocaleDateString('pt-BR')} {new Date(currentUnit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-                <div>
-                  <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Status Interno</span>
-                  <span className={`font-semibold px-2 py-0.5 rounded text-[10px] font-bold ${currentUnit.status === 'Estoque' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
-                    {currentUnit.status === 'Estoque' ? 'Em Estoque' : 'Baixado / Saída'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Claims and Accessories details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-850 space-y-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                    Motivo da Devolução (Cliente)
-                  </h4>
-                  <p className="text-sm text-slate-300 leading-relaxed italic">
-                    "{currentUnit.customerReason}"
-                  </p>
-                </div>
-
-                <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-850 space-y-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <Info className="w-3.5 h-3.5 text-sky-400" />
-                    Lista de Acessórios Recebidos
-                  </h4>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    {currentUnit.accessoriesInclusion || 'Nenhum acessório declarado.'}
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 pt-2 text-[10px] text-slate-450 border-t border-slate-800">
-                    <span>Aparelho: <strong>{currentUnit.deviceStatus}</strong></span>
-                    <span>Caixa: <strong>{currentUnit.packageStatus}</strong></span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Integrated Photo Gallery split by logical category */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-                  Galeria de Fotos da Triagem
-                </h4>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="gallery-categories">
-                  {/* Category A: Product */}
-                  <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
-                    <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos do Aparelho ({currentUnit.photosProduct?.length || 0})</span>
-                    {currentUnit.photosProduct && currentUnit.photosProduct.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {currentUnit.photosProduct.map((p, i) => (
-                          <div 
-                            key={i} 
-                            onClick={() => setFullscreenImage(p)}
-                            className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
-                          >
-                            <img src={p} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
-                              <Eye className="w-4 h-4" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto do aparelho.</p>
-                    )}
-                  </div>
-
-                  {/* Category B: Box */}
-                  <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
-                    <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos da Embalagem ({currentUnit.photosBox?.length || 0})</span>
-                    {currentUnit.photosBox && currentUnit.photosBox.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {currentUnit.photosBox.map((p, i) => (
-                          <div 
-                            key={i} 
-                            onClick={() => setFullscreenImage(p)}
-                            className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
-                          >
-                            <img src={p} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
-                              <Eye className="w-4 h-4" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto da caixa.</p>
-                    )}
-                  </div>
-
-                  {/* Category C: Accessories */}
-                  <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
-                    <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos dos Acessórios ({currentUnit.photosAccessories?.length || 0})</span>
-                    {currentUnit.photosAccessories && currentUnit.photosAccessories.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {currentUnit.photosAccessories.map((p, i) => (
-                          <div 
-                            key={i} 
-                            onClick={() => setFullscreenImage(p)}
-                            className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
-                          >
-                            <img src={p} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
-                              <Eye className="w-4 h-4" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto de acessórios.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Technical Report / Observations HTML Render */}
-              <div className="space-y-2" id="technical-report-view">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-sky-400" />
-                  Laudo Técnico de Entrada (Triador)
-                </h4>
-                {currentUnit.notes ? (
-                  <div 
-                    className="p-5 bg-slate-950 border border-slate-850 rounded-xl text-sm text-slate-300 leading-relaxed max-h-60 overflow-y-auto prose prose-invert prose-sm"
-                    dangerouslySetInnerHTML={{ __html: currentUnit.notes }}
-                  />
+              <div className="flex items-center gap-2">
+                {isEditingUnit ? (
+                  <>
+                    <button 
+                      type="button"
+                      onClick={() => { setIsEditingUnit(false); setEditForm(null); }}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      type="button"
+                      disabled={isSavingEdit}
+                      onClick={handleSaveEdit}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{isSavingEdit ? 'Salvando...' : 'Salvar Alterações'}</span>
+                    </button>
+                  </>
                 ) : (
-                  <p className="p-4 text-xs text-slate-500 bg-slate-950 rounded-xl border border-slate-850 italic text-center">Sem observações descritivas fornecidas.</p>
+                  <>
+                    <button 
+                      type="button"
+                      onClick={() => handleStartEdit(currentUnit)}
+                      className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-sky-600/20 flex items-center gap-1.5 cursor-pointer"
+                      title="Editar imagens, descrição, SKU e campos do produto"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>Editar Produto</span>
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={handleCloseDetails}
+                      className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-800 transition-colors cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </>
                 )}
               </div>
-
-              {/* Checkout details if already dispatched */}
-              {currentUnit.status === 'Baixado' && currentUnit.checkoutDate && (
-                <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Este produto foi retirado física e logicamente do galpão em <strong>{new Date(currentUnit.checkoutDate).toLocaleString('pt-BR')}</strong>.</span>
-                </div>
-              )}
             </div>
+
+            {/* Modal Body: Switch between View Mode and Edit Mode */}
+            {isEditingUnit && editForm ? (
+              /* EDIT MODE CONTENT */
+              <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh]">
+                <div className="p-3 bg-sky-950/60 border border-sky-500/30 rounded-xl text-sky-200 text-xs flex items-center gap-2">
+                  <Pencil className="w-4 h-4 text-sky-400 shrink-0" />
+                  <span>Modo de edição do produto. Altere imagens, descrição, nome, SKU e especificações do item.</span>
+                </div>
+
+                {/* Section 1: Main Info */}
+                <div className="space-y-4 bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5" />
+                    Dados do Produto & Identificação
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Nome do Produto
+                      </label>
+                      <input 
+                        type="text" 
+                        value={editForm.baseProductName} 
+                        onChange={(e) => setEditForm({ ...editForm, baseProductName: e.target.value })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500" 
+                        placeholder="Nome do produto"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        SKU
+                      </label>
+                      <input 
+                        type="text" 
+                        value={editForm.baseProductSku} 
+                        onChange={(e) => setEditForm({ ...editForm, baseProductSku: e.target.value })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-sky-400 font-mono focus:outline-none focus:border-sky-500" 
+                        placeholder="Ex: 1650"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Código STI / Rastreio
+                      </label>
+                      <input 
+                        type="text" 
+                        value={editForm.trackingCode} 
+                        onChange={(e) => setEditForm({ ...editForm, trackingCode: e.target.value })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
+                        placeholder="Ex: 13509873"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Número de Série (S/N)
+                      </label>
+                      <input 
+                        type="text" 
+                        value={editForm.serialNumber || ''} 
+                        onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
+                        placeholder="Ex: SN-123456789-BR"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Voltagem Elétrica
+                      </label>
+                      <select 
+                        value={editForm.baseProductVoltage || 'Bivolt'} 
+                        onChange={(e) => setEditForm({ ...editForm, baseProductVoltage: e.target.value })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                      >
+                        <option value="Bivolt">Bivolt</option>
+                        <option value="110V / 127V">110V / 127V</option>
+                        <option value="220V">220V</option>
+                        <option value="N/A">N/A (Sem energia)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Setor de Destino
+                      </label>
+                      <select 
+                        value={editForm.destinationSector} 
+                        onChange={(e) => setEditForm({ ...editForm, destinationSector: e.target.value as DestinationSectorType })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                      >
+                        <option value="Openbox">Openbox (Outlet / Revisados)</option>
+                        <option value="Principal">Estoque Principal (Prontos / Novos)</option>
+                        <option value="RMA">RMA (Assistência Técnica)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Diagnostics & Condition */}
+                <div className="space-y-4 bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Condição, Motivo & Acessórios
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Estado do Aparelho
+                      </label>
+                      <select 
+                        value={editForm.deviceStatus} 
+                        onChange={(e) => setEditForm({ ...editForm, deviceStatus: e.target.value as DeviceStatusType })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                      >
+                        <option value="Novo">Novo</option>
+                        <option value="Usado">Usado</option>
+                        <option value="Com Avaria">Com Avaria</option>
+                        <option value="Peças">Peças / Sucata</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Estado da Embalagem / Caixa
+                      </label>
+                      <select 
+                        value={editForm.packageStatus} 
+                        onChange={(e) => setEditForm({ ...editForm, packageStatus: e.target.value as PackageStatusType })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                      >
+                        <option value="Perfeita">Perfeita / Na Caixa</option>
+                        <option value="Danificada">Danificada</option>
+                        <option value="Sem Embalagem">Sem Embalagem / Fora da Caixa</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Motivo da Devolução / Observação Curta
+                      </label>
+                      <textarea 
+                        value={editForm.customerReason} 
+                        onChange={(e) => setEditForm({ ...editForm, customerReason: e.target.value })} 
+                        rows={2}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-sky-500" 
+                        placeholder="Ex: Revisada, sem marcas de uso, testada..."
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Acessórios Recebidos
+                      </label>
+                      <input 
+                        type="text" 
+                        value={editForm.accessoriesInclusion || ''} 
+                        onChange={(e) => setEditForm({ ...editForm, accessoriesInclusion: e.target.value })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500" 
+                        placeholder="Ex: Embalagem: Na caixa; Fonte e cabo USB inclusos."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Technical Report / Detailed Description */}
+                <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5" />
+                    Laudo Técnico de Entrada / Descrição Detalhada
+                  </h4>
+                  <textarea 
+                    value={editForm.notes || ''} 
+                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} 
+                    rows={4}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-sky-500 leading-relaxed" 
+                    placeholder="Adicione texto ou formato HTML do laudo..."
+                  />
+                </div>
+
+                {/* Section 4: Photo Gallery Editor */}
+                <div className="space-y-4 bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5" />
+                      Gerenciar Galeria de Fotos ({ (editForm.photosProduct?.length || 0) + (editForm.photosBox?.length || 0) + (editForm.photosAccessories?.length || 0) })
+                    </h4>
+
+                    {/* Category selector for URL addition */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-400 text-[10px]">Adicionar Para:</span>
+                      <select 
+                        value={urlInputCategory}
+                        onChange={(e) => setUrlInputCategory(e.target.value as any)}
+                        className="bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-[11px] font-bold text-white cursor-pointer"
+                      >
+                        <option value="photosProduct">Fotos do Aparelho</option>
+                        <option value="photosBox">Fotos da Embalagem</option>
+                        <option value="photosAccessories">Fotos dos Acessórios</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Add photo inputs */}
+                  <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
+                    <div className="flex flex-col sm:flex-row items-center gap-2">
+                      <label className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1.5 shrink-0">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload do Computador</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={(e) => handleAddPhotoFile(urlInputCategory, e)} 
+                          className="hidden" 
+                        />
+                      </label>
+
+                      <div className="flex-1 w-full flex items-center gap-2">
+                        <input 
+                          type="text" 
+                          value={imageUrlInput} 
+                          onChange={(e) => setImageUrlInput(e.target.value)} 
+                          placeholder="Cole o link da imagem (URL https://...)" 
+                          className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500" 
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => handleAddPhotoUrl(urlInputCategory)}
+                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer"
+                        >
+                          Adicionar URL
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Categories preview grids with delete overlay */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Product Photos */}
+                    <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-1">
+                        <span>Fotos do Aparelho</span>
+                        <span className="text-sky-400">({editForm.photosProduct?.length || 0})</span>
+                      </div>
+                      {editForm.photosProduct && editForm.photosProduct.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {editForm.photosProduct.map((p, i) => (
+                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group">
+                              <img src={p} className="w-full h-full object-cover" />
+                              <button 
+                                type="button" 
+                                onClick={() => handleRemovePhoto('photosProduct', i)}
+                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer"
+                                title="Remover foto"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 italic text-center py-4">Sem fotos do aparelho.</p>
+                      )}
+                    </div>
+
+                    {/* Box Photos */}
+                    <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-1">
+                        <span>Fotos da Embalagem</span>
+                        <span className="text-sky-400">({editForm.photosBox?.length || 0})</span>
+                      </div>
+                      {editForm.photosBox && editForm.photosBox.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {editForm.photosBox.map((p, i) => (
+                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group">
+                              <img src={p} className="w-full h-full object-cover" />
+                              <button 
+                                type="button" 
+                                onClick={() => handleRemovePhoto('photosBox', i)}
+                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer"
+                                title="Remover foto"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 italic text-center py-4">Sem fotos da caixa.</p>
+                      )}
+                    </div>
+
+                    {/* Accessories Photos */}
+                    <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-1">
+                        <span>Fotos dos Acessórios</span>
+                        <span className="text-sky-400">({editForm.photosAccessories?.length || 0})</span>
+                      </div>
+                      {editForm.photosAccessories && editForm.photosAccessories.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {editForm.photosAccessories.map((p, i) => (
+                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group">
+                              <img src={p} className="w-full h-full object-cover" />
+                              <button 
+                                type="button" 
+                                onClick={() => handleRemovePhoto('photosAccessories', i)}
+                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer"
+                                title="Remover foto"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 italic text-center py-4">Sem fotos de acessórios.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* VIEW MODE CONTENT */
+              <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
+                
+                {/* Top metadata grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-slate-950 p-4 border border-slate-850 rounded-xl text-xs">
+                  <div>
+                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Origem / Canal</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}>
+                      {currentUnit.platform}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Nº de Série (S/N)</span>
+                    <span className="font-semibold text-slate-200 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
+                      {currentUnit.serialNumber || 'Não Informado'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Voltagem Elétrica</span>
+                    <span className="font-semibold text-slate-200 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">{currentUnit.baseProductVoltage}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Data de Triagem</span>
+                    <span className="font-semibold text-slate-300">{new Date(currentUnit.createdAt).toLocaleDateString('pt-BR')} {new Date(currentUnit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Status Interno</span>
+                    <span className={`font-semibold px-2 py-0.5 rounded text-[10px] font-bold ${currentUnit.status === 'Estoque' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                      {currentUnit.status === 'Estoque' ? 'Em Estoque' : 'Baixado / Saída'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Claims and Accessories details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-850 space-y-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                      Motivo da Devolução (Cliente)
+                    </h4>
+                    <p className="text-sm text-slate-300 leading-relaxed italic">
+                      "{currentUnit.customerReason}"
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-850 space-y-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-sky-400" />
+                      Lista de Acessórios Recebidos
+                    </h4>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      {currentUnit.accessoriesInclusion || 'Nenhum acessório declared.'}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 pt-2 text-[10px] text-slate-450 border-t border-slate-800">
+                      <span>Aparelho: <strong>{currentUnit.deviceStatus}</strong></span>
+                      <span>Caixa: <strong>{currentUnit.packageStatus}</strong></span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Integrated Photo Gallery split by logical category */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                    Galeria de Fotos da Triagem
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="gallery-categories">
+                    {/* Category A: Product */}
+                    <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
+                      <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos do Aparelho ({currentUnit.photosProduct?.length || 0})</span>
+                      {currentUnit.photosProduct && currentUnit.photosProduct.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {currentUnit.photosProduct.map((p, i) => (
+                            <div 
+                              key={i} 
+                              onClick={() => setFullscreenImage(p)}
+                              className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                            >
+                              <img src={p} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
+                                <Eye className="w-4 h-4" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto do aparelho.</p>
+                      )}
+                    </div>
+
+                    {/* Category B: Box */}
+                    <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
+                      <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos da Embalagem ({currentUnit.photosBox?.length || 0})</span>
+                      {currentUnit.photosBox && currentUnit.photosBox.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {currentUnit.photosBox.map((p, i) => (
+                            <div 
+                              key={i} 
+                              onClick={() => setFullscreenImage(p)}
+                              className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                            >
+                              <img src={p} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
+                                <Eye className="w-4 h-4" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto da caixa.</p>
+                      )}
+                    </div>
+
+                    {/* Category C: Accessories */}
+                    <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
+                      <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos dos Acessórios ({currentUnit.photosAccessories?.length || 0})</span>
+                      {currentUnit.photosAccessories && currentUnit.photosAccessories.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {currentUnit.photosAccessories.map((p, i) => (
+                            <div 
+                              key={i} 
+                              onClick={() => setFullscreenImage(p)}
+                              className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                            >
+                              <img src={p} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
+                                <Eye className="w-4 h-4" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto de acessórios.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Technical Report / Observations HTML Render */}
+                <div className="space-y-2" id="technical-report-view">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-sky-400" />
+                    Laudo Técnico de Entrada (Triador)
+                  </h4>
+                  {currentUnit.notes ? (
+                    <div 
+                      className="p-5 bg-slate-950 border border-slate-850 rounded-xl text-sm text-slate-300 leading-relaxed max-h-60 overflow-y-auto prose prose-invert prose-sm"
+                      dangerouslySetInnerHTML={{ __html: currentUnit.notes }}
+                    />
+                  ) : (
+                    <p className="p-4 text-xs text-slate-500 bg-slate-950 rounded-xl border border-slate-850 italic text-center">Sem observações descritivas fornecidas.</p>
+                  )}
+                </div>
+
+                {/* Checkout details if already dispatched */}
+                {currentUnit.status === 'Baixado' && currentUnit.checkoutDate && (
+                  <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Este produto foi retirado física e logicamente do galpão em <strong>{new Date(currentUnit.checkoutDate).toLocaleString('pt-BR')}</strong>.</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Modal Action Controls Bar */}
             <div className="px-6 py-4 bg-slate-950 border-t border-slate-850 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -831,26 +1403,40 @@ export default function PhysicalStock({
                 <div className="text-slate-500 text-xs">Ações indisponíveis para produtos baixados.</div>
               )}
 
-              {/* Right Side Actions: Dar Baixa & Excluir */}
+              {/* Right Side Actions: Save/Edit, Dar Baixa & Excluir */}
               <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-                <button 
-                  onClick={() => handleDelete(currentUnit.id)}
-                  className="px-3 py-2 bg-slate-800 hover:bg-rose-600/20 text-slate-405 hover:text-rose-400 border border-slate-750 hover:border-rose-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Apagar ficha técnica do banco"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Excluir Registro
-                </button>
-
-                {currentUnit.status === 'Estoque' && (
+                {isEditingUnit ? (
                   <button 
-                    onClick={() => handleCheckout(currentUnit.id)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
-                    id="btn-stock-checkout"
+                    type="button"
+                    disabled={isSavingEdit}
+                    onClick={handleSaveEdit}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Dar Baixa de Estoque
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingEdit ? 'Salvando...' : 'Salvar Alterações'}</span>
                   </button>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => handleDelete(currentUnit.id)}
+                      className="px-3 py-2 bg-slate-800 hover:bg-rose-600/20 text-slate-405 hover:text-rose-400 border border-slate-750 hover:border-rose-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      title="Apagar ficha técnica do banco"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Excluir Registro
+                    </button>
+
+                    {currentUnit.status === 'Estoque' && (
+                      <button 
+                        onClick={() => handleCheckout(currentUnit.id)}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                        id="btn-stock-checkout"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Dar Baixa de Estoque
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -917,6 +1503,15 @@ export default function PhysicalStock({
           </div>
         </div>
       )}
+
+      {/* Excel Inventory Import Modal */}
+      <ExcelImportModal 
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+        products={products}
+        onImportUnits={handleImportBatchUnits}
+        defaultSector={activeTab === 'Openbox' ? 'Openbox' : activeTab === 'RMA' ? 'RMA' : activeTab === 'Principal' ? 'Principal' : 'Openbox'}
+      />
     </div>
   );
 }

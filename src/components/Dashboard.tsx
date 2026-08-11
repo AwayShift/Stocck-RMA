@@ -242,13 +242,18 @@ export default function Dashboard({ units, onViewUnit, onNavigateToStock, onRese
                           )}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded">
                               {unit.baseProductSku}
                             </span>
                             <span className="font-mono text-xs text-slate-400">
                               #{unit.trackingCode}
                             </span>
+                            {unit.serialNumber && (
+                              <span className="font-mono text-xs text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">
+                                S/N: {unit.serialNumber}
+                              </span>
+                            )}
                           </div>
                           <h4 className="text-sm font-semibold text-white mt-1 truncate max-w-[200px] sm:max-w-[280px]">
                             {unit.baseProductName}

@@ -620,11 +620,13 @@ export default function App() {
             {activeTab === 'stock' && (
               <PhysicalStock 
                 units={triageUnits}
+                products={products}
                 onUpdateUnit={handleSaveTriage}
                 onDeleteUnit={handleDeleteTriage}
                 onCheckoutUnit={handleCheckoutTriage}
                 initialSelectedUnit={selectedTriageUnit}
                 onClearSelectedUnit={() => setSelectedTriageUnit(null)}
+                onSaveTriage={handleSaveTriage}
               />
             )}
 

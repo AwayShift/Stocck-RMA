@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType } from '../types';
 import { uploadFileToStorage } from '../lib/dbService';
+import { RichTextEditor } from './RichTextEditor';
 
 interface RmaEntryProps {
   products: BaseProduct[];
@@ -76,6 +77,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
   
   // Fields of Entrance
   const [trackingCode, setTrackingCode] = useState('');
+  const [serialNumber, setSerialNumber] = useState('');
   const [platform, setPlatform] = useState<PlatformType>('Mercado Livre');
   const [customerReason, setCustomerReason] = useState('');
 
@@ -95,79 +97,13 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
   // Active upload zone for Ctrl+V
   const [activeUploadCategory, setActiveUploadCategory] = useState<'product' | 'box' | 'accessories'>('product');
 
-  // Quill rich-text observations HTML state
+  // Rich-text observations HTML state
   const [notes, setNotes] = useState('');
-  const quillContainerRef = useRef<HTMLDivElement>(null);
-  const quillInstanceRef = useRef<any>(null);
 
   // Status messages
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Dynamic Quill.js CDN loader
-  useEffect(() => {
-    let quillScript: HTMLScriptElement | null = null;
-    let quillStyle: HTMLLinkElement | null = null;
-
-    const initQuill = () => {
-      if (quillContainerRef.current && (window as any).Quill && !quillInstanceRef.current) {
-        // Clear previous toolbars and editor markup in the parent container to prevent duplication
-        const parent = quillContainerRef.current.parentNode;
-        if (parent) {
-          const toolbars = parent.querySelectorAll('.ql-toolbar');
-          toolbars.forEach(tb => tb.remove());
-        }
-        quillContainerRef.current.innerHTML = '';
-
-        quillInstanceRef.current = new (window as any).Quill(quillContainerRef.current, {
-          theme: 'snow',
-          placeholder: 'Insira o laudo técnico completo, observações sobre o circuito, avarias, etc...',
-          modules: {
-            toolbar: [
-              ['bold', 'italic', 'underline', 'strike'],
-              [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-              ['clean']
-            ]
-          }
-        });
-
-        // Set initial state
-        quillInstanceRef.current.root.innerHTML = notes;
-
-        // Listen for changes
-        quillInstanceRef.current.on('text-change', () => {
-          setNotes(quillInstanceRef.current.root.innerHTML);
-        });
-      }
-    };
-
-    if (!(window as any).Quill) {
-      // Load Quill css
-      quillStyle = document.createElement('link');
-      quillStyle.rel = 'stylesheet';
-      quillStyle.href = 'https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css';
-      document.head.appendChild(quillStyle);
-
-      // Load Quill js
-      quillScript = document.createElement('script');
-      quillScript.src = 'https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js';
-      quillScript.async = true;
-      quillScript.onload = () => {
-        initQuill();
-      };
-      document.body.appendChild(quillScript);
-    } else {
-      initQuill();
-    }
-
-    return () => {
-      // Component unmount logic
-      if (quillInstanceRef.current) {
-        quillInstanceRef.current = null;
-      }
-    };
-  }, []);
 
   // Image upload handler
   const handlePhotoUpload = async (files: FileList | null, category: 'product' | 'box' | 'accessories') => {
@@ -283,9 +219,9 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
   // Global Ctrl+V Paste handler as fallback
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
-      // Don't intercept paste if focused inside Quill editor
+      // Don't intercept paste if focused inside rich text editor
       const activeEl = document.activeElement;
-      if (activeEl && activeEl.closest('.ql-editor')) {
+      if (activeEl && (activeEl.getAttribute('contenteditable') === 'true' || activeEl.closest('[contenteditable="true"]'))) {
         return;
       }
       await handleLocalPaste(e, activeCategoryRef.current);
@@ -320,6 +256,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
     const newTriage: TriageUnit = {
       id: 'tr-' + Date.now(),
       trackingCode: finalTrackingCode,
+      serialNumber: serialNumber.trim(),
       baseProductId: refProduct.id,
       baseProductName: refProduct.name,
       baseProductSku: refProduct.sku,
@@ -350,12 +287,10 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
       setPhotosBox([]);
       setPhotosAccessories([]);
       setNotes('');
-      if (quillInstanceRef.current) {
-        quillInstanceRef.current.root.innerHTML = '';
-      }
       
-      // Reset tracking code
+      // Reset tracking code & serial number
       setTrackingCode('');
+      setSerialNumber('');
 
       // Scroll to top
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -381,6 +316,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
     setSelectedProductId(randomProduct.id);
     setPlatform('Mercado Livre');
     setTrackingCode('STI-40912');
+    setSerialNumber('SN-9876543210-BR');
     setCustomerReason('O produto funcionou na primeira semana, mas parou de esquentar na segunda semana. Quero devolução.');
     setDeviceStatus('Usado');
     setPackageStatus('Danificada');
@@ -388,9 +324,6 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
     setDestinationSector('RMA');
     const technicalReport = `<h3>Relatório de Entrada de RMA:</h3><p>Equipamento recebido com marcas leves de gordura no cesto.</p><p><strong>Diagnóstico:</strong> Resistência aberta. Fusível térmico de proteção em curto-circuito devido a superaquecimento.</p><p><strong>Solução:</strong> Necessita troca de kit de aquecimento na oficina técnica.</p>`;
     setNotes(technicalReport);
-    if (quillInstanceRef.current) {
-      quillInstanceRef.current.root.innerHTML = technicalReport;
-    }
   };
 
   return (
@@ -471,7 +404,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Platform Selection */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Plataforma Origem</label>
@@ -491,21 +424,32 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                    {/* Tracking / Case Code (Código STI) */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                      Código STI {destinationSector === 'Openbox' ? <span className="text-amber-500 font-bold">* (Obrigatório para Openbox)</span> : <span className="text-slate-500 font-normal">(Opcional)</span>}
+                      Código STI {destinationSector === 'Openbox' ? <span className="text-amber-500 font-bold">* (Obrigatório)</span> : <span className="text-slate-500 font-normal">(Opcional)</span>}
                     </label>
                     <input 
                       type="text"
-                      placeholder={destinationSector === 'Openbox' ? "Digite o Código STI (Obrigatório para Openbox)" : "Digite o Código STI (Opcional)"}
+                      placeholder={destinationSector === 'Openbox' ? "Digite o Código STI" : "Código STI (Opcional)"}
                       value={trackingCode}
                       onChange={(e) => setTrackingCode(e.target.value)}
                       className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
                       id="input-tracking-code"
                     />
-                    <p className="text-[10px] text-slate-500">
-                      {destinationSector === 'Openbox' 
-                        ? 'O código STI é obrigatório para identificar unicamente o item no Openbox.' 
-                        : 'Este código identifica o item, mas é opcional para RMA / Estoque Principal.'}
-                    </p>
+                  </div>
+
+                  {/* Serial Number / S/N */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                      <span>Nº de Série / Serial</span>
+                      <span className="text-slate-500 font-normal">(S/N)</span>
+                    </label>
+                    <input 
+                      type="text"
+                      placeholder="Ex: SN-123456789-BR (Bipar barras)"
+                      value={serialNumber}
+                      onChange={(e) => setSerialNumber(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
+                      id="input-serial-number"
+                    />
                   </div>
                 </div>
 
@@ -576,23 +520,25 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                 </div>
               </div>
 
-              {/* Step 3: Technical observations (Quill Rich text) */}
+              {/* Step 3: Technical observations */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-3">
-                <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">3</span>
-                  Laudo Técnico & Observações
-                </h3>
-                
-                {/* Note Rich-text container with explicit Quill instantiation */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex justify-between">
-                    <span>Observações do Triador (Quill WYSIWYG)</span>
-                    <span className="text-[10px] text-sky-400 font-normal">Nota técnica oficial de recebimento</span>
-                  </label>
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden text-slate-200" style={{ minHeight: '180px' }}>
-                    <div ref={quillContainerRef} id="quill-editor" style={{ height: '140px', border: 'none' }} className="text-sm"></div>
-                  </div>
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">3</span>
+                    Laudo Técnico & Observações
+                  </h3>
                 </div>
+                
+                {/* Editor Container */}
+                <RichTextEditor
+                  value={notes}
+                  onChange={setNotes}
+                  label="Observações e Parecer do Triador"
+                  placeholder="Insira o laudo técnico completo, observações sobre o circuito, avarias, etc..."
+                  minHeight="160px"
+                  maxHeight="320px"
+                  id="technical-notes-editor"
+                />
               </div>
             </div>
 

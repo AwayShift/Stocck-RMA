@@ -61,6 +61,7 @@ const DEFAULT_TRIAGE_UNITS: TriageUnit[] = [
   {
     id: 'tr-1',
     trackingCode: 'ML-827491023',
+    serialNumber: 'SN-AF45L-2025-8891',
     baseProductId: 'bp-2',
     baseProductName: 'Fritadeira Elétrica AirFryer Touch 4.5L',
     baseProductSku: 'AIR-FRY-45L',
@@ -81,6 +82,7 @@ const DEFAULT_TRIAGE_UNITS: TriageUnit[] = [
   {
     id: 'tr-2',
     trackingCode: 'SHP-992817441',
+    serialNumber: 'SN-ASP1600-220V-3042',
     baseProductId: 'bp-1',
     baseProductName: 'Aspirador de Pó Vertical Ultra 1600W',
     baseProductSku: 'ASP-VRT-1600',
@@ -294,6 +296,7 @@ const seedTriageUnits = async () => {
     for (const u of DEFAULT_TRIAGE_UNITS) {
       await setDoc(doc(db, 'triage_units', u.id), {
         trackingCode: u.trackingCode,
+        serialNumber: u.serialNumber || '',
         baseProductId: u.baseProductId,
         baseProductName: u.baseProductName,
         baseProductSku: u.baseProductSku,
@@ -445,6 +448,7 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<void> => {
 
   await setDoc(unitRef, {
     trackingCode: unit.trackingCode,
+    serialNumber: unit.serialNumber || '',
     baseProductId: unit.baseProductId,
     baseProductName: unit.baseProductName,
     baseProductSku: unit.baseProductSku,

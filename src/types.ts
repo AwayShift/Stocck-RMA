@@ -40,6 +40,7 @@ export interface CaseTracking {
 export interface TriageUnit {
   id: string;
   trackingCode: string; // Código de rastreamento / número do caso
+  serialNumber?: string; // Número de série do produto
   baseProductId: string;
   baseProductName: string;
   baseProductSku: string;

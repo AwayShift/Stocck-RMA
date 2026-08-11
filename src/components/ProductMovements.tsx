@@ -296,9 +296,10 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
           const matchesSku = u.baseProductSku?.toLowerCase().includes(query);
           const matchesName = u.baseProductName?.toLowerCase().includes(query);
           const matchesTracking = u.trackingCode?.toLowerCase().includes(query);
+          const matchesSerial = u.serialNumber?.toLowerCase().includes(query);
           const matchesPlatform = u.platform?.toLowerCase().includes(query);
           const matchesSector = u.destinationSector?.toLowerCase().includes(query);
-          return matchesSku || matchesName || matchesTracking || matchesPlatform || matchesSector;
+          return matchesSku || matchesName || matchesTracking || matchesSerial || matchesPlatform || matchesSector;
         }
 
         return true;
@@ -944,6 +945,12 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
                       <p className="font-bold text-white truncate text-xs">{item.baseProductName}</p>
                       <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
                         <span className="font-mono">{item.trackingCode}</span>
+                        {item.serialNumber && (
+                          <>
+                            <span>•</span>
+                            <span className="font-mono text-slate-400">S/N: {item.serialNumber}</span>
+                          </>
+                        )}
                         <span>•</span>
                         <span className="font-extrabold uppercase text-[9px]" style={{
                           color: item.destinationSector === 'Principal' ? '#10B981' : item.destinationSector === 'Openbox' ? '#F59E0B' : '#EF4444'
