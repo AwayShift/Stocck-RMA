@@ -215,8 +215,65 @@ export default function PhysicalStock({
     });
   };
 
+  // State to toggle filtering only duplicate items
+  const [filterOnlyDuplicates, setFilterOnlyDuplicates] = useState(false);
+
+  // Track duplicated STI Codes (trackingCode) and Serial Numbers (serialNumber) in active physical stock
+  const duplicateStiSet = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    units.forEach(u => {
+      if (u.status === 'Estoque' && u.trackingCode && u.trackingCode.trim()) {
+        const key = u.trackingCode.trim().toLowerCase();
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    });
+    const set = new Set<string>();
+    Object.entries(counts).forEach(([key, count]) => {
+      if (count > 1) set.add(key);
+    });
+    return set;
+  }, [units]);
+
+  const duplicateSerialSet = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    units.forEach(u => {
+      if (u.status === 'Estoque' && u.serialNumber && u.serialNumber.trim()) {
+        const key = u.serialNumber.trim().toLowerCase();
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    });
+    const set = new Set<string>();
+    Object.entries(counts).forEach(([key, count]) => {
+      if (count > 1) set.add(key);
+    });
+    return set;
+  }, [units]);
+
+  const isDuplicateSti = (unit: TriageUnit) => {
+    if (!unit.trackingCode || !unit.trackingCode.trim()) return false;
+    return duplicateStiSet.has(unit.trackingCode.trim().toLowerCase());
+  };
+
+  const isDuplicateSerial = (unit: TriageUnit) => {
+    if (!unit.serialNumber || !unit.serialNumber.trim()) return false;
+    return duplicateSerialSet.has(unit.serialNumber.trim().toLowerCase());
+  };
+
+  const isUnitDuplicate = (unit: TriageUnit) => {
+    return isDuplicateSti(unit) || isDuplicateSerial(unit);
+  };
+
+  const duplicateUnitsCount = React.useMemo(() => {
+    return units.filter(u => u.status === 'Estoque' && (isDuplicateSti(u) || isDuplicateSerial(u))).length;
+  }, [units, duplicateStiSet, duplicateSerialSet]);
+
   // Filter logic
   const filteredUnits = units.filter(unit => {
+    // 0. Filter only duplicate items if toggle is active
+    if (filterOnlyDuplicates && !isUnitDuplicate(unit)) {
+      return false;
+    }
+
     // 1. Search filter
     const term = searchTerm.toLowerCase().trim();
     const matchesSearch = !term ||
@@ -224,7 +281,7 @@ export default function PhysicalStock({
       (unit.baseProductSku || '').toLowerCase().includes(term) ||
       (unit.trackingCode || '').toLowerCase().includes(term) ||
       (unit.serialNumber || '').toLowerCase().includes(term) ||
-      (unit.platform || '').toLowerCase().includes(term) ||
+      (unit.destinationSector !== 'Openbox' && (unit.platform || '').toLowerCase().includes(term)) ||
       (unit.customerReason || '').toLowerCase().includes(term) ||
       (unit.destinationSector || '').toLowerCase().includes(term) ||
       (unit.notes || '').toLowerCase().includes(term) ||
@@ -531,6 +588,27 @@ export default function PhysicalStock({
               </button>
             )}
 
+            {/* Filter Duplicates button */}
+            <button 
+              type="button"
+              onClick={() => setFilterOnlyDuplicates(prev => !prev)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                filterOnlyDuplicates
+                  ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-lg shadow-amber-500/20 scale-105'
+                  : duplicateUnitsCount > 0
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
+                  : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
+              }`}
+              title="Filtrar produtos com STI ou Serial repetidos"
+              id="btn-filter-duplicates"
+            >
+              <AlertTriangle className={`w-3.5 h-3.5 ${filterOnlyDuplicates ? 'text-slate-950' : 'text-amber-400'}`} />
+              <span>{filterOnlyDuplicates ? 'Apenas Duplicados' : `Duplicados (${duplicateUnitsCount})`}</span>
+              {duplicateUnitsCount > 0 && !filterOnlyDuplicates && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              )}
+            </button>
+
             {/* View switcher: Grid vs List/Linhas */}
             <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-0.5" id="stock-view-switcher">
               <button
@@ -568,6 +646,30 @@ export default function PhysicalStock({
           </div>
         </div>
 
+        {/* Duplicate Warning Banner */}
+        {duplicateUnitsCount > 0 && (
+          <div className={`px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3 text-xs font-medium transition-colors ${
+            filterOnlyDuplicates 
+              ? 'bg-amber-950/60 border-amber-500/50 text-amber-200' 
+              : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+          }`} id="stock-duplicate-banner">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                <strong>{duplicateUnitsCount}</strong> {duplicateUnitsCount === 1 ? 'produto possui' : 'produtos possuem'} <strong>Código STI</strong> ou <strong>Número de Série</strong> repetidos no estoque físico.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFilterOnlyDuplicates(prev => !prev)}
+              className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Filter className="w-3 h-3" />
+              <span>{filterOnlyDuplicates ? 'Mostrar Todos os Produtos' : 'Filtrar Apenas Duplicados'}</span>
+            </button>
+          </div>
+        )}
+
         {/* Units list Grid or List */}
         {filteredUnits.length === 0 ? (
           <div className="p-12 text-center bg-slate-950 flex flex-col items-center justify-center" id="stock-empty">
@@ -584,17 +686,22 @@ export default function PhysicalStock({
               // Total photos count
               const photosCount = (unit.photosProduct?.length || 0) + (unit.photosBox?.length || 0) + (unit.photosAccessories?.length || 0);
 
+              const hasDupSti = isDuplicateSti(unit);
+              const hasDupSerial = isDuplicateSerial(unit);
+
               return (
                 <div 
                   key={unit.id}
                   onClick={() => setSelectedUnitId(unit.id)}
-                  className="group bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-xl p-4 flex flex-col justify-between hover:shadow-xl transition-all cursor-pointer"
+                  className={`group bg-slate-900 border hover:border-slate-600 rounded-xl p-4 flex flex-col justify-between hover:shadow-xl transition-all cursor-pointer ${
+                    hasDupSti || hasDupSerial ? 'border-amber-500/50 shadow-md shadow-amber-500/5' : 'border-slate-800'
+                  }`}
                   id={`stock-unit-${unit.id}`}
                 >
                   <div className="space-y-3">
                     {/* Header */}
                     <div className="flex justify-between items-start gap-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {unit.status !== 'Baixado' && (
                           <button
                             type="button"
@@ -617,12 +724,30 @@ export default function PhysicalStock({
                           {unit.baseProductSku}
                         </span>
                         {unit.serialNumber && (
-                          <span className="font-mono text-[10px] text-slate-400 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded" title="Número de Série">
+                          <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${
+                            hasDupSerial 
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold' 
+                              : 'text-slate-400 bg-slate-950 border-slate-800'
+                          }`} title={hasDupSerial ? "Número de Série Duplicado!" : "Número de Série"}>
                             S/N: {unit.serialNumber}
                           </span>
                         )}
+                        {hasDupSti && (
+                          <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-0.5" title="Código STI Duplicado!">
+                            <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                            <span>STI Repetido</span>
+                          </span>
+                        )}
+                        {hasDupSerial && (
+                          <span className="bg-rose-500/20 text-rose-300 border border-rose-500/40 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-0.5" title="Número de Série Duplicado!">
+                            <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                            <span>Serial Repetido</span>
+                          </span>
+                        )}
                       </div>
-                      <span className="font-mono text-[10px] text-slate-500 font-bold">
+                      <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                        hasDupSti ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-500'
+                      }`}>
                         #{unit.trackingCode}
                       </span>
                     </div>
@@ -665,9 +790,13 @@ export default function PhysicalStock({
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
-                      {unit.platform}
-                    </span>
+                    {unit.destinationSector !== 'Openbox' ? (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
+                        {unit.platform}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500 italic">Openbox</span>
+                    )}
                     <div className="flex items-center gap-2">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
                         {unit.destinationSector}
@@ -698,11 +827,16 @@ export default function PhysicalStock({
               const sectorClass = getSectorBadgeClass(unit.destinationSector);
               const photosCount = (unit.photosProduct?.length || 0) + (unit.photosBox?.length || 0) + (unit.photosAccessories?.length || 0);
 
+              const hasDupSti = isDuplicateSti(unit);
+              const hasDupSerial = isDuplicateSerial(unit);
+
               return (
                 <div 
                   key={unit.id}
                   onClick={() => setSelectedUnitId(unit.id)}
-                  className="group bg-slate-900 border border-slate-800/80 hover:border-slate-600 rounded-xl p-3 sm:p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:shadow-lg transition-all cursor-pointer"
+                  className={`group bg-slate-900 border hover:border-slate-600 rounded-xl p-3 sm:p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:shadow-lg transition-all cursor-pointer ${
+                    hasDupSti || hasDupSerial ? 'border-amber-500/50' : 'border-slate-800/80'
+                  }`}
                   id={`stock-unit-list-${unit.id}`}
                 >
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
@@ -745,17 +879,35 @@ export default function PhysicalStock({
                         <span className="font-mono text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded shrink-0">
                           {unit.baseProductSku}
                         </span>
-                        <span className="font-mono text-[10px] text-slate-500 font-bold shrink-0">
+                        <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                          hasDupSti ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-500'
+                        }`}>
                           #{unit.trackingCode}
                         </span>
                         {unit.serialNumber && (
-                          <span className="font-mono text-[10px] text-slate-400 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded shrink-0" title="Número de Série">
+                          <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${
+                            hasDupSerial ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold' : 'text-slate-400 bg-slate-950 border-slate-800'
+                          }`} title="Número de Série">
                             S/N: {unit.serialNumber}
                           </span>
                         )}
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
-                          {unit.platform}
-                        </span>
+                        {hasDupSti && (
+                          <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-0.5" title="Código STI Duplicado!">
+                            <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                            <span>STI Repetido</span>
+                          </span>
+                        )}
+                        {hasDupSerial && (
+                          <span className="bg-rose-500/20 text-rose-300 border border-rose-500/40 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-0.5" title="Número de Série Duplicado!">
+                            <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                            <span>Serial Repetido</span>
+                          </span>
+                        )}
+                        {unit.destinationSector !== 'Openbox' && (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
+                            {unit.platform}
+                          </span>
+                        )}
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
                           {unit.destinationSector}
                         </span>
@@ -1216,14 +1368,30 @@ export default function PhysicalStock({
               /* VIEW MODE CONTENT */
               <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
                 
+                {/* Duplicate warning banner inside detail modal */}
+                {(isDuplicateSti(currentUnit) || isDuplicateSerial(currentUnit)) && (
+                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2.5 text-xs text-amber-200">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <p className="font-bold text-amber-300">Atenção: Identificado Código Repetido no Estoque Físico</p>
+                      <p className="text-[11px] text-amber-400/80 mt-0.5">
+                        {isDuplicateSti(currentUnit) && `O Código STI (#${currentUnit.trackingCode}) já está cadastrado em outra unidade no estoque. `}
+                        {isDuplicateSerial(currentUnit) && `O Número de Série (S/N: ${currentUnit.serialNumber}) já está cadastrado em outra unidade no estoque.`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Top metadata grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-slate-950 p-4 border border-slate-850 rounded-xl text-xs">
-                  <div>
-                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Origem / Canal</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}>
-                      {currentUnit.platform}
-                    </span>
-                  </div>
+                  {currentUnit.destinationSector !== 'Openbox' && (
+                    <div>
+                      <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Origem / Canal</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}>
+                        {currentUnit.platform}
+                      </span>
+                    </div>
+                  )}
                   <div>
                     <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Nº de Série (S/N)</span>
                     <span className="font-semibold text-slate-200 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">

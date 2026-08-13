@@ -265,9 +265,11 @@ export default function Dashboard({ units, onViewUnit, onNavigateToStock, onRese
                       </div>
 
                       <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle.bg} ${pStyle.text} ${pStyle.border}`}>
-                          {unit.platform}
-                        </span>
+                        {unit.destinationSector !== 'Openbox' && (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle.bg} ${pStyle.text} ${pStyle.border}`}>
+                            {unit.platform}
+                          </span>
+                        )}
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${sectorStyle}`}>
                           {unit.destinationSector}
                         </span>

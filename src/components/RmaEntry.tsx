@@ -404,22 +404,24 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className={`grid grid-cols-1 ${destinationSector === 'Openbox' ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
                   {/* Platform Selection */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Plataforma Origem</label>
-                    <select 
-                      value={platform}
-                      onChange={(e) => setPlatform(e.target.value as PlatformType)}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500"
-                      id="select-platform-origin"
-                    >
-                      <option value="Mercado Livre">Mercado Livre</option>
-                      <option value="Shopee">Shopee</option>
-                      <option value="Amazon">Amazon</option>
-                      <option value="Kabum">Kabum</option>
-                    </select>
-                  </div>
+                  {destinationSector !== 'Openbox' && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Plataforma Origem</label>
+                      <select 
+                        value={platform}
+                        onChange={(e) => setPlatform(e.target.value as PlatformType)}
+                        className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500"
+                        id="select-platform-origin"
+                      >
+                        <option value="Mercado Livre">Mercado Livre</option>
+                        <option value="Shopee">Shopee</option>
+                        <option value="Amazon">Amazon</option>
+                        <option value="Kabum">Kabum</option>
+                      </select>
+                    </div>
+                  )}
 
                    {/* Tracking / Case Code (Código STI) */}
                   <div className="space-y-1.5">

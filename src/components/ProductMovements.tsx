@@ -938,9 +938,11 @@ export default function ProductMovements({ products, units, onSaveTriage, userRo
                         <span className="font-mono text-[10px] font-black text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800/50">
                           {item.baseProductSku}
                         </span>
-                        <span className="text-[10px] font-bold text-slate-400">
-                          • {item.platform}
-                        </span>
+                        {item.destinationSector !== 'Openbox' && (
+                          <span className="text-[10px] font-bold text-slate-400">
+                            • {item.platform}
+                          </span>
+                        )}
                       </div>
                       <p className="font-bold text-white truncate text-xs">{item.baseProductName}</p>
                       <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
