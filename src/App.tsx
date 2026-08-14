@@ -24,18 +24,23 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 
-import { BaseProduct, TriageUnit, CaseTracking } from './types';
+import { BaseProduct, TriageUnit, CaseTracking, DailyInflowRecord } from './types';
 import { 
   subscribeBaseProducts,
   subscribeTriageUnits,
   subscribeCaseTracking,
+  subscribeDailyInflows,
   saveBaseProduct,
+  saveBatchBaseProducts,
   deleteBaseProduct,
   saveTriageUnit,
   deleteTriageUnit,
   checkoutTriageUnit,
   saveCaseTracking,
   deleteCaseTracking,
+  saveDailyInflow,
+  saveBatchDailyInflows,
+  deleteDailyInflow,
   resetDatabaseToDefaults,
   createAuditLog
 } from './lib/dbService';
@@ -62,6 +67,7 @@ export default function App() {
   const [products, setProducts] = useState<BaseProduct[]>([]);
   const [triageUnits, setTriageUnits] = useState<TriageUnit[]>([]);
   const [cases, setCases] = useState<CaseTracking[]>([]);
+  const [dailyInflows, setDailyInflows] = useState<DailyInflowRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
 
@@ -185,16 +191,45 @@ export default function App() {
       setIsLoading(false);
     });
 
+    // Subscribe to daily inflows in real-time
+    const unsubscribeDailyInflows = subscribeDailyInflows((fetchedInflows) => {
+      setDailyInflows(fetchedInflows);
+    }, (err) => {
+      console.error('Error syncing daily inflows:', err);
+    });
+
     return () => {
       unsubscribeProducts();
       unsubscribeTriage();
       unsubscribeCases();
+      unsubscribeDailyInflows();
     };
   }, [user]);
+
+  // Daily Inflow actions
+  const handleSaveDailyInflow = async (record: DailyInflowRecord) => {
+    await saveDailyInflow(record);
+  };
+
+  const handleSaveBatchDailyInflows = async (records: DailyInflowRecord[]) => {
+    return await saveBatchDailyInflows(records);
+  };
+
+  const handleDeleteDailyInflow = async (id: string) => {
+    if (userRole !== 'admin') {
+      alert('Acesso negado: Apenas administradores podem apagar lançamentos do fluxo de entradas.');
+      return;
+    }
+    await deleteDailyInflow(id);
+  };
 
   // Catálogo de Base actions
   const handleSaveProduct = async (product: BaseProduct) => {
     await saveBaseProduct(product);
+  };
+
+  const handleSaveBatchProducts = async (productsToSave: BaseProduct[]) => {
+    return await saveBatchBaseProducts(productsToSave, products);
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -604,6 +639,7 @@ export default function App() {
               <BaseCatalog 
                 products={products}
                 onSaveProduct={handleSaveProduct}
+                onSaveBatchProducts={handleSaveBatchProducts}
                 onDeleteProduct={handleDeleteProduct}
                 userRole={userRole}
               />
@@ -638,6 +674,10 @@ export default function App() {
               <ProductMovements 
                 products={products}
                 units={triageUnits}
+                dailyInflows={dailyInflows}
+                onSaveDailyInflow={handleSaveDailyInflow}
+                onSaveBatchDailyInflows={handleSaveBatchDailyInflows}
+                onDeleteDailyInflow={handleDeleteDailyInflow}
                 onSaveTriage={handleSaveTriage}
                 userRole={userRole}
               />

@@ -92,6 +92,12 @@ service cloud.firestore {
       allow create, update, delete: if isManagerOrAdmin();
     }
 
+    // Coleção /daily_inflows: Leitura para autenticados. Escrita/gestão de fluxo de entradas para Admin ou Gerentes.
+    match /daily_inflows/{inflowId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isManagerOrAdmin();
+    }
+
     // Coleção /logs: Registros de auditoria do sistema.
     // Ninguém pode apagar ou alterar. Qualquer autenticado pode criar. Apenas Admin pode ler.
     match /logs/{logId} {

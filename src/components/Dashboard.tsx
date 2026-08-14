@@ -15,7 +15,7 @@ import {
   ShoppingCart, 
   Layers 
 } from 'lucide-react';
-import { TriageUnit, PlatformType, DestinationSectorType } from '../types';
+import { TriageUnit, PlatformType, DestinationSectorType, isMigrationUnit } from '../types';
 
 interface DashboardProps {
   units: TriageUnit[];
@@ -25,9 +25,10 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ units, onViewUnit, onNavigateToStock, onResetData }: DashboardProps) {
-  // Filter for today's units (based on local timezone)
+  // Filter for today's units (based on local timezone, excluding migration imports)
   const todayUnits = units.filter(u => {
     try {
+      if (isMigrationUnit(u)) return false;
       const uDate = new Date(u.createdAt);
       const today = new Date();
       return uDate.getDate() === today.getDate() &&

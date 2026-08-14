@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
-import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTracking } from '../types';
+import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTracking, DailyInflowRecord } from '../types';
 
 // Helper to check if running inside Tauri (Always false in our 100% Web application)
 export const isTauriEnvironment = (): boolean => {
@@ -268,6 +268,36 @@ export const subscribeCaseTracking = (
   });
 };
 
+export const subscribeDailyInflows = (
+  callback: (inflows: DailyInflowRecord[]) => void,
+  errorCallback?: (err: any) => void
+) => {
+  return onSnapshot(collection(db, 'daily_inflows'), (snapshot) => {
+    const inflows: DailyInflowRecord[] = [];
+    snapshot.forEach((doc) => {
+      inflows.push({ id: doc.id, ...doc.data() } as DailyInflowRecord);
+    });
+    // Sort by date ascending
+    inflows.sort((a, b) => a.date.localeCompare(b.date));
+    
+    if (inflows.length === 0 && snapshot.metadata.fromCache === false) {
+      const alreadySeeded = localStorage.getItem('daily_inflows_seeded');
+      if (!alreadySeeded) {
+        seedDailyInflows();
+        localStorage.setItem('daily_inflows_seeded', 'true');
+      }
+    } else if (inflows.length > 0) {
+      localStorage.setItem('daily_inflows_seeded', 'true');
+    }
+    callback(inflows);
+  }, (err) => {
+    console.error('Failed to subscribe daily inflows:', err);
+    if (errorCallback) {
+      errorCallback(err);
+    }
+  });
+};
+
 // SEED HELPERS
 
 const seedBaseProducts = async () => {
@@ -344,6 +374,75 @@ const DEFAULT_CASES: CaseTracking[] = [
   }
 ];
 
+// Default daily inflows matching the user's provided spreadsheet image
+export const DEFAULT_DAILY_INFLOWS: DailyInflowRecord[] = [
+  {
+    id: 'inflow-2026-05-25',
+    date: '2026-05-25',
+    rma: 23,
+    estoque: 25,
+    openbox: 2,
+    es: 0,
+    totalDia: 50,
+    source: 'excel',
+    notes: 'Carga recebida na segunda-feira',
+    createdAt: '2026-05-25T08:30:00.000Z',
+    updatedAt: '2026-05-25T08:30:00.000Z'
+  },
+  {
+    id: 'inflow-2026-05-26',
+    date: '2026-05-26',
+    rma: 11,
+    estoque: 15,
+    openbox: 1,
+    es: 44,
+    totalDia: 71,
+    source: 'excel',
+    notes: 'Lote ES recebido via transporte terceirizado',
+    createdAt: '2026-05-26T08:30:00.000Z',
+    updatedAt: '2026-05-26T08:30:00.000Z'
+  },
+  {
+    id: 'inflow-2026-05-27',
+    date: '2026-05-27',
+    rma: 11,
+    estoque: 25,
+    openbox: 5,
+    es: 54,
+    totalDia: 95,
+    source: 'excel',
+    notes: 'Pico de triagem quarta-feira',
+    createdAt: '2026-05-27T08:30:00.000Z',
+    updatedAt: '2026-05-27T08:30:00.000Z'
+  },
+  {
+    id: 'inflow-2026-05-28',
+    date: '2026-05-28',
+    rma: 15,
+    estoque: 24,
+    openbox: 2,
+    es: 0,
+    totalDia: 41,
+    source: 'excel',
+    notes: 'Entradas regulares',
+    createdAt: '2026-05-28T08:30:00.000Z',
+    updatedAt: '2026-05-28T08:30:00.000Z'
+  },
+  {
+    id: 'inflow-2026-05-29',
+    date: '2026-05-29',
+    rma: 2,
+    estoque: 6,
+    openbox: 2,
+    es: 0,
+    totalDia: 10,
+    source: 'excel',
+    notes: 'Fechamento semanal',
+    createdAt: '2026-05-29T08:30:00.000Z',
+    updatedAt: '2026-05-29T08:30:00.000Z'
+  }
+];
+
 const seedCaseTracking = async () => {
   try {
     for (const c of DEFAULT_CASES) {
@@ -360,6 +459,96 @@ const seedCaseTracking = async () => {
     console.log('Case tracking seeded successfully.');
   } catch (err) {
     console.error('Error seeding case tracking:', err);
+  }
+};
+
+export const seedDailyInflows = async () => {
+  try {
+    for (const item of DEFAULT_DAILY_INFLOWS) {
+      await setDoc(doc(db, 'daily_inflows', item.id), {
+        date: item.date,
+        rma: item.rma,
+        estoque: item.estoque,
+        openbox: item.openbox,
+        es: item.es,
+        totalDia: item.totalDia,
+        source: item.source || 'excel',
+        notes: item.notes || '',
+        createdAt: item.createdAt || new Date().toISOString(),
+        updatedAt: item.updatedAt || new Date().toISOString()
+      });
+    }
+    console.log('Daily inflows seeded successfully.');
+  } catch (err) {
+    console.error('Error seeding daily inflows:', err);
+  }
+};
+
+export const saveDailyInflow = async (record: DailyInflowRecord): Promise<void> => {
+  const docId = record.id || `inflow-${record.date}`;
+  const inflowRef = doc(db, 'daily_inflows', docId);
+  const docSnap = await getDoc(inflowRef);
+  const isUpdate = docSnap.exists();
+  const total = Number(record.rma || 0) + Number(record.estoque || 0) + Number(record.openbox || 0) + Number(record.es || 0);
+
+  const payload: DailyInflowRecord = {
+    id: docId,
+    date: record.date,
+    rma: Number(record.rma || 0),
+    estoque: Number(record.estoque || 0),
+    openbox: Number(record.openbox || 0),
+    es: Number(record.es || 0),
+    totalDia: total,
+    notes: record.notes || '',
+    source: record.source || 'manual',
+    createdAt: isUpdate ? (docSnap.data()?.createdAt || new Date().toISOString()) : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  await setDoc(inflowRef, payload);
+  await createAuditLog(
+    isUpdate ? 'UPDATE_DAILY_INFLOW' : 'CREATE_DAILY_INFLOW',
+    `${isUpdate ? 'Atualizou' : 'Registrou'} lançamento de entradas para ${record.date}. Total: ${total} unidades (RMA: ${record.rma}, Estoque: ${record.estoque}, Openbox: ${record.openbox}, ES: ${record.es})`
+  );
+};
+
+export const saveBatchDailyInflows = async (records: DailyInflowRecord[]): Promise<number> => {
+  let count = 0;
+  for (const record of records) {
+    const docId = record.id || `inflow-${record.date}`;
+    const inflowRef = doc(db, 'daily_inflows', docId);
+    const total = Number(record.rma || 0) + Number(record.estoque || 0) + Number(record.openbox || 0) + Number(record.es || 0);
+
+    await setDoc(inflowRef, {
+      id: docId,
+      date: record.date,
+      rma: Number(record.rma || 0),
+      estoque: Number(record.estoque || 0),
+      openbox: Number(record.openbox || 0),
+      es: Number(record.es || 0),
+      totalDia: total,
+      notes: record.notes || '',
+      source: 'excel',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    count++;
+  }
+
+  await createAuditLog(
+    'IMPORT_EXCEL_INFLOWS',
+    `Importou ${count} registro(s) diários via planilha Excel para o Fluxo de Entradas.`
+  );
+  return count;
+};
+
+export const deleteDailyInflow = async (id: string): Promise<void> => {
+  const inflowRef = doc(db, 'daily_inflows', id);
+  const docSnap = await getDoc(inflowRef);
+  if (docSnap.exists()) {
+    const data = docSnap.data();
+    await deleteDoc(inflowRef);
+    await createAuditLog('DELETE_DAILY_INFLOW', `Excluiu lançamento de entrada do dia: ${data.date}`);
   }
 };
 
@@ -429,6 +618,54 @@ export const saveBaseProduct = async (product: BaseProduct): Promise<void> => {
     isUpdate ? 'UPDATE_PRODUCT' : 'CREATE_PRODUCT',
     `${isUpdate ? 'Atualizou' : 'Criou'} produto master SKU: ${product.sku} - ${product.name}`
   );
+};
+
+export const saveBatchBaseProducts = async (
+  productsToSave: BaseProduct[],
+  existingProducts: BaseProduct[]
+): Promise<{ added: number; updated: number }> => {
+  let added = 0;
+  let updated = 0;
+
+  for (const item of productsToSave) {
+    const cleanSku = item.sku.trim().toUpperCase();
+    const existing = existingProducts.find(
+      p => p.sku.trim().toUpperCase() === cleanSku || p.id === item.id
+    );
+
+    const docId = existing ? existing.id : (item.id || `bp-${cleanSku.replace(/[^A-Z0-9_-]/gi, '_')}-${Date.now()}`);
+    const productRef = doc(db, 'products', docId);
+
+    const payload = {
+      name: item.name.trim(),
+      sku: cleanSku,
+      voltage: item.voltage || existing?.voltage || 'Bivolt',
+      description: item.description !== undefined ? item.description : (existing?.description || item.name.trim()),
+      imageUrl: item.imageUrl || existing?.imageUrl || '',
+      images: item.images || existing?.images || (item.imageUrl ? [item.imageUrl] : []),
+      imagesProduct: item.imagesProduct || existing?.imagesProduct || [],
+      imagesBox: item.imagesBox || existing?.imagesBox || [],
+      imagesAccessories: item.imagesAccessories || existing?.imagesAccessories || [],
+      accessories: item.accessories !== undefined ? item.accessories : (existing?.accessories || ''),
+      brand: item.brand !== undefined ? item.brand : (existing?.brand || ''),
+      category: item.category !== undefined ? item.category : (existing?.category || '')
+    };
+
+    await setDoc(productRef, payload, { merge: true });
+
+    if (existing) {
+      updated++;
+    } else {
+      added++;
+    }
+  }
+
+  await createAuditLog(
+    'IMPORT_EXCEL_CATALOG',
+    `Importou planilha no Catálogo de Base: ${added} novo(s) produto(s) adicionados e ${updated} atualizados.`
+  );
+
+  return { added, updated };
 };
 
 export const deleteBaseProduct = async (id: string): Promise<void> => {
@@ -512,12 +749,18 @@ export const resetDatabaseToDefaults = async (): Promise<void> => {
   for (const doc of casesSnap.docs) {
     await deleteDoc(doc.ref);
   }
+  const inflowsSnap = await getDocs(collection(db, 'daily_inflows'));
+  for (const doc of inflowsSnap.docs) {
+    await deleteDoc(doc.ref);
+  }
 
   localStorage.removeItem('base_products_seeded');
   localStorage.removeItem('triage_units_seeded');
   localStorage.removeItem('cases_seeded');
+  localStorage.removeItem('daily_inflows_seeded');
   await seedBaseProducts();
   await seedTriageUnits();
   await seedCaseTracking();
-  await createAuditLog('RESET_DATABASE', 'Restaurou banco de dados de produtos, triagens e acompanhamentos de casos para as configurações padrão');
+  await seedDailyInflows();
+  await createAuditLog('RESET_DATABASE', 'Restaurou banco de dados de produtos, triagens, casos e fluxo de entradas para as configurações padrão');
 };

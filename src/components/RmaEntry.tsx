@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Clipboard, 
   Upload, 
@@ -15,7 +15,11 @@ import {
   AlertCircle, 
   Eye, 
   Plus,
-  Zap
+  Zap,
+  Search,
+  Check,
+  ChevronDown,
+  X
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType } from '../types';
 import { uploadFileToStorage } from '../lib/dbService';
@@ -72,8 +76,11 @@ const compressImageToBase64 = (file: File): Promise<string> => {
 };
 
 export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: RmaEntryProps) {
-  // Select Base Product state
+  // Select Base Product state & search query
   const [selectedProductId, setSelectedProductId] = useState('');
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const productDropdownRef = useRef<HTMLDivElement>(null);
   
   // Fields of Entrance
   const [trackingCode, setTrackingCode] = useState('');
@@ -233,6 +240,44 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
     };
   }, []);
 
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (productDropdownRef.current && !productDropdownRef.current.contains(e.target as Node)) {
+        setIsProductDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Filtered products list by SKU or Name
+  const filteredProducts = useMemo(() => {
+    if (!productSearchTerm.trim()) return products;
+    const term = productSearchTerm.toLowerCase();
+    return products.filter(
+      p => p.sku?.toLowerCase().includes(term) || p.name?.toLowerCase().includes(term)
+    );
+  }, [products, productSearchTerm]);
+
+  // Selected product object
+  const selectedProduct = useMemo(() => {
+    return products.find(p => p.id === selectedProductId) || null;
+  }, [products, selectedProductId]);
+
+  // Sync search input with selected product or allow free typing
+  const handleSelectProduct = (p: BaseProduct) => {
+    setSelectedProductId(p.id);
+    setProductSearchTerm(`[${p.sku}] ${p.name}`);
+    setIsProductDropdownOpen(false);
+  };
+
+  const handleClearSelectedProduct = () => {
+    setSelectedProductId('');
+    setProductSearchTerm('');
+    setIsProductDropdownOpen(true);
+  };
+
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,12 +285,24 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
     setSuccessMessage('');
 
     if (!selectedProductId) {
-      setErrorMessage('Por favor, selecione um produto de referência do Catálogo.');
-      return;
+      // Auto-match if exact SKU or product name typed
+      const matched = products.find(
+        p => p.sku.toLowerCase() === productSearchTerm.trim().toLowerCase() ||
+             p.name.toLowerCase() === productSearchTerm.trim().toLowerCase()
+      );
+      if (matched) {
+        setSelectedProductId(matched.id);
+      } else {
+        setErrorMessage('Por favor, selecione ou digite um produto válido do Catálogo (SKU ou Nome).');
+        return;
+      }
     }
     const finalTrackingCode = trackingCode.trim() || `STI-${Math.floor(10000 + Math.random() * 90000)}`;
 
-    const refProduct = products.find(p => p.id === selectedProductId);
+    const refProduct = products.find(p => p.id === selectedProductId) || products.find(
+      p => p.sku.toLowerCase() === productSearchTerm.trim().toLowerCase() ||
+           p.name.toLowerCase() === productSearchTerm.trim().toLowerCase()
+    );
     if (!refProduct) {
       setErrorMessage('Produto de referência inválido.');
       return;
@@ -281,6 +338,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
       
       // Reset form fields
       setSelectedProductId('');
+      setProductSearchTerm('');
       setCustomerReason('');
       setAccessoriesInclusion('Todos os acessórios inclusos.');
       setPhotosProduct([]);
@@ -314,6 +372,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
     if (products.length === 0) return;
     const randomProduct = products[Math.floor(Math.random() * products.length)];
     setSelectedProductId(randomProduct.id);
+    setProductSearchTerm(`[${randomProduct.sku}] ${randomProduct.name}`);
     setPlatform('Mercado Livre');
     setTrackingCode('STI-40912');
     setSerialNumber('SN-9876543210-BR');
@@ -386,22 +445,142 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                   Recepção e Origem do Pacote
                 </h3>
 
-                {/* SKU Reference Selection */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Selecionar Produto do Catálogo</label>
-                  <select 
-                    value={selectedProductId}
-                    onChange={(e) => setSelectedProductId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 transition-colors font-sans"
-                    id="select-reference-product"
-                  >
-                    <option value="">-- Selecione o SKU / Nome do Produto --</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>
-                        [{p.sku}] - {p.name} ({p.voltage})
-                      </option>
-                    ))}
-                  </select>
+                {/* SKU & Product Search Input / AutoComplete */}
+                <div className="space-y-1.5" ref={productDropdownRef}>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <span>Produto do Catálogo (Nome ou SKU)</span>
+                      <span className="text-sky-400 font-bold">*</span>
+                    </label>
+                    {selectedProduct && (
+                      <button
+                        type="button"
+                        onClick={handleClearSelectedProduct}
+                        className="text-[11px] text-slate-400 hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>Trocar produto</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="relative">
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
+                      <Search className="w-4 h-4" />
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="Digite o SKU ou Nome do produto (Ex: AIR-FRYER, Batedeira...)"
+                      value={productSearchTerm}
+                      onChange={(e) => {
+                        setProductSearchTerm(e.target.value);
+                        setIsProductDropdownOpen(true);
+                        // If exact match exists, sync it
+                        const exact = products.find(p => p.sku.toLowerCase() === e.target.value.trim().toLowerCase());
+                        if (exact) {
+                          setSelectedProductId(exact.id);
+                        } else if (selectedProductId && e.target.value !== `[${selectedProduct?.sku}] ${selectedProduct?.name}`) {
+                          setSelectedProductId('');
+                        }
+                      }}
+                      onFocus={() => setIsProductDropdownOpen(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && filteredProducts.length > 0) {
+                          e.preventDefault();
+                          handleSelectProduct(filteredProducts[0]);
+                        } else if (e.key === 'Escape') {
+                          setIsProductDropdownOpen(false);
+                        }
+                      }}
+                      className={`w-full pl-10 pr-10 py-2.5 bg-slate-950 border rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition-all font-sans ${
+                        selectedProduct 
+                          ? 'border-sky-500/60 bg-sky-950/10 text-sky-100 font-medium' 
+                          : 'border-slate-800 focus:border-sky-500'
+                      }`}
+                      id="input-product-search-sku"
+                      autoComplete="off"
+                    />
+
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                      {productSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={handleClearSelectedProduct}
+                          className="p-1 text-slate-500 hover:text-white rounded-md transition-colors cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsProductDropdownOpen(prev => !prev)}
+                        className="p-1 text-slate-400 hover:text-white rounded-md transition-colors cursor-pointer"
+                      >
+                        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isProductDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    </div>
+
+                    {/* Autocomplete Dropdown */}
+                    {isProductDropdownOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-[#0a0f1d] border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin scrollbar-thumb-slate-850">
+                        <div className="p-2 bg-slate-900/90 text-[11px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium">
+                          <span>{filteredProducts.length} {filteredProducts.length === 1 ? 'produto encontrado' : 'produtos encontrados'}</span>
+                          <span className="text-[10px] text-slate-500">Pressione Enter ou clique para selecionar</span>
+                        </div>
+
+                        {filteredProducts.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-slate-500">
+                            Nenhum produto cadastrado com este SKU ou Nome.
+                          </div>
+                        ) : (
+                          filteredProducts.map((p) => {
+                            const isSelected = p.id === selectedProductId;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => handleSelectProduct(p)}
+                                className={`w-full text-left p-3 hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3 cursor-pointer ${
+                                  isSelected ? 'bg-sky-500/10' : ''
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono text-xs font-bold text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                      {p.sku}
+                                    </span>
+                                    <span className="text-[11px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
+                                      {p.voltage}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs font-medium text-slate-200 mt-1 truncate">
+                                    {p.name}
+                                  </p>
+                                </div>
+                                {isSelected && (
+                                  <Check className="w-4 h-4 text-sky-400 shrink-0" />
+                                )}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selected product tag preview */}
+                  {selectedProduct && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <div className="flex items-center gap-2 px-2.5 py-1 bg-sky-950/40 border border-sky-800/40 rounded-lg text-xs text-sky-300">
+                        <CheckCircle className="w-3.5 h-3.5 text-sky-400" />
+                        <span className="font-mono font-bold text-white">{selectedProduct.sku}</span>
+                        <span className="text-slate-400">•</span>
+                        <span className="truncate max-w-xs">{selectedProduct.name}</span>
+                        <span className="text-slate-400 font-mono text-[10px]">({selectedProduct.voltage})</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className={`grid grid-cols-1 ${destinationSector === 'Openbox' ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>

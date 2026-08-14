@@ -58,10 +58,83 @@ export interface TriageUnit {
   createdAt: string; // ISO String
   status: 'Estoque' | 'Baixado';
   checkoutDate?: string | null;
+  source?: 'manual' | 'excel' | 'migration';
+  isMigration?: boolean;
+}
+
+/**
+ * Helper to identify units created via spreadsheet inventory migration,
+ * so they are kept in stock inventory but ignored from operational RMA inflow counts.
+ */
+export function isMigrationUnit(u: {
+  isMigration?: boolean;
+  source?: string;
+  id?: string;
+  customerReason?: string;
+  notes?: string;
+}): boolean {
+  if (!u) return false;
+  if (u.isMigration) return true;
+  if (u.source === 'excel' || u.source === 'migration') return true;
+  if (u.id && (
+    u.id.startsWith('tr-excel-') || 
+    u.id.startsWith('excel-') || 
+    u.id.startsWith('mig-') || 
+    u.id.startsWith('migration-')
+  )) return true;
+  if (u.customerReason) {
+    const cr = u.customerReason.toLowerCase();
+    if (
+      cr.includes('importação de planilha') ||
+      cr.includes('importacao de planilha') ||
+      cr.includes('inventário openbox (importação') ||
+      cr.includes('inventario openbox (importacao') ||
+      cr.includes('migração de sistema') ||
+      cr.includes('migracao de sistema')
+    ) return true;
+  }
+  if (u.notes) {
+    const nt = u.notes.toLowerCase();
+    if (
+      nt.includes('item importado via planilha') ||
+      nt.includes('importação de planilha de inventário') ||
+      nt.includes('importacao de planilha de inventario') ||
+      nt.includes('inventário openbox') ||
+      nt.includes('inventario openbox')
+    ) return true;
+  }
+  return false;
 }
 
 export interface DashboardMetrics {
   totalReceivedToday: number;
   byPlatform: Record<PlatformType, number>;
   bySector: Record<DestinationSectorType, number>;
+}
+
+export interface DailyInflowRecord {
+  id: string;
+  date: string; // ISO 'YYYY-MM-DD'
+  rma: number;
+  estoque: number;
+  openbox: number;
+  es: number;
+  totalDia: number;
+  notes?: string;
+  source?: 'excel' | 'manual' | 'auto';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InflowWeekSummary {
+  weekNumber: number;
+  weekLabel: string;
+  startDate: string;
+  endDate: string;
+  records: DailyInflowRecord[];
+  totalWeek: number;
+  totalRma: number;
+  totalEstoque: number;
+  totalOpenbox: number;
+  totalEs: number;
 }

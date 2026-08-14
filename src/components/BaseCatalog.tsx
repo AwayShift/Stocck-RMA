@@ -19,24 +19,30 @@ import {
   Eye,
   ZoomIn,
   ZoomOut,
-  RotateCcw
+  RotateCcw,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 import { BaseProduct } from '../types';
-import { uploadFileToStorage } from '../lib/dbService';
+import { uploadFileToStorage, saveBatchBaseProducts } from '../lib/dbService';
 import { RichTextEditor } from './RichTextEditor';
+import ExcelBaseCatalogImportModal from './ExcelBaseCatalogImportModal';
+import { exportBaseCatalogToExcel } from '../utils/excelHelpers';
 
 interface BaseCatalogProps {
   products: BaseProduct[];
   onSaveProduct: (product: BaseProduct) => Promise<void>;
+  onSaveBatchProducts?: (products: BaseProduct[]) => Promise<{ added: number; updated: number }>;
   onDeleteProduct: (id: string) => Promise<void>;
   userRole?: 'admin' | 'operator' | null;
 }
 
-export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct, userRole }: BaseCatalogProps) {
+export default function BaseCatalog({ products, onSaveProduct, onSaveBatchProducts, onDeleteProduct, userRole }: BaseCatalogProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedVoltage, setSelectedVoltage] = useState('Todas');
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<BaseProduct | null>(null);
   const [viewingProduct, setViewingProduct] = useState<BaseProduct | null>(null);
   const [activeViewImageIndex, setActiveViewImageIndex] = useState<number>(0);
@@ -328,10 +334,18 @@ export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct, 
     return matchesTerm && matchesCategory && matchesVoltage;
   });
 
+  const handleBatchImport = async (productsToImport: BaseProduct[]) => {
+    if (onSaveBatchProducts) {
+      return await onSaveBatchProducts(productsToImport);
+    } else {
+      return await saveBatchBaseProducts(productsToImport, products);
+    }
+  };
+
   return (
     <div className="space-y-6" id="base-catalog-container">
-      {/* Header and Add button */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl" id="catalog-header">
+      {/* Header and Action buttons */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl" id="catalog-header">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <Database className="text-sky-400 w-6 h-6" />
@@ -341,16 +355,46 @@ export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct, 
             Cadastre os produtos oficiais da empresa para padronizar e facilitar a triagem de devoluções.
           </p>
         </div>
-        {userRole === 'admin' && (
-          <button 
-            onClick={handleAddClick}
-            className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-bold shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30 transition-all cursor-pointer"
-            id="btn-add-product"
+
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          {/* Export Catalog to Excel */}
+          <button
+            type="button"
+            onClick={() => exportBaseCatalogToExcel(filteredProducts)}
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer shadow-sm"
+            title="Exportar produtos visíveis do catálogo para arquivo Excel (.xlsx)"
+            id="btn-export-catalog-excel"
           >
-            <Plus className="w-4 h-4" />
-            Cadastrar Produto Master
+            <Download className="w-4 h-4 text-sky-400" />
+            <span>Exportar Excel ({filteredProducts.length})</span>
           </button>
-        )}
+
+          {/* Import Excel Spreadsheet Button (Matches user requirement) */}
+          {userRole === 'admin' && (
+            <button
+              type="button"
+              onClick={() => setIsExcelImportOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 transition-all cursor-pointer"
+              title="Importar planilha com SKU e Descrição (conforme modelo)"
+              id="btn-import-catalog-excel"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Importar Planilha</span>
+            </button>
+          )}
+
+          {/* Manual Add Master Product */}
+          {userRole === 'admin' && (
+            <button 
+              onClick={handleAddClick}
+              className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30 transition-all cursor-pointer"
+              id="btn-add-product"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Cadastrar Manual</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Catalog View */}
@@ -1361,6 +1405,14 @@ export default function BaseCatalog({ products, onSaveProduct, onDeleteProduct, 
           </div>
         </div>
       )}
+
+      {/* Excel Import Modal for Base Catalog */}
+      <ExcelBaseCatalogImportModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
+        existingProducts={products}
+        onImportProducts={handleBatchImport}
+      />
     </div>
   );
 }

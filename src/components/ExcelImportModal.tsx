@@ -262,7 +262,9 @@ export default function ExcelImportModal({
           photosBox: [],
           photosAccessories: [],
           createdAt: timestamp,
-          status: 'Estoque'
+          status: 'Estoque',
+          source: 'migration',
+          isMigration: true
         };
       });
 

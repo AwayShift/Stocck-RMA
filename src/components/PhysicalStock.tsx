@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { 
   Search, 
   Filter, 
@@ -30,7 +31,8 @@ import {
   Plus,
   RotateCcw,
   Camera,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Download
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
 import ExcelImportModal from './ExcelImportModal';
@@ -342,6 +344,79 @@ export default function PhysicalStock({
     });
   };
 
+  // Export Physical Stock units to Excel (.xlsx) matching the import format
+  const handleExportExcel = (unitsToExport?: TriageUnit[]) => {
+    const list = unitsToExport || filteredUnits;
+    if (list.length === 0) {
+      setActionError('Nenhuma unidade física localizada para exportar.');
+      setTimeout(() => setActionError(null), 3500);
+      return;
+    }
+
+    try {
+      const exportData = list.map(unit => {
+        // Packaging text format matching import conventions
+        let packaging = 'Na caixa';
+        if (unit.packageStatus === 'Sem Embalagem') {
+          packaging = 'Sem caixa';
+        } else if (unit.packageStatus === 'Danificada') {
+          packaging = 'Danificada';
+        } else if (unit.packageStatus === 'Perfeita') {
+          packaging = 'Na caixa';
+        }
+
+        // Category/Sector text format matching import conventions
+        let category = unit.destinationSector;
+        if (unit.destinationSector === 'Principal') {
+          category = 'Estoque Principal' as any;
+        }
+
+        // Observations / notes
+        const obs = unit.notes || unit.customerReason || 'Revisado';
+
+        return {
+          'SKU': unit.baseProductSku || '',
+          'STI': unit.trackingCode || '',
+          'Descrição do produto': unit.baseProductName || '',
+          'Embalagem': packaging,
+          'Observações': obs,
+          'Categoria': category,
+          'Número de Série': unit.serialNumber || ''
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Auto column widths
+      worksheet['!cols'] = [
+        { wch: 16 }, // SKU
+        { wch: 18 }, // STI
+        { wch: 48 }, // Descrição do produto
+        { wch: 16 }, // Embalagem
+        { wch: 38 }, // Observações
+        { wch: 22 }, // Categoria
+        { wch: 24 }  // Número de Série
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      const sheetName = (activeTab === 'Todos' ? 'Inventario_Estoque' : `Estoque_${activeTab}`).substring(0, 31);
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const isSelectedBatch = Boolean(unitsToExport && unitsToExport.length < filteredUnits.length);
+      const fileName = `Inventario_Estoque_${isSelectedBatch ? 'Selecionados_' : activeTab !== 'Todos' ? activeTab + '_' : ''}${todayStr}.xlsx`;
+
+      XLSX.writeFile(workbook, fileName);
+
+      setActionSuccess(`${list.length} produto(s) exportado(s) com sucesso para a planilha ${fileName}!`);
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: any) {
+      console.error('Erro ao exportar planilha:', err);
+      setActionError(`Erro ao gerar planilha Excel: ${err?.message || err}`);
+      setTimeout(() => setActionError(null), 4000);
+    }
+  };
+
   // Action: Dar Baixa (with custom confirmation)
   const handleCheckout = (id: string) => {
     setConfirmConfig({
@@ -472,15 +547,27 @@ export default function PhysicalStock({
           </p>
         </div>
 
-        <button
-          onClick={() => setIsExcelModalOpen(true)}
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2 cursor-pointer shrink-0"
-          id="btn-open-excel-import"
-          title="Importar planilha Excel de inventário OpenBox e direcionar por categorias"
-        >
-          <FileSpreadsheet className="w-4.5 h-4.5 text-white" />
-          <span>Importar Tabela Excel (OpenBox)</span>
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => handleExportExcel()}
+            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-200 font-bold rounded-xl text-xs transition-all border border-slate-700 hover:border-slate-600 flex items-center gap-2 cursor-pointer shrink-0 shadow-sm"
+            id="btn-export-stock-excel"
+            title="Exportar produtos do estoque físico atual para planilha Excel (.xlsx)"
+          >
+            <Download className="w-4 h-4 text-sky-400" />
+            <span>Exportar Planilha Excel ({filteredUnits.length})</span>
+          </button>
+
+          <button
+            onClick={() => setIsExcelModalOpen(true)}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2 cursor-pointer shrink-0"
+            id="btn-open-excel-import"
+            title="Importar planilha Excel de inventário OpenBox e direcionar por categorias"
+          >
+            <FileSpreadsheet className="w-4.5 h-4.5 text-white" />
+            <span>Importar Tabela Excel (OpenBox)</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Stock layout Card */}
@@ -578,14 +665,30 @@ export default function PhysicalStock({
 
           <div className="flex items-center gap-3 justify-between sm:justify-end flex-wrap">
             {selectedUnitIds.length > 0 && (
-              <button
-                onClick={handleBatchCheckout}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2 cursor-pointer animate-in fade-in"
-                id="btn-batch-checkout"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Dar Baixa em Lote ({selectedUnitIds.length})</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const selectedUnits = units.filter(u => selectedUnitIds.includes(u.id));
+                    handleExportExcel(selectedUnits);
+                  }}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-sky-300 hover:text-white font-bold rounded-xl text-xs transition-all border border-slate-700 hover:border-sky-500/50 flex items-center gap-1.5 cursor-pointer shadow-sm animate-in fade-in"
+                  id="btn-export-selected"
+                  title="Exportar apenas as unidades selecionadas para planilha Excel"
+                >
+                  <Download className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Exportar ({selectedUnitIds.length})</span>
+                </button>
+
+                <button
+                  onClick={handleBatchCheckout}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2 cursor-pointer animate-in fade-in"
+                  id="btn-batch-checkout"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Dar Baixa em Lote ({selectedUnitIds.length})</span>
+                </button>
+              </>
             )}
 
             {/* Filter Duplicates button */}
@@ -1585,6 +1688,17 @@ export default function PhysicalStock({
                   </button>
                 ) : (
                   <>
+                    <button 
+                      type="button"
+                      onClick={() => handleExportExcel([currentUnit])}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      title="Exportar este produto para planilha Excel (.xlsx)"
+                      id="btn-modal-export-unit"
+                    >
+                      <Download className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Exportar Excel</span>
+                    </button>
+
                     <button 
                       onClick={() => handleDelete(currentUnit.id)}
                       className="px-3 py-2 bg-slate-800 hover:bg-rose-600/20 text-slate-405 hover:text-rose-400 border border-slate-750 hover:border-rose-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
