@@ -17,18 +17,18 @@ import {
   Boxes,
   Layers,
   FileText,
-  Download
+  Download,
+  Users
 } from 'lucide-react';
 
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 
-import { BaseProduct, TriageUnit, CaseTracking, DailyInflowRecord } from './types';
+import { BaseProduct, TriageUnit, DailyInflowRecord } from './types';
 import { 
   subscribeBaseProducts,
   subscribeTriageUnits,
-  subscribeCaseTracking,
   subscribeDailyInflows,
   saveBaseProduct,
   saveBatchBaseProducts,
@@ -36,13 +36,12 @@ import {
   saveTriageUnit,
   deleteTriageUnit,
   checkoutTriageUnit,
-  saveCaseTracking,
-  deleteCaseTracking,
   saveDailyInflow,
   saveBatchDailyInflows,
   deleteDailyInflow,
   resetDatabaseToDefaults,
-  createAuditLog
+  createAuditLog,
+  ensureUserProfileExists
 } from './lib/dbService';
 
 import Dashboard from './components/Dashboard';
@@ -52,10 +51,11 @@ import PhysicalStock from './components/PhysicalStock';
 import LogsAudit from './components/LogsAudit';
 import Login from './components/Login';
 import ProductMovements from './components/ProductMovements';
-import CaseTrackingComponent from './components/CaseTracking';
+import ResetDatabaseModal from './components/ResetDatabaseModal';
+import UserManagementModal from './components/UserManagementModal';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rma' | 'catalog' | 'stock' | 'logs' | 'movement' | 'cases'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rma' | 'catalog' | 'stock' | 'logs' | 'movement'>('dashboard');
   
   // Auth state
   const [user, setUser] = useState<any>(null);
@@ -66,7 +66,6 @@ export default function App() {
   // Database states
   const [products, setProducts] = useState<BaseProduct[]>([]);
   const [triageUnits, setTriageUnits] = useState<TriageUnit[]>([]);
-  const [cases, setCases] = useState<CaseTracking[]>([]);
   const [dailyInflows, setDailyInflows] = useState<DailyInflowRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -74,12 +73,14 @@ export default function App() {
   // Cross-component communication
   const [selectedTriageUnit, setSelectedTriageUnit] = useState<TriageUnit | null>(null);
   const [isRbacModalOpen, setIsRbacModalOpen] = useState<boolean>(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+  const [isUserManagementOpen, setIsUserManagementOpen] = useState<boolean>(false);
 
   // Listen for Authentication state
   useEffect(() => {
     let unsubscribeUserDoc: (() => void) | null = null;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setIsAuthLoading(true);
 
       if (unsubscribeUserDoc) {
@@ -89,6 +90,10 @@ export default function App() {
 
       if (currentUser) {
         setUser(currentUser);
+
+        // Auto-heal / Ensure Firestore user document exists
+        await ensureUserProfileExists(currentUser);
+
         // Listen to custom user profile from Firestore users collection in real-time
         const userDocRef = doc(db, 'users', currentUser.uid);
         unsubscribeUserDoc = onSnapshot(userDocRef, async (userSnap) => {
@@ -107,31 +112,14 @@ export default function App() {
             }
             
             setUserRole(role);
-            setUserName(userData.name || 'Operador Corporativo');
+            setUserName(userData.name || currentUser.displayName || 'Operador Corporativo');
           } else {
-            // Document might not exist if created externally or during race-condition of signup
-            // We wait 2 seconds for signup flow to write it, else fallback to auto-creating.
-            setTimeout(async () => {
-              if (auth.currentUser?.uid === currentUser.uid) {
-                const freshSnap = await getDoc(userDocRef);
-                if (!freshSnap.exists()) {
-                  const defaultProfile = {
-                    uid: currentUser.uid,
-                    email: currentUser.email,
-                    name: currentUser.displayName || 'Operador Corporativo',
-                    role: currentUser.email === 'alessandro.away6@gmail.com' ? 'admin' : 'operator',
-                    createdAt: new Date().toISOString()
-                  };
-                  try {
-                    await setDoc(userDocRef, defaultProfile);
-                    setUserRole(defaultProfile.role as 'admin' | 'operator');
-                    setUserName(defaultProfile.name);
-                  } catch (err) {
-                    console.error('Error creating fallback user profile:', err);
-                  }
-                }
-              }
-            }, 2000);
+            // Fallback create profile in Firestore
+            const fallbackProfile = await ensureUserProfileExists(currentUser);
+            if (fallbackProfile) {
+              setUserRole(fallbackProfile.role);
+              setUserName(fallbackProfile.name);
+            }
           }
           setIsAuthLoading(false);
         }, (err) => {
@@ -163,9 +151,15 @@ export default function App() {
     setIsLoading(true);
     setSyncError(null);
     
+    // Fail-safe timeout so UI never hangs in loading state if network or Firestore is slow
+    const loadingTimeout = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
+
     // Subscribe to products in real-time
     const unsubscribeProducts = subscribeBaseProducts((fetchedProducts) => {
       setProducts(fetchedProducts);
+      setIsLoading(false);
     }, (err) => {
       console.error('Error syncing products:', err);
       setSyncError(err?.message || String(err));
@@ -175,18 +169,9 @@ export default function App() {
     // Subscribe to triage units in real-time
     const unsubscribeTriage = subscribeTriageUnits((fetchedUnits) => {
       setTriageUnits(fetchedUnits);
+      setIsLoading(false);
     }, (err) => {
       console.error('Error syncing triage units:', err);
-      setSyncError(err?.message || String(err));
-      setIsLoading(false);
-    });
-
-    // Subscribe to case tracking in real-time
-    const unsubscribeCases = subscribeCaseTracking((fetchedCases) => {
-      setCases(fetchedCases);
-      setIsLoading(false);
-    }, (err) => {
-      console.error('Error syncing case tracking:', err);
       setSyncError(err?.message || String(err));
       setIsLoading(false);
     });
@@ -194,14 +179,16 @@ export default function App() {
     // Subscribe to daily inflows in real-time
     const unsubscribeDailyInflows = subscribeDailyInflows((fetchedInflows) => {
       setDailyInflows(fetchedInflows);
+      setIsLoading(false);
     }, (err) => {
       console.error('Error syncing daily inflows:', err);
+      setIsLoading(false);
     });
 
     return () => {
+      clearTimeout(loadingTimeout);
       unsubscribeProducts();
       unsubscribeTriage();
-      unsubscribeCases();
       unsubscribeDailyInflows();
     };
   }, [user]);
@@ -257,53 +244,26 @@ export default function App() {
     await checkoutTriageUnit(id);
   };
 
-  // Case actions
-  const handleSaveCase = async (caseData: CaseTracking) => {
-    await saveCaseTracking(caseData);
-  };
-
-  const handleDeleteCase = async (id: string) => {
-    if (userRole !== 'admin') {
-      alert('Acesso negado: Apenas administradores podem apagar permanentemente registros de acompanhamento de casos.');
-      return;
-    }
-    await deleteCaseTracking(id);
-  };
-
-  // Reset database back to default seed
-  const handleResetData = async () => {
-    if (userRole !== 'admin') {
-      if (window.confirm('Acesso negado: Apenas administradores possuem privilégios para resetar o banco de dados.\n\nDeseja alternar temporariamente o seu cargo de demonstração para Administrador agora para executar o reset?')) {
-        await handleToggleDemoRole();
-        setTimeout(async () => {
-          if (window.confirm('Seu cargo foi atualizado para Administrador com sucesso!\n\nIsso resetará o banco de dados Firestore remoto para os dados iniciais padrão do fluxo. Confirmar?')) {
-            try {
-              await resetDatabaseToDefaults();
-            } catch (err: any) {
-              alert(`Erro ao resetar banco de dados: ${err?.message || err}`);
-            }
-          }
-        }, 500);
-      }
-      return;
-    }
-    if (window.confirm('Isso resetará o banco de dados Firestore remoto para os dados iniciais padrão do fluxo. Suas alterações customizadas serão sobrescritas pelos dados de teste logísticos. Confirmar?')) {
-      try {
-        await resetDatabaseToDefaults();
-      } catch (err: any) {
-        alert(`Erro ao resetar banco de dados: ${err?.message || err}`);
-      }
-    }
+  // Reset database back to default seed via secure password confirmation modal
+  const handleResetData = () => {
+    setIsResetModalOpen(true);
   };
 
   // Helper to set specific role inside DB for testing/evaluating RBAC constraints
   const handleSelectRole = async (targetRole: 'admin' | 'operator') => {
     if (!user) return;
+    
+    // An Administrator is NEVER allowed to downgrade their account to Operator
+    if (userRole === 'admin' && targetRole === 'operator') {
+      alert('Acesso negado: Administradores possuem privilégio permanente e não podem rebaixar sua conta para Operador.');
+      return;
+    }
+
     try {
       const userDocRef = doc(db, 'users', user.uid);
       await updateDoc(userDocRef, { role: targetRole });
       setUserRole(targetRole);
-      await createAuditLog('TOGGLE_DEMO_ROLE', `Alterou próprio cargo de demonstração para: ${targetRole === 'admin' ? 'Administrador' : 'Logística Sênior (Operador)'}`);
+      await createAuditLog('TOGGLE_DEMO_ROLE', `Alterou permissões corporativas para: ${targetRole === 'admin' ? 'Administrador' : 'Logística Sênior (Operador)'}`);
       setIsRbacModalOpen(false);
     } catch (err) {
       console.error('Failed to set role:', err);
@@ -313,8 +273,11 @@ export default function App() {
   // Helper to toggle role or open role selector
   const handleToggleDemoRole = async () => {
     if (!user) return;
-    const newRole = userRole === 'admin' ? 'operator' : 'admin';
-    await handleSelectRole(newRole);
+    if (userRole === 'admin') {
+      alert('Você já é um Administrador. Administradores não podem ser rebaixados para Operador.');
+      return;
+    }
+    await handleSelectRole('admin');
   };
 
   const handleLogout = async () => {
@@ -365,9 +328,9 @@ export default function App() {
               </div>
               <div>
                 <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-1.5">
-                  RMA<span className="text-sky-400 font-bold group-hover:text-sky-300 transition-colors">Flow</span>
+                  Stocck <span className="text-sky-400 font-bold group-hover:text-sky-300 transition-colors">RMA</span>
                 </h1>
-                <p className="text-[11px] text-slate-400 tracking-wider uppercase font-extrabold">Web Logística & Segurança</p>
+                <p className="text-[11px] text-slate-400 tracking-wider uppercase font-extrabold">Gestão e Triagem</p>
               </div>
             </button>
 
@@ -419,17 +382,6 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => { setActiveTab('cases'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'cases' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
-                }`}
-                id="nav-cases"
-              >
-                <Layers className="w-4.5 h-4.5" />
-                Contestação
-              </button>
-
-              <button
                 onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
                   activeTab === 'logs' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -453,6 +405,19 @@ export default function App() {
                 <Download className="w-3.5 h-3.5 text-emerald-400" />
                 Baixar PRD (QA)
               </a>
+
+              {/* User Management Button for Admin */}
+              {userRole === 'admin' && (
+                <button
+                  onClick={() => setIsUserManagementOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 rounded-lg text-xs font-black text-rose-300 hover:text-rose-200 cursor-pointer transition-all shadow-sm"
+                  title="Painel de controle de usuários e cargos de administradores no Firestore"
+                  id="btn-open-user-management"
+                >
+                  <Users className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Gestão de Usuários</span>
+                </button>
+              )}
 
               {/* Quick RBAC role switcher for testing */}
               <button
@@ -552,15 +517,6 @@ export default function App() {
           Entradas
         </button>
         <button
-          onClick={() => { setActiveTab('cases'); setSelectedTriageUnit(null); }}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'cases' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'border border-transparent text-slate-400 hover:text-white'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          Contestação
-        </button>
-        <button
           onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'logs' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'border border-transparent text-slate-400 hover:text-white'
@@ -629,6 +585,7 @@ export default function App() {
             {activeTab === 'dashboard' && (
               <Dashboard 
                 units={triageUnits}
+                products={products}
                 onViewUnit={handleViewUnitDetails}
                 onNavigateToStock={() => setActiveTab('stock')}
                 onResetData={handleResetData}
@@ -648,6 +605,7 @@ export default function App() {
             {activeTab === 'rma' && (
               <RmaEntry 
                 products={products}
+                units={triageUnits}
                 onSaveTriage={handleSaveTriage}
                 onNavigateToStock={() => setActiveTab('stock')}
               />
@@ -667,7 +625,13 @@ export default function App() {
             )}
 
             {activeTab === 'logs' && (
-              <LogsAudit userRole={userRole} />
+              <LogsAudit 
+                userRole={userRole} 
+                onResetData={handleResetData}
+                productsCount={products.length}
+                triageUnitsCount={triageUnits.length}
+                dailyInflowsCount={dailyInflows.length}
+              />
             )}
 
             {activeTab === 'movement' && (
@@ -679,15 +643,6 @@ export default function App() {
                 onSaveBatchDailyInflows={handleSaveBatchDailyInflows}
                 onDeleteDailyInflow={handleDeleteDailyInflow}
                 onSaveTriage={handleSaveTriage}
-                userRole={userRole}
-              />
-            )}
-
-            {activeTab === 'cases' && (
-              <CaseTrackingComponent 
-                cases={cases}
-                onSaveCase={handleSaveCase}
-                onDeleteCase={handleDeleteCase}
                 userRole={userRole}
               />
             )}
@@ -745,21 +700,57 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => handleSelectRole('operator')}
-                className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                  userRole === 'operator' 
-                    ? 'bg-sky-500/10 border-sky-500/40 text-sky-300' 
-                    : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                onClick={() => {
+                  if (userRole === 'admin') {
+                    alert('Administradores possuem privilégios totais e não podem ser rebaixados para Operador.');
+                    return;
+                  }
+                  handleSelectRole('operator');
+                }}
+                disabled={userRole === 'admin'}
+                className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between ${
+                  userRole === 'admin'
+                    ? 'bg-slate-950/40 border-slate-800/60 opacity-60 cursor-not-allowed text-slate-500'
+                    : userRole === 'operator' 
+                      ? 'bg-sky-500/10 border-sky-500/40 text-sky-300 cursor-pointer' 
+                      : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300 cursor-pointer'
                 }`}
                 id="role-option-operator"
               >
                 <div>
-                  <span className="font-bold text-sm block">Logística Sênior (Operador)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm block">Logística Sênior (Operador)</span>
+                    {userRole === 'admin' && (
+                      <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-bold">
+                        Rebaixamento Bloqueado
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[11px] text-slate-400">Acesso operacional: triagem de RMA, estoque e catálogo de leitura</span>
                 </div>
                 {userRole === 'operator' && <span className="text-xs font-black text-sky-400">ATIVO</span>}
               </button>
             </div>
+
+            {userRole === 'admin' && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-rose-300 font-semibold">
+                  <Users className="w-4 h-4 text-rose-400" />
+                  <span>Gerenciar outros usuários do sistema</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRbacModalOpen(false);
+                    setIsUserManagementOpen(true);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs transition-all cursor-pointer"
+                >
+                  Abrir Gestão
+                </button>
+              </div>
+            )}
+
             <div className="pt-2 flex justify-end">
               <button
                 onClick={() => setIsRbacModalOpen(false)}
@@ -771,6 +762,26 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* User Management & RBAC Control Modal */}
+      <UserManagementModal
+        isOpen={isUserManagementOpen}
+        onClose={() => setIsUserManagementOpen(false)}
+        currentUserEmail={user?.email || ''}
+        currentUserRole={userRole}
+      />
+
+      {/* Database Reset Password Confirmation Modal */}
+      <ResetDatabaseModal
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+        userEmail={user?.email || ''}
+        userRole={userRole}
+        onSuccess={() => {
+          setActiveTab('dashboard');
+        }}
+        onSwitchToAdmin={() => handleSelectRole('admin')}
+      />
     </div>
   );
 }

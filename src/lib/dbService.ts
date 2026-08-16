@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
-import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTracking, DailyInflowRecord } from '../types';
+import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTracking, DailyInflowRecord, UserAccount } from '../types';
 
 // Helper to check if running inside Tauri (Always false in our 100% Web application)
 export const isTauriEnvironment = (): boolean => {
@@ -175,16 +175,6 @@ export const subscribeBaseProducts = (
     snapshot.forEach((doc) => {
       products.push({ id: doc.id, ...doc.data() } as BaseProduct);
     });
-    // If empty, auto-seed defaults for beautiful immediate experience
-    if (products.length === 0 && snapshot.metadata.fromCache === false) {
-      const alreadySeeded = localStorage.getItem('base_products_seeded');
-      if (!alreadySeeded) {
-        seedBaseProducts();
-        localStorage.setItem('base_products_seeded', 'true');
-      }
-    } else if (products.length > 0) {
-      localStorage.setItem('base_products_seeded', 'true');
-    }
     callback(products);
   }, (err) => {
     console.error('Failed to subscribe products:', err);
@@ -205,16 +195,6 @@ export const subscribeTriageUnits = (
     });
     // Sort descending by date
     units.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
-    if (units.length === 0 && snapshot.metadata.fromCache === false) {
-      const alreadySeeded = localStorage.getItem('triage_units_seeded');
-      if (!alreadySeeded) {
-        seedTriageUnits();
-        localStorage.setItem('triage_units_seeded', 'true');
-      }
-    } else if (units.length > 0) {
-      localStorage.setItem('triage_units_seeded', 'true');
-    }
     callback(units);
   }, (err) => {
     console.error('Failed to subscribe triage units:', err);
@@ -249,16 +229,6 @@ export const subscribeCaseTracking = (
     });
     // Sort newest first by createdAt
     cases.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
-    if (cases.length === 0 && snapshot.metadata.fromCache === false) {
-      const alreadySeeded = localStorage.getItem('cases_seeded');
-      if (!alreadySeeded) {
-        seedCaseTracking();
-        localStorage.setItem('cases_seeded', 'true');
-      }
-    } else if (cases.length > 0) {
-      localStorage.setItem('cases_seeded', 'true');
-    }
     callback(cases);
   }, (err) => {
     console.error('Failed to subscribe case tracking:', err);
@@ -279,16 +249,6 @@ export const subscribeDailyInflows = (
     });
     // Sort by date ascending
     inflows.sort((a, b) => a.date.localeCompare(b.date));
-    
-    if (inflows.length === 0 && snapshot.metadata.fromCache === false) {
-      const alreadySeeded = localStorage.getItem('daily_inflows_seeded');
-      if (!alreadySeeded) {
-        seedDailyInflows();
-        localStorage.setItem('daily_inflows_seeded', 'true');
-      }
-    } else if (inflows.length > 0) {
-      localStorage.setItem('daily_inflows_seeded', 'true');
-    }
     callback(inflows);
   }, (err) => {
     console.error('Failed to subscribe daily inflows:', err);
@@ -735,32 +695,210 @@ export const checkoutTriageUnit = async (id: string): Promise<void> => {
   }
 };
 
+export const resetCatalogProducts = async (): Promise<number> => {
+  const productsSnap = await getDocs(collection(db, 'products'));
+  const count = productsSnap.docs.length;
+  for (const doc of productsSnap.docs) {
+    await deleteDoc(doc.ref);
+  }
+  localStorage.setItem('base_products_seeded', 'true');
+  try {
+    await createAuditLog('RESET_CATALOG', `Executou limpeza total do Catálogo de Base (${count} produtos removidos).`);
+  } catch (err) {
+    console.warn('Audit log creation warning:', err);
+  }
+  return count;
+};
+
+export const resetPhysicalStockUnits = async (): Promise<number> => {
+  const unitsSnap = await getDocs(collection(db, 'triage_units'));
+  const count = unitsSnap.docs.length;
+  for (const doc of unitsSnap.docs) {
+    await deleteDoc(doc.ref);
+  }
+  localStorage.setItem('triage_units_seeded', 'true');
+  try {
+    await createAuditLog('RESET_STOCK', `Executou limpeza total do Estoque Físico e Triagem de RMA (${count} unidades removidas).`);
+  } catch (err) {
+    console.warn('Audit log creation warning:', err);
+  }
+  return count;
+};
+
+export const resetDailyInflowsRecords = async (): Promise<number> => {
+  const inflowsSnap = await getDocs(collection(db, 'daily_inflows'));
+  const count = inflowsSnap.docs.length;
+  for (const doc of inflowsSnap.docs) {
+    await deleteDoc(doc.ref);
+  }
+  localStorage.setItem('daily_inflows_seeded', 'true');
+  try {
+    await createAuditLog('RESET_INFLOWS', `Executou limpeza total do Fluxo Diário de Entradas (${count} registros diários removidos).`);
+  } catch (err) {
+    console.warn('Audit log creation warning:', err);
+  }
+  return count;
+};
+
+export const resetAuditLogsRecords = async (): Promise<number> => {
+  const logsSnap = await getDocs(collection(db, 'logs'));
+  const count = logsSnap.docs.length;
+  for (const doc of logsSnap.docs) {
+    await deleteDoc(doc.ref);
+  }
+  try {
+    await createAuditLog('RESET_LOGS', `Executou limpeza do histórico de logs (${count} logs anteriores apagados).`);
+  } catch (err) {
+    console.warn('Audit log creation warning:', err);
+  }
+  return count;
+};
+
 export const resetDatabaseToDefaults = async (): Promise<void> => {
-  // Clear and seed
+  // Clear products
   const productsSnap = await getDocs(collection(db, 'products'));
   for (const doc of productsSnap.docs) {
     await deleteDoc(doc.ref);
   }
+  
+  // Clear triage units (physical stock)
   const unitsSnap = await getDocs(collection(db, 'triage_units'));
   for (const doc of unitsSnap.docs) {
     await deleteDoc(doc.ref);
   }
+  
+  // Clear case tracking
   const casesSnap = await getDocs(collection(db, 'cases'));
   for (const doc of casesSnap.docs) {
     await deleteDoc(doc.ref);
   }
+  
+  // Clear daily inflows
   const inflowsSnap = await getDocs(collection(db, 'daily_inflows'));
   for (const doc of inflowsSnap.docs) {
     await deleteDoc(doc.ref);
   }
 
-  localStorage.removeItem('base_products_seeded');
-  localStorage.removeItem('triage_units_seeded');
-  localStorage.removeItem('cases_seeded');
-  localStorage.removeItem('daily_inflows_seeded');
-  await seedBaseProducts();
-  await seedTriageUnits();
-  await seedCaseTracking();
-  await seedDailyInflows();
-  await createAuditLog('RESET_DATABASE', 'Restaurou banco de dados de produtos, triagens, casos e fluxo de entradas para as configurações padrão');
+  // Clear all saved audit logs
+  const logsSnap = await getDocs(collection(db, 'logs'));
+  for (const doc of logsSnap.docs) {
+    await deleteDoc(doc.ref);
+  }
+
+  // Set flags to true so no automatic mocks are created
+  localStorage.setItem('base_products_seeded', 'true');
+  localStorage.setItem('triage_units_seeded', 'true');
+  localStorage.setItem('cases_seeded', 'true');
+  localStorage.setItem('daily_inflows_seeded', 'true');
+  
+  try {
+    await createAuditLog('RESET_DATABASE', 'Executou limpeza total do banco de dados (produtos, triagens, estoque, casos e logs). Sistema limpo com 0 registros.');
+  } catch (logErr) {
+    console.warn('Audit log creation warning after database reset:', logErr);
+  }
 };
+
+// ==========================================
+// USER MANAGEMENT & RBAC FIRESTORE HELPERS
+// ==========================================
+
+/**
+ * Subscribe to all users in the 'users' collection (Real-time for Admin view)
+ */
+export const subscribeToUsers = (callback: (users: UserAccount[]) => void) => {
+  const usersRef = collection(db, 'users');
+  return onSnapshot(usersRef, (snapshot) => {
+    const list: UserAccount[] = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        uid: docSnap.id,
+        email: data.email || '',
+        name: data.name || 'Usuário Corporativo',
+        role: (data.role === 'admin' ? 'admin' : 'operator') as 'admin' | 'operator',
+        createdAt: data.createdAt || '',
+        lastLogin: data.lastLogin || ''
+      };
+    });
+    // Sort: Admins first, then by name
+    list.sort((a, b) => {
+      if (a.role === 'admin' && b.role !== 'admin') return -1;
+      if (a.role !== 'admin' && b.role === 'admin') return 1;
+      return a.name.localeCompare(b.name);
+    });
+    callback(list);
+  }, (err) => {
+    console.error('Error subscribing to users collection:', err);
+  });
+};
+
+/**
+ * Update any user's role (Admin / Operator) in Firestore
+ */
+export const updateUserRoleInDb = async (
+  uid: string, 
+  newRole: 'admin' | 'operator',
+  targetEmail?: string
+): Promise<void> => {
+  const userDocRef = doc(db, 'users', uid);
+  await updateDoc(userDocRef, {
+    role: newRole,
+    updatedAt: new Date().toISOString()
+  });
+
+  const roleLabel = newRole === 'admin' ? 'Administrador (Acesso Total)' : 'Logística / Operador';
+  await createAuditLog('UPDATE_USER_ROLE', `Alterou permissões de acesso do usuário ${targetEmail || uid} para: ${roleLabel}`);
+};
+
+/**
+ * Delete a user profile document from Firestore
+ */
+export const deleteUserDocumentFromDb = async (uid: string, targetEmail?: string): Promise<void> => {
+  const userDocRef = doc(db, 'users', uid);
+  await deleteDoc(userDocRef);
+  try {
+    await createAuditLog('DELETE_USER', `Removeu o registro do usuário ${targetEmail || uid} do Firestore`);
+  } catch (logErr) {
+    console.warn('Non-blocking audit log creation error on user delete:', logErr);
+  }
+};
+
+/**
+ * Ensure user document exists in Firestore / Auto-heal missing profiles
+ */
+export const ensureUserProfileExists = async (currentUser: any): Promise<UserAccount | null> => {
+  if (!currentUser || !currentUser.uid) return null;
+  try {
+    const userDocRef = doc(db, 'users', currentUser.uid);
+    const snap = await getDoc(userDocRef);
+    
+    if (!snap.exists()) {
+      const isMasterAdmin = currentUser.email === 'alessandro.away6@gmail.com';
+      const initialProfile: UserAccount = {
+        uid: currentUser.uid,
+        email: currentUser.email || '',
+        name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Operador Corporativo',
+        role: isMasterAdmin ? 'admin' : 'operator',
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(userDocRef, initialProfile);
+      return initialProfile;
+    } else {
+      const data = snap.data();
+      // If master admin and not yet admin, upgrade
+      if (currentUser.email === 'alessandro.away6@gmail.com' && data.role !== 'admin') {
+        await updateDoc(userDocRef, { role: 'admin' });
+      }
+      return {
+        uid: snap.id,
+        email: data.email || currentUser.email || '',
+        name: data.name || currentUser.displayName || 'Operador Corporativo',
+        role: (data.role === 'admin' ? 'admin' : 'operator') as 'admin' | 'operator',
+        createdAt: data.createdAt || ''
+      };
+    }
+  } catch (err) {
+    console.error('Error ensuring user profile in Firestore:', err);
+    return null;
+  }
+};
+

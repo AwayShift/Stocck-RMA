@@ -122,26 +122,26 @@ export default function ManualDailyInflowModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn" id="manual-inflow-modal">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-              <Boxes className="w-5 h-5" />
+        <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 sticky top-0 z-10">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-inner">
+              <Boxes className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-800">
+              <h2 className="text-xl font-bold text-white">
                 {initialData ? 'Editar Lançamento Diário' : 'Lançamento Manual de Quantidades'}
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Registre o volume diário de entradas por setor sem especificar SKUs
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -151,7 +151,7 @@ export default function ManualDailyInflowModal({
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Date Picker */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
               Data da Entrada *
             </label>
             <div className="relative">
@@ -161,12 +161,12 @@ export default function ManualDailyInflowModal({
                 max={new Date().toISOString().split('T')[0]}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-semibold text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
               />
               <Calendar className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
             {date && (
-              <p className="text-xs text-blue-600 font-medium mt-1">
+              <p className="text-xs text-emerald-400 font-medium mt-1">
                 {getWeekdayName(date)} ({formatBrDate(date)})
               </p>
             )}
@@ -175,12 +175,12 @@ export default function ManualDailyInflowModal({
           {/* Quantities by Sector Grid */}
           <div className="grid grid-cols-2 gap-3.5 pt-1">
             {/* RMA */}
-            <div className="bg-blue-50/40 border border-blue-100 rounded-xl p-3.5 space-y-2">
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-blue-900 uppercase tracking-wider">
+                <label className="text-xs font-bold text-sky-400 uppercase tracking-wider">
                   RMA (Triagem)
                 </label>
-                <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30 px-1.5 py-0.5 rounded">
                   Qtd
                 </span>
               </div>
@@ -190,27 +190,27 @@ export default function ManualDailyInflowModal({
                 value={rma === 0 ? '' : rma}
                 onChange={(e) => setRma(Math.max(0, parseInt(e.target.value, 10) || 0))}
                 placeholder="0"
-                className="w-full px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-lg font-black text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-center"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xl font-black text-sky-400 focus:outline-none focus:border-sky-500 text-center"
               />
               <div className="flex items-center justify-center gap-1">
                 <button
                   type="button"
                   onClick={() => adjustValue(setRma, -1)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-blue-700 hover:bg-blue-100 rounded border border-blue-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   -1
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustValue(setRma, 1)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-blue-700 hover:bg-blue-100 rounded border border-blue-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-sky-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +1
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustValue(setRma, 10)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-blue-700 hover:bg-blue-100 rounded border border-blue-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-sky-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +10
                 </button>
@@ -218,12 +218,12 @@ export default function ManualDailyInflowModal({
             </div>
 
             {/* ESTOQUE */}
-            <div className="bg-emerald-50/40 border border-emerald-100 rounded-xl p-3.5 space-y-2">
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-emerald-900 uppercase tracking-wider">
+                <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
                   Estoque Geral
                 </label>
-                <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded">
                   Qtd
                 </span>
               </div>
@@ -233,27 +233,27 @@ export default function ManualDailyInflowModal({
                 value={estoque === 0 ? '' : estoque}
                 onChange={(e) => setEstoque(Math.max(0, parseInt(e.target.value, 10) || 0))}
                 placeholder="0"
-                className="w-full px-3 py-1.5 bg-white border border-emerald-200 rounded-lg text-lg font-black text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-center"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xl font-black text-emerald-400 focus:outline-none focus:border-emerald-500 text-center"
               />
               <div className="flex items-center justify-center gap-1">
                 <button
                   type="button"
                   onClick={() => adjustValue(setEstoque, -1)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-emerald-700 hover:bg-emerald-100 rounded border border-emerald-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   -1
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustValue(setEstoque, 1)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-emerald-700 hover:bg-emerald-100 rounded border border-emerald-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-emerald-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +1
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustValue(setEstoque, 10)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-emerald-700 hover:bg-emerald-100 rounded border border-emerald-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-emerald-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +10
                 </button>
@@ -261,12 +261,12 @@ export default function ManualDailyInflowModal({
             </div>
 
             {/* OPENBOX */}
-            <div className="bg-amber-50/40 border border-amber-100 rounded-xl p-3.5 space-y-2">
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                <label className="text-xs font-bold text-amber-400 uppercase tracking-wider">
                   Openbox
                 </label>
-                <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded">
                   Qtd
                 </span>
               </div>
@@ -276,27 +276,27 @@ export default function ManualDailyInflowModal({
                 value={openbox === 0 ? '' : openbox}
                 onChange={(e) => setOpenbox(Math.max(0, parseInt(e.target.value, 10) || 0))}
                 placeholder="0"
-                className="w-full px-3 py-1.5 bg-white border border-amber-200 rounded-lg text-lg font-black text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-center"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xl font-black text-amber-400 focus:outline-none focus:border-amber-500 text-center"
               />
               <div className="flex items-center justify-center gap-1">
                 <button
                   type="button"
                   onClick={() => adjustValue(setOpenbox, -1)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-amber-700 hover:bg-amber-100 rounded border border-amber-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   -1
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustValue(setOpenbox, 1)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-amber-700 hover:bg-amber-100 rounded border border-amber-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-amber-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +1
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustValue(setOpenbox, 5)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-amber-700 hover:bg-amber-100 rounded border border-amber-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-amber-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +5
                 </button>
@@ -304,12 +304,12 @@ export default function ManualDailyInflowModal({
             </div>
 
             {/* ES */}
-            <div className="bg-purple-50/40 border border-purple-100 rounded-xl p-3.5 space-y-2">
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-purple-900 uppercase tracking-wider">
-                  ES (Especial)
+                <label className="text-xs font-bold text-purple-400 uppercase tracking-wider">
+                  ES (Espírito Santo)
                 </label>
-                <span className="text-[10px] font-semibold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded">
                   Qtd
                 </span>
               </div>
@@ -319,27 +319,27 @@ export default function ManualDailyInflowModal({
                 value={es === 0 ? '' : es}
                 onChange={(e) => setEs(Math.max(0, parseInt(e.target.value, 10) || 0))}
                 placeholder="0"
-                className="w-full px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-lg font-black text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 text-center"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xl font-black text-purple-400 focus:outline-none focus:border-purple-500 text-center"
               />
               <div className="flex items-center justify-center gap-1">
                 <button
                   type="button"
                   onClick={() => adjustValue(setEs, -1)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-purple-700 hover:bg-purple-100 rounded border border-purple-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   -1
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustValue(setEs, 1)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-purple-700 hover:bg-purple-100 rounded border border-purple-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-purple-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +1
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustValue(setEs, 10)}
-                  className="px-2 py-0.5 text-xs font-bold bg-white text-purple-700 hover:bg-purple-100 rounded border border-purple-200"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-purple-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +10
                 </button>
@@ -348,11 +348,11 @@ export default function ManualDailyInflowModal({
           </div>
 
           {/* Total Preview Badge */}
-          <div className="bg-slate-900 text-white rounded-xl p-4 flex items-center justify-between shadow-inner">
+          <div className="bg-slate-950 border border-slate-800 text-white rounded-2xl p-4 flex items-center justify-between shadow-inner">
             <div className="flex items-center gap-2.5">
               <Sparkles className="w-5 h-5 text-amber-400" />
               <div>
-                <span className="text-xs font-medium text-slate-300 block">Total Consolidado do Dia</span>
+                <span className="text-xs font-bold text-slate-200 block">Total Consolidado do Dia</span>
                 <span className="text-[11px] text-slate-400">RMA + Estoque + Openbox + ES</span>
               </div>
             </div>
@@ -364,7 +364,7 @@ export default function ManualDailyInflowModal({
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
               Observações / Lote (Opcional)
             </label>
             <input
@@ -372,18 +372,18 @@ export default function ManualDailyInflowModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Ex: Carga recebida transportadora X, lote especial..."
-              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+          <div className="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
             {initialData?.id && onDelete ? (
               <button
                 type="button"
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="px-3.5 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Excluir Dia</span>
@@ -392,18 +392,18 @@ export default function ManualDailyInflowModal({
               <div />
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+                className="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 font-semibold text-xs transition-all cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2"
+                className="flex items-center gap-2 px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl font-bold text-xs shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all cursor-pointer disabled:opacity-50"
               >
                 {isSaving ? (
                   <>
@@ -424,3 +424,4 @@ export default function ManualDailyInflowModal({
     </div>
   );
 }
+

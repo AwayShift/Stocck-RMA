@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   Search, 
@@ -32,10 +32,12 @@ import {
   RotateCcw,
   Camera,
   Image as ImageIcon,
-  Download
+  Download,
+  ChevronDown
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
 import ExcelImportModal from './ExcelImportModal';
+import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct } from '../utils/productImages';
 
 // Helper to compress image to base64
 const compressImageToBase64 = (file: File): Promise<string> => {
@@ -103,6 +105,7 @@ export default function PhysicalStock({
 }: PhysicalStockProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'Todos' | DestinationSectorType | 'Baixado'>('Todos');
+  const [visibleCount, setVisibleCount] = useState(20);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(initialSelectedUnit?.id || null);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
@@ -130,12 +133,25 @@ export default function PhysicalStock({
     onConfirm: () => void;
   } | null>(null);
 
+  // Sector transfer with photo choice modal state
+  const [transferModalData, setTransferModalData] = useState<{
+    unit: TriageUnit;
+    targetSector: DestinationSectorType;
+    baseProduct?: BaseProduct;
+    savedPhotosCount: number;
+  } | null>(null);
+
   // Selected unit details
   const currentUnit = units.find(u => u.id === (selectedUnitId || initialSelectedUnit?.id));
 
   // Edit mode state for selected unit
   const [isEditingUnit, setIsEditingUnit] = useState(false);
   const [editForm, setEditForm] = useState<TriageUnit | null>(null);
+  const [originalUnitPhotos, setOriginalUnitPhotos] = useState<{
+    photosProduct: string[];
+    photosBox: string[];
+    photosAccessories: string[];
+  } | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [urlInputCategory, setUrlInputCategory] = useState<'photosProduct' | 'photosBox' | 'photosAccessories'>('photosProduct');
@@ -155,11 +171,17 @@ export default function PhysicalStock({
     setEditingSector('');
     setIsEditingUnit(false);
     setEditForm(null);
+    setOriginalUnitPhotos(null);
   };
 
   const handleStartEdit = (unit: TriageUnit) => {
     setSelectedUnitId(unit.id);
     setEditForm({ ...unit });
+    setOriginalUnitPhotos({
+      photosProduct: [...(unit.photosProduct || [])],
+      photosBox: [...(unit.photosBox || [])],
+      photosAccessories: [...(unit.photosAccessories || [])]
+    });
     setIsEditingUnit(true);
   };
 
@@ -167,7 +189,18 @@ export default function PhysicalStock({
     if (!editForm) return;
     setIsSavingEdit(true);
     try {
-      await onUpdateUnit(editForm);
+      let updatedForm = { ...editForm };
+      
+      // If destinationSector is 'Principal' and photos are empty, auto-reference base product images
+      if (updatedForm.destinationSector === 'Principal' && (!updatedForm.photosProduct || updatedForm.photosProduct.length === 0)) {
+        const baseProd = findBaseProduct(updatedForm, products);
+        const baseImgs = getBaseProductImages(baseProd);
+        if (baseImgs.productPhotos.length > 0) {
+          updatedForm.photosProduct = baseImgs.productPhotos;
+        }
+      }
+
+      await onUpdateUnit(updatedForm);
       setIsSavingEdit(false);
       setIsEditingUnit(false);
       setActionSuccess('Ficha do produto e fotos atualizados com sucesso!');
@@ -300,6 +333,15 @@ export default function PhysicalStock({
       return unit.status === 'Estoque' && (term ? matchesSearch : (matchesSearch && matchesSector));
     }
   });
+
+  // Reset pagination limit when search term, sector tab, or duplicate filter changes
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [searchTerm, activeTab, filterOnlyDuplicates]);
+
+  // Slice filtered units according to current pagination limit (20 items per page)
+  const displayedUnits = filteredUnits.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredUnits.length;
 
   // Toggle selection for a single item
   const handleToggleSelectUnit = (id: string, e?: React.MouseEvent) => {
@@ -438,21 +480,50 @@ export default function PhysicalStock({
     });
   };
 
-  // Action: Move Sector (with custom confirmation)
+  // Action: Move Sector (with custom confirmation and photo strategy options for Principal)
   const handleMoveSector = (unit: TriageUnit, newSector: DestinationSectorType) => {
+    if (unit.destinationSector === newSector) return;
+
+    const baseProd = findBaseProduct(unit, products);
+    const baseImgs = getBaseProductImages(baseProd);
+    const savedPhotosCount = (unit.photosProduct?.length || 0) + (unit.photosBox?.length || 0) + (unit.photosAccessories?.length || 0);
+
+    // If transferring to Estoque Principal, and the unit already has saved photos AND base product images exist:
+    if (newSector === 'Principal' && savedPhotosCount > 0 && !!baseImgs.main) {
+      setTransferModalData({
+        unit,
+        targetSector: newSector,
+        baseProduct: baseProd,
+        savedPhotosCount
+      });
+      return;
+    }
+
     setConfirmConfig({
       title: 'Mover Setor de Estoque',
-      message: `Deseja alterar o setor de destino desta unidade para "${newSector}"?`,
+      message: `Deseja alterar o setor de destino desta unidade para "${newSector}"?${newSector === 'Principal' && baseImgs.main ? ' (As imagens oficiais do produto base serão vinculadas automaticamente).' : ''}`,
       type: 'info',
       onConfirm: async () => {
+        let finalPhotosProduct = unit.photosProduct || [];
+        let finalPhotosBox = unit.photosBox || [];
+        let finalPhotosAccessories = unit.photosAccessories || [];
+
+        // If moving to Principal with no previous photos, auto-reference base product images
+        if (newSector === 'Principal' && savedPhotosCount === 0 && baseImgs.productPhotos.length > 0) {
+          finalPhotosProduct = baseImgs.productPhotos;
+        }
+
         const updated: TriageUnit = {
           ...unit,
-          destinationSector: newSector
+          destinationSector: newSector,
+          photosProduct: finalPhotosProduct,
+          photosBox: finalPhotosBox,
+          photosAccessories: finalPhotosAccessories
         };
         try {
           await onUpdateUnit(updated);
           setEditingSector('');
-          setActionSuccess('Setor atualizado com sucesso no estoque!');
+          setActionSuccess(`Setor atualizado para ${newSector} com sucesso!`);
           setTimeout(() => setActionSuccess(null), 3000);
         } catch (err) {
           console.error(err);
@@ -461,6 +532,64 @@ export default function PhysicalStock({
         }
       }
     });
+  };
+
+  // Action: Execute sector transfer with selected photo strategy (Keep Saved / Use Base / Combine Both)
+  const handleConfirmTransferWithPhotoChoice = async (
+    choice: 'keep_saved' | 'use_base' | 'combine'
+  ) => {
+    if (!transferModalData) return;
+    const { unit, targetSector, baseProduct } = transferModalData;
+    const baseImgs = getBaseProductImages(baseProduct);
+
+    let newPhotosProduct = [...(unit.photosProduct || [])];
+    let newPhotosBox = [...(unit.photosBox || [])];
+    let newPhotosAccessories = [...(unit.photosAccessories || [])];
+
+    if (choice === 'use_base') {
+      newPhotosProduct = baseImgs.productPhotos.length > 0 ? baseImgs.productPhotos : (baseImgs.main ? [baseImgs.main] : []);
+      newPhotosBox = baseImgs.boxPhotos;
+      newPhotosAccessories = baseImgs.accessoriesPhotos;
+    } else if (choice === 'combine') {
+      const baseProdList = baseImgs.productPhotos.length > 0 ? baseImgs.productPhotos : (baseImgs.main ? [baseImgs.main] : []);
+      for (const img of baseProdList) {
+        if (!newPhotosProduct.includes(img)) {
+          newPhotosProduct.push(img);
+        }
+      }
+      for (const img of baseImgs.boxPhotos) {
+        if (!newPhotosBox.includes(img)) {
+          newPhotosBox.push(img);
+        }
+      }
+      for (const img of baseImgs.accessoriesPhotos) {
+        if (!newPhotosAccessories.includes(img)) {
+          newPhotosAccessories.push(img);
+        }
+      }
+    }
+    // If 'keep_saved', keeps the existing photosProduct, photosBox, photosAccessories as they were
+
+    const updated: TriageUnit = {
+      ...unit,
+      destinationSector: targetSector,
+      photosProduct: newPhotosProduct,
+      photosBox: newPhotosBox,
+      photosAccessories: newPhotosAccessories
+    };
+
+    try {
+      await onUpdateUnit(updated);
+      setTransferModalData(null);
+      setEditingSector('');
+      const strategyName = choice === 'keep_saved' ? 'Fotos salvas mantidas' : choice === 'use_base' ? 'Imagens da base aplicadas' : 'Fotos combinadas';
+      setActionSuccess(`Transferido para ${targetSector} com sucesso! (${strategyName})`);
+      setTimeout(() => setActionSuccess(null), 3500);
+    } catch (err: any) {
+      console.error('Error updating sector:', err);
+      setActionError(`Erro ao transferir: ${err?.message || err}`);
+      setTimeout(() => setActionError(null), 3500);
+    }
   };
 
   // Action: Delete Triage Unit (with custom confirmation)
@@ -744,7 +873,9 @@ export default function PhysicalStock({
 
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <Filter className="w-3.5 h-3.5 text-sky-400" />
-              <span>Mostrando <strong>{filteredUnits.length}</strong> unidades</span>
+              <span>
+                Exibindo <strong className="text-sky-400">{displayedUnits.length}</strong> de <strong className="text-white">{filteredUnits.length}</strong> {filteredUnits.length === 1 ? 'unidade' : 'unidades'}
+              </span>
             </div>
           </div>
         </div>
@@ -780,14 +911,18 @@ export default function PhysicalStock({
             <p className="text-slate-300 font-semibold text-sm">Nenhuma unidade física localizada.</p>
             <p className="text-slate-500 text-xs mt-1">Insira novas devoluções ou refine os termos de busca.</p>
           </div>
-        ) : viewMode === 'grid' ? (
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-950" id="stock-grid">
-            {filteredUnits.map((unit) => {
+        ) : (
+          <>
+            {viewMode === 'grid' ? (
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-950" id="stock-grid">
+                {displayedUnits.map((unit) => {
               const pStyle = getPlatformStyle(unit.platform);
               const sectorClass = getSectorBadgeClass(unit.destinationSector);
               
-              // Total photos count
-              const photosCount = (unit.photosProduct?.length || 0) + (unit.photosBox?.length || 0) + (unit.photosAccessories?.length || 0);
+              // Resolve photos (automatic fallback to base product if Principal/Novo or empty)
+              const resolved = getUnitResolvedPhotos(unit, products);
+              const photosCount = resolved.totalPhotosCount;
+              const mainPhoto = resolved.mainPhoto;
 
               const hasDupSti = isDuplicateSti(unit);
               const hasDupSerial = isDuplicateSerial(unit);
@@ -857,13 +992,16 @@ export default function PhysicalStock({
 
                     {/* Image / Thumbnail if exists */}
                     <div className="w-full h-32 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center relative">
-                      {unit.photosProduct && unit.photosProduct.length > 0 ? (
-                        <img src={unit.photosProduct[0]} alt={unit.baseProductName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      {mainPhoto ? (
+                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       ) : (
                         <Package className="w-8 h-8 text-slate-600" />
                       )}
                       {photosCount > 0 && (
-                        <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold">
+                        <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold flex items-center gap-1">
+                          {resolved.isUsingBaseProductImage && (
+                            <span className="text-sky-400 text-[9px] font-sans font-normal">Base •</span>
+                          )}
                           {photosCount} {photosCount === 1 ? 'Foto' : 'Fotos'}
                         </span>
                       )}
@@ -925,10 +1063,14 @@ export default function PhysicalStock({
         ) : (
           /* List / Linhas View */
           <div className="p-4 space-y-2 bg-slate-950" id="stock-list-rows">
-            {filteredUnits.map((unit) => {
+            {displayedUnits.map((unit) => {
               const pStyle = getPlatformStyle(unit.platform);
               const sectorClass = getSectorBadgeClass(unit.destinationSector);
-              const photosCount = (unit.photosProduct?.length || 0) + (unit.photosBox?.length || 0) + (unit.photosAccessories?.length || 0);
+              
+              // Resolve photos (automatic fallback to base product if Principal/Novo or empty)
+              const resolved = getUnitResolvedPhotos(unit, products);
+              const photosCount = resolved.totalPhotosCount;
+              const mainPhoto = resolved.mainPhoto;
 
               const hasDupSti = isDuplicateSti(unit);
               const hasDupSerial = isDuplicateSerial(unit);
@@ -964,8 +1106,8 @@ export default function PhysicalStock({
 
                     {/* Thumbnail */}
                     <div className="w-12 h-12 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0 relative">
-                      {unit.photosProduct && unit.photosProduct.length > 0 ? (
-                        <img src={unit.photosProduct[0]} alt={unit.baseProductName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      {mainPhoto ? (
+                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                       ) : (
                         <Package className="w-5 h-5 text-slate-600" />
                       )}
@@ -1066,7 +1208,32 @@ export default function PhysicalStock({
             })}
           </div>
         )}
-      </div>
+
+        {/* Pagination / Mostrar Mais button */}
+        <div className="p-5 bg-slate-950/80 border-t border-slate-800/80 flex flex-col items-center justify-center gap-2.5 text-center" id="stock-pagination-footer">
+          {hasMore ? (
+            <button
+              type="button"
+              onClick={() => setVisibleCount(prev => prev + 20)}
+              className="px-6 py-2.5 bg-slate-800 hover:bg-slate-750 hover:border-sky-500/50 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm group"
+              id="btn-load-more-stock"
+            >
+              <span>Mostrar Mais</span>
+              <ChevronDown className="w-4 h-4 text-sky-400 group-hover:translate-y-0.5 transition-transform" />
+            </button>
+          ) : (
+            <span className="text-xs text-slate-500 font-medium">
+              Todas as {filteredUnits.length} unidades foram carregadas
+            </span>
+          )}
+
+          <span className="text-xs text-slate-400 font-medium">
+            Exibindo <strong className="text-sky-400 font-bold">{displayedUnits.length}</strong> de <strong className="text-white font-bold">{filteredUnits.length}</strong> {filteredUnits.length === 1 ? 'unidade' : 'unidades'}
+          </span>
+        </div>
+      </>
+    )}
+  </div>
 
       {/* Complete unit details / Edit Modal Sheet */}
       {currentUnit && (
@@ -1349,6 +1516,155 @@ export default function PhysicalStock({
                     </div>
                   </div>
 
+                  {/* Smart Base Product Image & Saved Photo Options for Estoque Principal */}
+                  {(() => {
+                    const baseProd = findBaseProduct(editForm, products);
+                    const baseImgs = getBaseProductImages(baseProd);
+                    const isPrincipal = editForm.destinationSector === 'Principal';
+                    const origSavedCount = (originalUnitPhotos?.photosProduct?.length || 0) + (originalUnitPhotos?.photosBox?.length || 0) + (originalUnitPhotos?.photosAccessories?.length || 0);
+
+                    if (isPrincipal && baseImgs.main) {
+                      return (
+                        <div className="p-3.5 bg-slate-900/90 border border-sky-500/30 rounded-xl space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 text-sky-300">
+                              <Sparkles className="w-4 h-4 text-sky-400 shrink-0" />
+                              <span className="text-xs font-bold text-white">
+                                Opções de Imagens para o Estoque Principal
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-400">
+                              Produto Base: <strong className="text-sky-300">{baseProd?.name || editForm.baseProductName}</strong>
+                            </span>
+                          </div>
+
+                          {/* 3 Strategy Buttons Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            {/* Option 1: Use Base Product Images */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditForm(prev => prev ? {
+                                  ...prev,
+                                  photosProduct: baseImgs.productPhotos.length > 0 ? baseImgs.productPhotos : (baseImgs.main ? [baseImgs.main] : []),
+                                  photosBox: baseImgs.boxPhotos,
+                                  photosAccessories: baseImgs.accessoriesPhotos
+                                } : null);
+                                setActionSuccess('Fotos do Catálogo Base aplicadas!');
+                                setTimeout(() => setActionSuccess(null), 2500);
+                              }}
+                              className="p-2.5 bg-slate-950 hover:bg-sky-950/40 border border-slate-800 hover:border-sky-500/50 rounded-lg text-left transition-all flex flex-col justify-between gap-2 group cursor-pointer"
+                              title="Substituir galeria pelas fotos oficiais cadastradas no Catálogo Base"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-sky-400 flex items-center gap-1.5">
+                                  <ImageIcon className="w-3.5 h-3.5" />
+                                  Usar Imagem da Base
+                                </span>
+                                {baseImgs.main && (
+                                  <img src={baseImgs.main} alt="Base" className="w-6 h-6 rounded object-cover border border-slate-700 shrink-0" />
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-400 leading-tight">
+                                Aplica fotos oficiais do produto base sem duplicar dados.
+                              </span>
+                            </button>
+
+                            {/* Option 2: Keep Saved Triage Photos */}
+                            <button
+                              type="button"
+                              disabled={origSavedCount === 0}
+                              onClick={() => {
+                                if (originalUnitPhotos) {
+                                  setEditForm(prev => prev ? {
+                                    ...prev,
+                                    photosProduct: [...originalUnitPhotos.photosProduct],
+                                    photosBox: [...originalUnitPhotos.photosBox],
+                                    photosAccessories: [...originalUnitPhotos.photosAccessories]
+                                  } : null);
+                                  setActionSuccess('Fotos salvas da triagem restauradas!');
+                                  setTimeout(() => setActionSuccess(null), 2500);
+                                }
+                              }}
+                              className={`p-2.5 rounded-lg text-left transition-all flex flex-col justify-between gap-2 group ${
+                                origSavedCount > 0 
+                                  ? 'bg-slate-950 hover:bg-emerald-950/40 border border-slate-800 hover:border-emerald-500/50 cursor-pointer' 
+                                  : 'bg-slate-950/50 border border-slate-850 opacity-40 cursor-not-allowed'
+                              }`}
+                              title={origSavedCount > 0 ? "Restaurar fotos que já estavam cadastradas na triagem deste item" : "Nenhuma foto salva anteriormente"}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                                  <Camera className="w-3.5 h-3.5" />
+                                  Usar Fotos Salvas
+                                </span>
+                                {originalUnitPhotos?.photosProduct?.[0] && (
+                                  <img src={originalUnitPhotos.photosProduct[0]} alt="Salva" className="w-6 h-6 rounded object-cover border border-slate-700 shrink-0" />
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-400 leading-tight">
+                                {origSavedCount > 0 ? `Mantém as ${origSavedCount} foto(s) da triagem.` : 'Sem fotos salvas da triagem.'}
+                              </span>
+                            </button>
+
+                            {/* Option 3: Combine Both */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditForm(prev => {
+                                  if (!prev) return null;
+                                  const currentProd = [...(prev.photosProduct || [])];
+                                  const currentBox = [...(prev.photosBox || [])];
+                                  const currentAcc = [...(prev.photosAccessories || [])];
+
+                                  const baseProdList = baseImgs.productPhotos.length > 0 ? baseImgs.productPhotos : (baseImgs.main ? [baseImgs.main] : []);
+                                  for (const img of baseProdList) {
+                                    if (!currentProd.includes(img)) currentProd.push(img);
+                                  }
+                                  for (const img of baseImgs.boxPhotos) {
+                                    if (!currentBox.includes(img)) currentBox.push(img);
+                                  }
+                                  for (const img of baseImgs.accessoriesPhotos) {
+                                    if (!currentAcc.includes(img)) currentAcc.push(img);
+                                  }
+                                  return {
+                                    ...prev,
+                                    photosProduct: currentProd,
+                                    photosBox: currentBox,
+                                    photosAccessories: currentAcc
+                                  };
+                                });
+                                setActionSuccess('Fotos salvas combinadas com a Base!');
+                                setTimeout(() => setActionSuccess(null), 2500);
+                              }}
+                              className="p-2.5 bg-slate-950 hover:bg-amber-950/40 border border-slate-800 hover:border-amber-500/50 rounded-lg text-left transition-all flex flex-col justify-between gap-2 group cursor-pointer"
+                              title="Mesclar fotos da triagem com imagens oficiais do Catálogo Base"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                                  <Layers className="w-3.5 h-3.5" />
+                                  Combinar Ambas
+                                </span>
+                                <div className="flex -space-x-1.5 shrink-0">
+                                  {originalUnitPhotos?.photosProduct?.[0] && (
+                                    <img src={originalUnitPhotos.photosProduct[0]} alt="Salva" className="w-5 h-5 rounded-full object-cover border border-slate-700" />
+                                  )}
+                                  {baseImgs.main && (
+                                    <img src={baseImgs.main} alt="Base" className="w-5 h-5 rounded-full object-cover border border-slate-700" />
+                                  )}
+                                </div>
+                              </div>
+                              <span className="text-[10px] text-slate-400 leading-tight">
+                                Junta fotos da triagem + imagens da base.
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
                   {/* Add photo inputs */}
                   <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
                     <div className="flex flex-col sm:flex-row items-center gap-2">
@@ -1545,83 +1861,108 @@ export default function PhysicalStock({
                 </div>
 
                 {/* Integrated Photo Gallery split by logical category */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-                    Galeria de Fotos da Triagem
-                  </h4>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="gallery-categories">
-                    {/* Category A: Product */}
-                    <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
-                      <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos do Aparelho ({currentUnit.photosProduct?.length || 0})</span>
-                      {currentUnit.photosProduct && currentUnit.photosProduct.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {currentUnit.photosProduct.map((p, i) => (
-                            <div 
-                              key={i} 
-                              onClick={() => setFullscreenImage(p)}
-                              className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                {(() => {
+                  const resolved = getUnitResolvedPhotos(currentUnit, products);
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                          Galeria de Fotos da Triagem
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          {resolved.isUsingBaseProductImage && (
+                            <span className="text-[10px] text-sky-400 bg-sky-500/10 border border-sky-500/30 px-2 py-0.5 rounded font-bold">
+                              Vinculado ao Catálogo Base (Sem duplicação de dados)
+                            </span>
+                          )}
+                          {currentUnit.destinationSector === 'Principal' && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEdit(currentUnit)}
+                              className="px-2 py-0.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                              title="Alterar opções de fotos (Base, Salvas ou Combinadas)"
                             >
-                              <img src={p} className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
-                                <Eye className="w-4 h-4" />
-                              </div>
-                            </div>
-                          ))}
+                              <Pencil className="w-2.5 h-2.5" />
+                              Opções de Imagens
+                            </button>
+                          )}
                         </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto do aparelho.</p>
-                      )}
-                    </div>
+                      </div>
 
-                    {/* Category B: Box */}
-                    <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
-                      <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos da Embalagem ({currentUnit.photosBox?.length || 0})</span>
-                      {currentUnit.photosBox && currentUnit.photosBox.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {currentUnit.photosBox.map((p, i) => (
-                            <div 
-                              key={i} 
-                              onClick={() => setFullscreenImage(p)}
-                              className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
-                            >
-                              <img src={p} className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
-                                <Eye className="w-4 h-4" />
-                              </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="gallery-categories">
+                        {/* Category A: Product */}
+                        <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
+                          <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos do Aparelho ({resolved.photosProduct.length})</span>
+                          {resolved.photosProduct.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {resolved.photosProduct.map((p, i) => (
+                                <div 
+                                  key={i} 
+                                  onClick={() => setFullscreenImage(p)}
+                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                                >
+                                  <img src={p} className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
+                                    <Eye className="w-4 h-4" />
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          ) : (
+                            <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto do aparelho.</p>
+                          )}
                         </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto da caixa.</p>
-                      )}
-                    </div>
 
-                    {/* Category C: Accessories */}
-                    <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
-                      <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos dos Acessórios ({currentUnit.photosAccessories?.length || 0})</span>
-                      {currentUnit.photosAccessories && currentUnit.photosAccessories.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {currentUnit.photosAccessories.map((p, i) => (
-                            <div 
-                              key={i} 
-                              onClick={() => setFullscreenImage(p)}
-                              className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
-                            >
-                              <img src={p} className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
-                                <Eye className="w-4 h-4" />
-                              </div>
+                        {/* Category B: Box */}
+                        <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
+                          <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos da Embalagem ({resolved.photosBox.length})</span>
+                          {resolved.photosBox.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {resolved.photosBox.map((p, i) => (
+                                <div 
+                                  key={i} 
+                                  onClick={() => setFullscreenImage(p)}
+                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                                >
+                                  <img src={p} className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
+                                    <Eye className="w-4 h-4" />
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          ) : (
+                            <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto da caixa.</p>
+                          )}
                         </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto de acessórios.</p>
-                      )}
+
+                        {/* Category C: Accessories */}
+                        <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
+                          <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos dos Acessórios ({resolved.photosAccessories.length})</span>
+                          {resolved.photosAccessories.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {resolved.photosAccessories.map((p, i) => (
+                                <div 
+                                  key={i} 
+                                  onClick={() => setFullscreenImage(p)}
+                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                                >
+                                  <img src={p} className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
+                                    <Eye className="w-4 h-4" />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto de acessórios.</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Technical Report / Observations HTML Render */}
                 <div className="space-y-2" id="technical-report-view">
@@ -1736,6 +2077,147 @@ export default function PhysicalStock({
             <X className="w-6 h-6" />
           </button>
           <img src={fullscreenImage} className="max-w-full max-h-[90vh] rounded-xl border border-slate-800 object-contain shadow-2xl" />
+        </div>
+      )}
+
+      {/* Sector Transfer with Photo Choice Modal (When moving to Estoque Principal) */}
+      {transferModalData && (
+        <div className="fixed inset-0 z-[120] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
+            
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Transferência para Estoque Principal</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {transferModalData.unit.baseProductName} ({transferModalData.unit.sti || transferModalData.unit.trackingCode})
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setTransferModalData(null)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 leading-relaxed">
+              Este produto veio de outro armazém (<strong>{transferModalData.unit.destinationSector}</strong>) e já possui <strong>{transferModalData.savedPhotosCount} foto(s) cadastrada(s)</strong>.
+              <br />
+              Escolha a opção de imagem para o <strong>Estoque Principal</strong>:
+            </div>
+
+            {/* 3 Interactive Photo Strategy Cards */}
+            <div className="space-y-2.5">
+              {/* Option 1: Keep Saved Photos */}
+              <div 
+                onClick={() => handleConfirmTransferWithPhotoChoice('keep_saved')}
+                className="p-3.5 bg-slate-950 hover:bg-emerald-950/30 border border-slate-800 hover:border-emerald-500/50 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 group"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-white group-hover:text-emerald-300">
+                      1. Manter Fotos Já Cadastradas
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Preserva exatamente as fotos reais salvas na triagem deste item.
+                  </p>
+                </div>
+                {transferModalData.unit.photosProduct?.[0] && (
+                  <img 
+                    src={transferModalData.unit.photosProduct[0]} 
+                    alt="Salva" 
+                    className="w-12 h-12 rounded-lg object-cover border border-slate-700 shrink-0 group-hover:scale-105 transition-transform" 
+                  />
+                )}
+              </div>
+
+              {/* Option 2: Use Base Product Image */}
+              {(() => {
+                const baseImgs = getBaseProductImages(transferModalData.baseProduct);
+                return (
+                  <div 
+                    onClick={() => handleConfirmTransferWithPhotoChoice('use_base')}
+                    className="p-3.5 bg-slate-950 hover:bg-sky-950/30 border border-slate-800 hover:border-sky-500/50 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon className="w-4 h-4 text-sky-400" />
+                        <span className="text-xs font-bold text-white group-hover:text-sky-300">
+                          2. Usar Imagem do Catálogo Base
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Aplica a foto oficial cadastrada no Catálogo Base (sem duplicação de dados).
+                      </p>
+                    </div>
+                    {baseImgs.main && (
+                      <img 
+                        src={baseImgs.main} 
+                        alt="Base" 
+                        className="w-12 h-12 rounded-lg object-cover border border-slate-700 shrink-0 group-hover:scale-105 transition-transform" 
+                      />
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Option 3: Combine Both */}
+              {(() => {
+                const baseImgs = getBaseProductImages(transferModalData.baseProduct);
+                return (
+                  <div 
+                    onClick={() => handleConfirmTransferWithPhotoChoice('combine')}
+                    className="p-3.5 bg-slate-950 hover:bg-amber-950/30 border border-slate-800 hover:border-amber-500/50 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-amber-400" />
+                        <span className="text-xs font-bold text-white group-hover:text-amber-300">
+                          3. Usar Ambas (Combinar Imagens)
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Mantém as fotos já salvas E inclui as fotos oficiais do catálogo base.
+                      </p>
+                    </div>
+                    <div className="flex -space-x-3 shrink-0">
+                      {transferModalData.unit.photosProduct?.[0] && (
+                        <img 
+                          src={transferModalData.unit.photosProduct[0]} 
+                          alt="Salva" 
+                          className="w-10 h-10 rounded-lg object-cover border-2 border-slate-900 group-hover:scale-105 transition-transform" 
+                        />
+                      )}
+                      {baseImgs.main && (
+                        <img 
+                          src={baseImgs.main} 
+                          alt="Base" 
+                          className="w-10 h-10 rounded-lg object-cover border-2 border-slate-900 group-hover:scale-105 transition-transform" 
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setTransferModalData(null)}
+                className="px-4 py-2 bg-slate-850 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancelar Transferência
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -76,64 +76,63 @@ export default function ProductMovements({
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }, []);
 
-  // Available months list extracted from dailyInflows, triage units and past history up to current month
+  // Available months list extracted strictly from dailyInflows, triage units and the current active month
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
     
-    // Always include current month
+    // Always include current month for active entries
     monthsSet.add(currentMonthStr);
     
-    // Generate past 24 months fallback
-    const [currY, currM] = currentMonthStr.split('-').map(Number);
-    for (let i = 0; i < 24; i++) {
-      const d = new Date(currY, (currM - 1) - i, 1);
-      const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (mStr <= currentMonthStr) {
-        monthsSet.add(mStr);
-      }
-    }
-    
-    // Add months from daily inflows (only up to current month)
+    // Add months from daily inflows (from imported spreadsheet or manual entries)
     dailyInflows.forEach(item => {
       if (item.date && item.date.length >= 7) {
         const mStr = item.date.substring(0, 7);
-        if (mStr <= currentMonthStr) {
+        if (/^\d{4}-\d{2}$/.test(mStr)) {
           monthsSet.add(mStr);
         }
       }
     });
 
-    // Add months from actual triage units (only up to current month)
+    // Add months from actual triage units registered in database
     units.forEach(u => {
       try {
-        const d = new Date(u.createdAt);
-        if (!isNaN(d.getTime())) {
-          const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          if (mStr <= currentMonthStr) {
+        if (u.createdAt) {
+          const d = new Date(u.createdAt);
+          if (!isNaN(d.getTime())) {
+            const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             monthsSet.add(mStr);
           }
         }
       } catch (e) {}
     });
     
-    // Convert to sorted array descending (index 0 is currentMonthStr)
-    return Array.from(monthsSet).filter(m => m <= currentMonthStr).sort().reverse();
+    // Convert to sorted array descending (newest first, oldest last)
+    const sorted = Array.from(monthsSet).sort().reverse();
+    return sorted.length > 0 ? sorted : [currentMonthStr];
   }, [units, dailyInflows, currentMonthStr]);
 
-  // Selected Month state ("YYYY-MM"), strictly default to current month or valid past month
+  // Selected Month state ("YYYY-MM")
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    if (dailyInflows && dailyInflows.length > 0) {
+      const sortedInflows = [...dailyInflows].sort((a, b) => b.date.localeCompare(a.date));
+      if (sortedInflows[0]?.date) {
+        return sortedInflows[0].date.substring(0, 7);
+      }
+    }
     return currentMonthStr;
   });
 
-  // Strict clamp: never allow selectedMonth to exceed currentMonthStr
+  // Ensure selectedMonth is valid within availableMonths
   useEffect(() => {
-    if (selectedMonth > currentMonthStr) {
-      setSelectedMonth(currentMonthStr);
+    if (!availableMonths.includes(selectedMonth)) {
+      setSelectedMonth(availableMonths[0] || currentMonthStr);
     }
-  }, [selectedMonth, currentMonthStr]);
+  }, [availableMonths, selectedMonth, currentMonthStr]);
 
-  // Check if currently viewing the latest/current month
-  const isCurrentMonth = selectedMonth >= currentMonthStr;
+  // Check positions in available list
+  const currentMonthIndex = availableMonths.indexOf(selectedMonth);
+  const isOldestMonth = currentMonthIndex === -1 || currentMonthIndex >= availableMonths.length - 1;
+  const isLatestMonth = currentMonthIndex === -1 || currentMonthIndex <= 0;
 
   // Filter selection states
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -147,28 +146,21 @@ export default function ProductMovements({
     setSelectedWeek(null);
   }, [selectedMonth]);
 
-  // Navigate months helper - Go back in time (Mês anterior)
+  // Navigate months helper - Go back in time (Mês anterior existente)
   const handlePrevMonth = () => {
+    if (isOldestMonth) return;
     const currentIndex = availableMonths.indexOf(selectedMonth);
     if (currentIndex !== -1 && currentIndex < availableMonths.length - 1) {
       setSelectedMonth(availableMonths[currentIndex + 1]);
-    } else {
-      const [y, m] = selectedMonth.split('-').map(Number);
-      const prevDate = new Date(y, m - 2, 1);
-      const mStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-      setSelectedMonth(mStr);
     }
   };
 
-  // Navigate months helper - Advance towards current month (never past current month)
+  // Navigate months helper - Advance towards newer month
   const handleNextMonth = () => {
-    if (isCurrentMonth) return;
+    if (isLatestMonth) return;
     const currentIndex = availableMonths.indexOf(selectedMonth);
     if (currentIndex > 0) {
-      const nextMonth = availableMonths[currentIndex - 1];
-      if (nextMonth <= currentMonthStr) {
-        setSelectedMonth(nextMonth);
-      }
+      setSelectedMonth(availableMonths[currentIndex - 1]);
     }
   };
 
@@ -598,8 +590,13 @@ export default function ProductMovements({
           <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
             <button
               onClick={handlePrevMonth}
-              className="p-1.5 hover:bg-slate-900 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
-              title="Mês Anterior"
+              disabled={isOldestMonth}
+              className={`p-1.5 rounded-lg transition-colors ${
+                isOldestMonth
+                  ? 'text-slate-600 cursor-not-allowed opacity-30'
+                  : 'hover:bg-slate-900 text-slate-400 hover:text-white cursor-pointer'
+              }`}
+              title={isOldestMonth ? "Mês mais antigo disponível" : "Mês Anterior"}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -618,13 +615,13 @@ export default function ProductMovements({
 
             <button
               onClick={handleNextMonth}
-              disabled={isCurrentMonth}
+              disabled={isLatestMonth}
               className={`p-1.5 rounded-lg transition-colors ${
-                isCurrentMonth
+                isLatestMonth
                   ? 'text-slate-600 cursor-not-allowed opacity-30'
                   : 'hover:bg-slate-900 text-slate-400 hover:text-white cursor-pointer'
               }`}
-              title={isCurrentMonth ? "Mês atual (limite mais recente)" : "Próximo Mês"}
+              title={isLatestMonth ? "Mês mais recente disponível" : "Próximo Mês"}
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -745,12 +742,12 @@ export default function ProductMovements({
             </div>
 
             <div className="bg-[#0f172a]/70 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ES (Especial)</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ES (Espírito Santo)</span>
               <div className="mt-2 flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-purple-400">{monthTotals.totalEs}</span>
                 <span className="text-[10px] text-slate-500 font-bold">un</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">Lotes Especiais</span>
+              <span className="text-[10px] text-slate-500 mt-1">Filial Espírito Santo</span>
             </div>
 
             <div className="bg-[#0f172a]/70 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">

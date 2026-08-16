@@ -15,22 +15,44 @@ import {
   Filter, 
   Database,
   Lock,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  Package,
+  Boxes,
+  Layers,
+  FileSpreadsheet,
+  AlertTriangle,
+  ChevronRight
 } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
 import { subscribeAuditLogs, createAuditLog } from '../lib/dbService';
+import ResetDatabaseModal, { ResetTargetType } from './ResetDatabaseModal';
 
 interface LogsAuditProps {
   userRole: 'admin' | 'operator' | null;
+  onResetData?: () => void;
+  productsCount?: number;
+  triageUnitsCount?: number;
+  dailyInflowsCount?: number;
 }
 
-export default function LogsAudit({ userRole }: LogsAuditProps) {
+export default function LogsAudit({ 
+  userRole, 
+  onResetData,
+  productsCount = 0,
+  triageUnitsCount = 0,
+  dailyInflowsCount = 0
+}: LogsAuditProps) {
   const [logs, setLogs] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [actionFilter, setActionFilter] = useState('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+
+  // Individual reset modal state
+  const [activeResetTarget, setActiveResetTarget] = useState<ResetTargetType | null>(null);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
   useEffect(() => {
     setIsLoading(true);
@@ -40,6 +62,22 @@ export default function LogsAudit({ userRole }: LogsAuditProps) {
     });
     return () => unsubscribe();
   }, []);
+
+  const openIndividualReset = (target: ResetTargetType) => {
+    setActiveResetTarget(target);
+    setIsResetModalOpen(true);
+  };
+
+  const getTargetItemCount = (target: ResetTargetType | null) => {
+    switch (target) {
+      case 'catalog': return productsCount;
+      case 'stock': return triageUnitsCount;
+      case 'inflows': return dailyInflowsCount;
+      case 'logs': return logs.length;
+      case 'all': return productsCount + triageUnitsCount + dailyInflowsCount + logs.length;
+      default: return 0;
+    }
+  };
 
   const filteredLogs = logs.filter(log => {
     const matchesSearch = 
@@ -85,6 +123,10 @@ export default function LogsAudit({ userRole }: LogsAuditProps) {
       case 'CHECKOUT_TRIAGE':
         return 'bg-sky-500/10 text-sky-400 border border-sky-500/20';
       case 'RESET_DATABASE':
+      case 'RESET_CATALOG':
+      case 'RESET_STOCK':
+      case 'RESET_DAILY_INFLOWS':
+      case 'RESET_LOGS':
         return 'bg-purple-500/10 text-purple-400 border border-purple-500/20';
       default:
         return 'bg-slate-500/10 text-slate-400 border border-slate-500/20';
@@ -100,7 +142,11 @@ export default function LogsAudit({ userRole }: LogsAuditProps) {
       case 'UPDATE_TRIAGE': return 'EDITAR RMA';
       case 'DELETE_TRIAGE': return 'EXCLUIR RMA';
       case 'CHECKOUT_TRIAGE': return 'BAIXA ESTOQUE';
-      case 'RESET_DATABASE': return 'RESET BANCO';
+      case 'RESET_DATABASE': return 'RESET GERAL';
+      case 'RESET_CATALOG': return 'RESET CATÁLOGO';
+      case 'RESET_STOCK': return 'RESET ESTOQUE';
+      case 'RESET_DAILY_INFLOWS': return 'RESET ENTRADAS';
+      case 'RESET_LOGS': return 'LIMPEZA LOGS';
       default: return action;
     }
   };
@@ -113,7 +159,7 @@ export default function LogsAudit({ userRole }: LogsAuditProps) {
         </div>
         <h3 className="text-lg font-bold text-white">Acesso Restrito a Administradores</h3>
         <p className="text-xs text-slate-400 leading-relaxed">
-          Os logs de auditoria e eventos do sistema contêm dados sensíveis de conformidade e governança, estando restritos a contas com privilégios de Administrador (RBAC).
+          Os logs de auditoria e ferramentas de governança de dados contêm operações críticas, estando restritos a contas com privilégios de Administrador (RBAC).
         </p>
       </div>
     );
@@ -127,20 +173,168 @@ export default function LogsAudit({ userRole }: LogsAuditProps) {
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
               <ShieldAlert className="text-rose-500 w-6 h-6 animate-pulse" />
-              Painel de Segurança e Rastreabilidade (Logs)
+              Painel de Segurança, Rastreabilidade & Governança
             </h2>
             <p className="text-sm text-slate-400 mt-1">
-              Auditoria de logs em tempo real para conformidade de segurança corporativa e governança.
+              Auditoria em tempo real de logs, rastreabilidade de eventos e ferramentas de gestão de dados.
             </p>
           </div>
-          <div className="flex items-center gap-2.5 bg-slate-950 px-4 py-2 rounded-xl border border-slate-850">
-            <User className="w-4 h-4 text-sky-400" />
-            <div className="text-xs">
-              <span className="text-slate-400 block font-semibold">Seu Nível RBAC:</span>
-              <span className={`font-black uppercase tracking-wider ${userRole === 'admin' ? 'text-rose-400' : 'text-sky-400'}`}>
-                {userRole === 'admin' ? 'Administrador' : 'Operador'}
-              </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => openIndividualReset('all')}
+              className="flex items-center gap-2 px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 rounded-xl text-xs font-bold border border-rose-500/30 transition-all cursor-pointer shadow-sm"
+              title="Reset geral do banco de dados completo"
+              id="btn-reset-db-from-logs"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-rose-400" />
+              <span>Reset Geral do Banco</span>
+            </button>
+            <div className="flex items-center gap-2.5 bg-slate-950 px-4 py-2 rounded-xl border border-slate-850">
+              <User className="w-4 h-4 text-sky-400" />
+              <div className="text-xs">
+                <span className="text-slate-400 block font-semibold">Seu Nível RBAC:</span>
+                <span className="font-black uppercase tracking-wider text-rose-400">
+                  Administrador
+                </span>
+              </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Individual Resets Section */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5" id="individual-resets-section">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800/80 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Reset Individual por Módulo</h3>
+              <p className="text-xs text-slate-400">Execute a limpeza independente e cirúrgica de cada coleção do Firestore sem afetar as outras.</p>
+            </div>
+          </div>
+          <span className="text-[11px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-lg">
+            Requer Senha de Administrador
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 1. Catálogo de Base */}
+          <div className="bg-slate-950/70 border border-slate-800/90 rounded-2xl p-4 flex flex-col justify-between space-y-4 hover:border-amber-500/30 transition-all group">
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <Package className="w-5 h-5" />
+                </div>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                  {productsCount} SKUs
+                </span>
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors">Catálogo de Base</h4>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Apaga todos os produtos e SKUs cadastrados no catálogo base.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => openIndividualReset('catalog')}
+              className="w-full py-2 px-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              id="btn-reset-catalog"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>Resetar Catálogo</span>
+            </button>
+          </div>
+
+          {/* 2. Estoque Físico */}
+          <div className="bg-slate-950/70 border border-slate-800/90 rounded-2xl p-4 flex flex-col justify-between space-y-4 hover:border-sky-500/30 transition-all group">
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                  <Boxes className="w-5 h-5" />
+                </div>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg bg-sky-500/10 text-sky-300 border border-sky-500/20">
+                  {triageUnitsCount} Unidades
+                </span>
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors">Estoque Físico</h4>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Apaga todas as unidades físicas de triagem, devolução e estoque.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => openIndividualReset('stock')}
+              className="w-full py-2 px-3 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 hover:text-sky-200 border border-sky-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              id="btn-reset-stock"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-sky-400" />
+              <span>Resetar Estoque</span>
+            </button>
+          </div>
+
+          {/* 3. Fluxo de Entradas */}
+          <div className="bg-slate-950/70 border border-slate-800/90 rounded-2xl p-4 flex flex-col justify-between space-y-4 hover:border-indigo-500/30 transition-all group">
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                  {dailyInflowsCount} Lançamentos
+                </span>
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">Fluxo de Entradas</h4>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Apaga todos os lançamentos diários e consolidados por setor.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => openIndividualReset('inflows')}
+              className="w-full py-2 px-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              id="btn-reset-inflows"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Resetar Entradas</span>
+            </button>
+          </div>
+
+          {/* 4. Auditoria e Logs */}
+          <div className="bg-slate-950/70 border border-slate-800/90 rounded-2xl p-4 flex flex-col justify-between space-y-4 hover:border-rose-500/30 transition-all group">
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/20">
+                  {logs.length} Logs
+                </span>
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white group-hover:text-rose-300 transition-colors">Auditoria & Logs</h4>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Apaga o histórico de logs de ações e auditoria gravados no Firestore.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => openIndividualReset('logs')}
+              className="w-full py-2 px-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 border border-rose-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              id="btn-reset-logs"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>Limpar Logs</span>
+            </button>
           </div>
         </div>
       </div>
@@ -188,7 +382,11 @@ export default function LogsAudit({ userRole }: LogsAuditProps) {
                     <option value="UPDATE_PRODUCT">Editar Produto</option>
                     <option value="DELETE_PRODUCT">Excluir Produto</option>
                     <option value="CHECKOUT_TRIAGE">Baixa Estoque</option>
-                    <option value="RESET_DATABASE">Reset Banco</option>
+                    <option value="RESET_DATABASE">Reset Geral</option>
+                    <option value="RESET_CATALOG">Reset Catálogo</option>
+                    <option value="RESET_STOCK">Reset Estoque</option>
+                    <option value="RESET_DAILY_INFLOWS">Reset Entradas</option>
+                    <option value="RESET_LOGS">Limpeza Logs</option>
                   </select>
                 </div>
 
@@ -303,21 +501,21 @@ export default function LogsAudit({ userRole }: LogsAuditProps) {
                 <div className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0 mt-1.5"></div>
                 <div>
                   <strong className="text-white block font-semibold">Função: Operador</strong>
-                  <p className="text-slate-450 mt-0.5">Tem permissão de ler e escrever produtos no catálogo e preencher triagens de devolução.</p>
+                  <p className="text-slate-450 mt-0.5">Permissão de criar e consultar produtos no catálogo e lançar triagens de RMA.</p>
                 </div>
               </li>
               <li className="flex items-start gap-2.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0 mt-1.5"></div>
                 <div>
                   <strong className="text-white block font-semibold">Função: Administrador</strong>
-                  <p className="text-slate-450 mt-0.5">Controle total. Único com permissão de excluir triagens, auditar logs e extrair relatórios.</p>
+                  <p className="text-slate-450 mt-0.5">Controle total. Exclusão de itens, auditoria de logs e limpeza/reset de coleções.</p>
                 </div>
               </li>
               <li className="flex items-start gap-2.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0 mt-1.5"></div>
                 <div>
                   <strong className="text-white block font-semibold">Armazenamento Seguro</strong>
-                  <p className="text-slate-450 mt-0.5">As fotos do RMA são carregadas no Firebase Storage e suas URLs seguras indexadas no Firestore.</p>
+                  <p className="text-slate-450 mt-0.5">Fotos de triagem e comprovação são indexadas no Firestore com controle de integridade.</p>
                 </div>
               </li>
             </ul>
@@ -347,12 +545,41 @@ service cloud.firestore {
       allow write: if isOperatorOrAdmin();
       allow delete: if isAdmin();
     }
+    match /catalog_products/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isOperatorOrAdmin();
+      allow delete: if isAdmin();
+    }
+    match /daily_inflows/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isOperatorOrAdmin();
+      allow delete: if isAdmin();
+    }
   }
 }`}
             </pre>
           </div>
         </div>
       </div>
+
+      {/* Individual Reset Modal */}
+      {isResetModalOpen && (
+        <ResetDatabaseModal 
+          isOpen={isResetModalOpen}
+          onClose={() => {
+            setIsResetModalOpen(false);
+            setActiveResetTarget(null);
+          }}
+          userEmail={auth.currentUser?.email || ''}
+          userRole={userRole}
+          target={activeResetTarget || 'all'}
+          itemCount={getTargetItemCount(activeResetTarget)}
+          onSuccess={() => {
+            setIsResetModalOpen(false);
+            setActiveResetTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

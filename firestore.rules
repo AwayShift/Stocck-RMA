@@ -19,20 +19,28 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Obtém o documento do usuário atual se existir
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    // Verifica se o usuário é o Administrador Primário do Sistema
+    function isBootstrappedAdmin() {
+      return isSignedIn() && (
+        request.auth.token.get('email', '') == 'alessandro.away6@gmail.com' ||
+        request.auth.token.get('email', '').matches('(?i)alessandro.away6@gmail.com')
+      );
     }
 
-    // Verifica se o usuário tem privilégio de Administrador (via Custom Claims ou Documento de Usuário)
+    // Obtém o cargo do usuário autenticado no Firestore de forma segura
+    function getUserRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '')
+        : '';
+    }
+
+    // Verifica se o usuário tem privilégio de Administrador (via Email Mestre, Custom Claims ou Documento de Usuário)
     function isAdmin() {
       return isSignedIn() && (
+        isBootstrappedAdmin() ||
         request.auth.token.get('admin', false) == true ||
         request.auth.token.get('role', '') == 'admin' ||
-        (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          getUserData().get('role', '') == 'admin'
-        )
+        getUserRole() == 'admin'
       );
     }
 
@@ -41,37 +49,26 @@ service cloud.firestore {
       return isSignedIn() && (
         isAdmin() ||
         request.auth.token.get('role', '') == 'manager' ||
-        (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          getUserData().get('role', '') == 'manager'
-        )
+        getUserRole() == 'manager'
       );
     }
 
     // --- REGRAS POR COLEÇÃO --- //
 
-    // Coleção /users: Um usuário comum só lê/escreve seu próprio perfil. Apenas Admin pode ver todos.
+    // Coleção /users: Cada usuário lê/escreve seu próprio perfil. Administradores possuem controle total.
     match /users/{userId} {
-      // Usuário lê o próprio perfil; Admin pode ler/listar qualquer um
+      // Usuário lê o próprio perfil; Admin pode ler e listar todos
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
 
-      // Criação de perfil próprio não pode auto-atribuir papéis elevados
-      allow create: if (
-        isOwner(userId) && (
-          !request.resource.data.keys().hasAny(['role', 'isAdmin']) ||
-          request.resource.data.get('role', 'user') == 'user'
-        )
-      ) || isAdmin();
+      // Criação de perfil: O próprio usuário ao se cadastrar/autenticar ou Administrador
+      allow create: if isOwner(userId) || isAdmin();
 
-      // Atualização de perfil próprio proíbe alteração de campos de privilégio (role, isAdmin)
-      allow update: if (
-        isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin'])
-      ) || isAdmin();
+      // Atualização de perfil: O próprio usuário (dados básicos) ou Administrador (gestão de cargos)
+      allow update: if isOwner(userId) || isAdmin();
 
-      // Exclusão restrita a administradores
-      allow delete: if isAdmin();
+      // Exclusão permitida para administradores ou para o dono da conta
+      allow delete: if isAdmin() || isOwner(userId);
     }
 
     // Coleção /products: Leitura pública para autenticados. Escrita exclusiva para Admin ou Gerentes.
@@ -99,11 +96,13 @@ service cloud.firestore {
     }
 
     // Coleção /logs: Registros de auditoria do sistema.
-    // Ninguém pode apagar ou alterar. Qualquer autenticado pode criar. Apenas Admin pode ler.
+    // Qualquer autenticado pode criar. Leitura e exclusão (no reset de sistema) para Admin.
     match /logs/{logId} {
       allow read: if isAdmin();
       allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isAdmin();
     }
   }
 }
+

@@ -24,9 +24,11 @@ import {
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType } from '../types';
 import { uploadFileToStorage } from '../lib/dbService';
 import { RichTextEditor } from './RichTextEditor';
+import { getBaseProductImages } from '../utils/productImages';
 
 interface RmaEntryProps {
   products: BaseProduct[];
+  units?: TriageUnit[];
   onSaveTriage: (unit: TriageUnit) => Promise<void>;
   onNavigateToStock: () => void;
 }
@@ -75,12 +77,46 @@ const compressImageToBase64 = (file: File): Promise<string> => {
   });
 };
 
-export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: RmaEntryProps) {
+export default function RmaEntry({ products, units = [], onSaveTriage, onNavigateToStock }: RmaEntryProps) {
   // Select Base Product state & search query
   const [selectedProductId, setSelectedProductId] = useState('');
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
   const productDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Frequency map of triage entries per product
+  const productInflowCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (units && units.length > 0) {
+      units.forEach(u => {
+        if (u.baseProductId) {
+          counts[u.baseProductId] = (counts[u.baseProductId] || 0) + 1;
+        }
+        if (u.baseProductSku) {
+          const keySku = `sku:${u.baseProductSku.toLowerCase().trim()}`;
+          counts[keySku] = (counts[keySku] || 0) + 1;
+        }
+      });
+    }
+    return counts;
+  }, [units]);
+
+  const getProductEntryCount = (p: BaseProduct) => {
+    const byId = productInflowCounts[p.id] || 0;
+    const bySku = productInflowCounts[`sku:${p.sku.toLowerCase().trim()}`] || 0;
+    return Math.max(byId, bySku);
+  };
+
+  // Top 10 products with most entries in stock
+  const top10Products = useMemo(() => {
+    return [...products]
+      .map(p => ({ product: p, count: getProductEntryCount(p) }))
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.product.name.localeCompare(b.product.name);
+      })
+      .slice(0, 10);
+  }, [products, productInflowCounts]);
   
   // Fields of Entrance
   const [trackingCode, setTrackingCode] = useState('');
@@ -251,14 +287,23 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filtered products list by SKU or Name
+  // Filtered products list by SKU or Name - prioritized by frequency of entries (Top entradas primeiro)
   const filteredProducts = useMemo(() => {
-    if (!productSearchTerm.trim()) return products;
-    const term = productSearchTerm.toLowerCase();
-    return products.filter(
-      p => p.sku?.toLowerCase().includes(term) || p.name?.toLowerCase().includes(term)
-    );
-  }, [products, productSearchTerm]);
+    let list = [...products];
+    if (productSearchTerm.trim()) {
+      const term = productSearchTerm.toLowerCase();
+      list = list.filter(
+        p => p.sku?.toLowerCase().includes(term) || p.name?.toLowerCase().includes(term)
+      );
+    }
+    // Sort so products with more triage entries appear first
+    return list.sort((a, b) => {
+      const countA = getProductEntryCount(a);
+      const countB = getProductEntryCount(b);
+      if (countB !== countA) return countB - countA;
+      return a.name.localeCompare(b.name);
+    });
+  }, [products, productSearchTerm, productInflowCounts]);
 
   // Selected product object
   const selectedProduct = useMemo(() => {
@@ -297,7 +342,16 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
         return;
       }
     }
-    const finalTrackingCode = trackingCode.trim() || `STI-${Math.floor(10000 + Math.random() * 90000)}`;
+    let finalTrackingCode = trackingCode.trim();
+    if (!finalTrackingCode) {
+      if (destinationSector === 'Openbox') {
+        finalTrackingCode = `STI-${Math.floor(10000 + Math.random() * 90000)}`;
+      } else if (destinationSector === 'Principal') {
+        finalTrackingCode = `PRIN-${Math.floor(10000 + Math.random() * 90000)}`;
+      } else {
+        finalTrackingCode = `RMA-${Math.floor(10000 + Math.random() * 90000)}`;
+      }
+    }
 
     const refProduct = products.find(p => p.id === selectedProductId) || products.find(
       p => p.sku.toLowerCase() === productSearchTerm.trim().toLowerCase() ||
@@ -309,6 +363,24 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
     }
 
     setIsSubmitting(true);
+
+    let finalPhotosProduct = [...photosProduct];
+    let finalPhotosBox = [...photosBox];
+    let finalPhotosAccessories = [...photosAccessories];
+
+    // For items in Estoque Principal, reuse the base product's already registered image without extra storage
+    if (destinationSector === 'Principal' && refProduct) {
+      const baseImgs = getBaseProductImages(refProduct);
+      if (finalPhotosProduct.length === 0 && baseImgs.productPhotos.length > 0) {
+        finalPhotosProduct = baseImgs.productPhotos;
+      }
+      if (finalPhotosBox.length === 0 && baseImgs.boxPhotos.length > 0) {
+        finalPhotosBox = baseImgs.boxPhotos;
+      }
+      if (finalPhotosAccessories.length === 0 && baseImgs.accessoriesPhotos.length > 0) {
+        finalPhotosAccessories = baseImgs.accessoriesPhotos;
+      }
+    }
 
     const newTriage: TriageUnit = {
       id: 'tr-' + Date.now(),
@@ -325,9 +397,9 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
       accessoriesInclusion: accessoriesInclusion.trim(),
       destinationSector,
       notes: notes, // HTML rich-text
-      photosProduct,
-      photosBox,
-      photosAccessories,
+      photosProduct: finalPhotosProduct,
+      photosBox: finalPhotosBox,
+      photosAccessories: finalPhotosAccessories,
       createdAt: new Date().toISOString(),
       status: 'Estoque'
     };
@@ -438,10 +510,82 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Side Column: Fields (7 cols) */}
             <div className="lg:col-span-7 space-y-6">
-              {/* Step 1: Base Identification */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-1">
+              {/* Step 1: Destination Decision (FIRST ITEM IN ORDER - COMPACT) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-md" id="rma-step-destination">
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">1</span>
+                    <span>Decisão de Direcionamento (Destino)</span>
+                  </label>
+                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border"
+                    style={{
+                      backgroundColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.1)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                      borderColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.3)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)',
+                      color: destinationSector === 'Principal' ? '#34D399' : destinationSector === 'Openbox' ? '#FBBF24' : '#F87171'
+                    }}
+                  >
+                    {destinationSector === 'Principal' ? '🟢 Estoque Principal' : destinationSector === 'Openbox' ? '🟠 Openbox' : '🔴 RMA'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" id="destination-sector-cards">
+                  {/* Card 1: Estoque Principal */}
+                  <button
+                    type="button"
+                    onClick={() => setDestinationSector('Principal')}
+                    className={`py-2 px-3 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      destinationSector === 'Principal'
+                        ? 'bg-emerald-500/15 border-emerald-500 shadow-sm shadow-emerald-500/10 ring-1 ring-emerald-500/40 text-emerald-300 font-bold'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-emerald-500/30 hover:bg-slate-950 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                      <span className="text-xs truncate">Estoque Principal</span>
+                    </div>
+                    {destinationSector === 'Principal' && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                  </button>
+
+                  {/* Card 2: Openbox */}
+                  <button
+                    type="button"
+                    onClick={() => setDestinationSector('Openbox')}
+                    className={`py-2 px-3 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      destinationSector === 'Openbox'
+                        ? 'bg-amber-500/15 border-amber-500 shadow-sm shadow-amber-500/10 ring-1 ring-amber-500/40 text-amber-300 font-bold'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-amber-500/30 hover:bg-slate-950 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                      <span className="text-xs truncate">Openbox</span>
+                    </div>
+                    {destinationSector === 'Openbox' && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                  </button>
+
+                  {/* Card 3: RMA */}
+                  <button
+                    type="button"
+                    onClick={() => setDestinationSector('RMA')}
+                    className={`py-2 px-3 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      destinationSector === 'RMA'
+                        ? 'bg-rose-500/15 border-rose-500 shadow-sm shadow-rose-500/10 ring-1 ring-rose-500/40 text-rose-300 font-bold'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-rose-500/30 hover:bg-slate-950 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0"></span>
+                      <span className="text-xs truncate">RMA</span>
+                    </div>
+                    {destinationSector === 'RMA' && <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Step 2: Base Identification */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-2">
                 <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">1</span>
+                  <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">2</span>
                   Recepção e Origem do Pacote
                 </h3>
 
@@ -523,10 +667,13 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
 
                     {/* Autocomplete Dropdown */}
                     {isProductDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-[#0a0f1d] border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin scrollbar-thumb-slate-850">
-                        <div className="p-2 bg-slate-900/90 text-[11px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium">
-                          <span>{filteredProducts.length} {filteredProducts.length === 1 ? 'produto encontrado' : 'produtos encontrados'}</span>
-                          <span className="text-[10px] text-slate-500">Pressione Enter ou clique para selecionar</span>
+                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-[#0a0f1d] border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin scrollbar-thumb-slate-850">
+                        <div className="p-2.5 bg-slate-900/90 text-[11px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10 backdrop-blur-sm">
+                          <span className="flex items-center gap-1.5 font-bold text-slate-300">
+                            <span className="w-2 h-2 rounded-full bg-sky-400"></span>
+                            {filteredProducts.length} {filteredProducts.length === 1 ? 'produto' : 'produtos'} {productSearchTerm ? 'encontrados' : 'ordenados por frequência de entrada'}
+                          </span>
+                          <span className="text-[10px] text-slate-500">Top 10 mais frequentes primeiro</span>
                         </div>
 
                         {filteredProducts.length === 0 ? (
@@ -534,18 +681,20 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                             Nenhum produto cadastrado com este SKU ou Nome.
                           </div>
                         ) : (
-                          filteredProducts.map((p) => {
+                          filteredProducts.map((p, idx) => {
                             const isSelected = p.id === selectedProductId;
+                            const entryCount = getProductEntryCount(p);
+                            const isTop10 = idx < 10;
                             return (
                               <button
                                 key={p.id}
                                 type="button"
                                 onClick={() => handleSelectProduct(p)}
-                                className={`w-full text-left p-3 hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3 cursor-pointer ${
+                                className={`w-full text-left p-2.5 hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3 cursor-pointer ${
                                   isSelected ? 'bg-sky-500/10' : ''
                                 }`}
                               >
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-mono text-xs font-bold text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                                       {p.sku}
@@ -553,6 +702,17 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                                     <span className="text-[11px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
                                       {p.voltage}
                                     </span>
+                                    {entryCount > 0 && (
+                                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                                        isTop10 && !productSearchTerm 
+                                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' 
+                                          : 'bg-slate-800 text-slate-400'
+                                      }`}>
+                                        <span>#{idx + 1}</span>
+                                        <span>•</span>
+                                        <span>{entryCount} {entryCount === 1 ? 'entrada' : 'entradas'}</span>
+                                      </span>
+                                    )}
                                   </div>
                                   <p className="text-xs font-medium text-slate-200 mt-1 truncate">
                                     {p.name}
@@ -583,41 +743,60 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                   )}
                 </div>
 
-                <div className={`grid grid-cols-1 ${destinationSector === 'Openbox' ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
+                <div className={`grid grid-cols-1 ${destinationSector === 'Openbox' ? 'md:grid-cols-2' : 'md:grid-cols-2'} gap-4`}>
                   {/* Platform Selection */}
-                  {destinationSector !== 'Openbox' && (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Plataforma Origem</label>
-                      <select 
-                        value={platform}
-                        onChange={(e) => setPlatform(e.target.value as PlatformType)}
-                        className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500"
-                        id="select-platform-origin"
-                      >
-                        <option value="Mercado Livre">Mercado Livre</option>
-                        <option value="Shopee">Shopee</option>
-                        <option value="Amazon">Amazon</option>
-                        <option value="Kabum">Kabum</option>
-                      </select>
-                    </div>
-                  )}
-
-                   {/* Tracking / Case Code (Código STI) */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                      Código STI {destinationSector === 'Openbox' ? <span className="text-amber-500 font-bold">* (Obrigatório)</span> : <span className="text-slate-500 font-normal">(Opcional)</span>}
-                    </label>
-                    <input 
-                      type="text"
-                      placeholder={destinationSector === 'Openbox' ? "Digite o Código STI" : "Código STI (Opcional)"}
-                      value={trackingCode}
-                      onChange={(e) => setTrackingCode(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
-                      id="input-tracking-code"
-                    />
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Plataforma Origem</label>
+                    <select 
+                      value={platform}
+                      onChange={(e) => setPlatform(e.target.value as PlatformType)}
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500"
+                      id="select-platform-origin"
+                    >
+                      <option value="Mercado Livre">Mercado Livre</option>
+                      <option value="Shopee">Shopee</option>
+                      <option value="Amazon">Amazon</option>
+                      <option value="Kabum">Kabum</option>
+                    </select>
                   </div>
 
-                  {/* Serial Number / S/N */}
+                  {/* Tracking / Case Code (Código STI) - Enabled ONLY for Openbox */}
+                  {destinationSector === 'Openbox' ? (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center justify-between">
+                        <span>Código STI</span>
+                        <span className="text-[11px] font-normal text-slate-400">Identificador Openbox</span>
+                      </label>
+                      <input 
+                        type="text"
+                        placeholder="Digite o Código STI (Ex: STI-40912)"
+                        value={trackingCode}
+                        onChange={(e) => setTrackingCode(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-slate-950 border border-amber-500/40 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                        id="input-tracking-code"
+                      />
+                    </div>
+                  ) : (
+                    /* Serial Number / S/N when not openbox */
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                        <span>Nº de Série / Serial</span>
+                        <span className="text-slate-500 font-normal">(S/N)</span>
+                      </label>
+                      <input 
+                        type="text"
+                        placeholder="Ex: SN-123456789-BR (Bipar barras)"
+                        value={serialNumber}
+                        onChange={(e) => setSerialNumber(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
+                        id="input-serial-number"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Serial Number when Openbox is active */}
+                {destinationSector === 'Openbox' && (
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
                       <span>Nº de Série / Serial</span>
@@ -629,10 +808,10 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                       value={serialNumber}
                       onChange={(e) => setSerialNumber(e.target.value)}
                       className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
-                      id="input-serial-number"
+                      id="input-serial-number-openbox"
                     />
                   </div>
-                </div>
+                )}
 
                 {/* Customer Reason text */}
                 <div className="space-y-1.5">
@@ -648,10 +827,10 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                 </div>
               </div>
 
-              {/* Step 2: Analysis and State */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-2">
+              {/* Step 3: Analysis and State */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-3">
                 <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">2</span>
+                  <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">3</span>
                   Avaliação Visual e Triagem Técnica
                 </h3>
 
@@ -701,11 +880,11 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                 </div>
               </div>
 
-              {/* Step 3: Technical observations */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-3">
+              {/* Step 4: Technical observations */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-4">
                 <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">3</span>
+                    <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">4</span>
                     Laudo Técnico & Observações
                   </h3>
                 </div>
@@ -723,7 +902,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
               </div>
             </div>
 
-            {/* Right Side Column: Photos & Decision (5 cols) */}
+            {/* Right Side Column: Photos & Submission (5 cols) */}
             <div className="lg:col-span-5 space-y-6">
               {/* Photo categories upload */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5" id="rma-step-photos">
@@ -865,7 +1044,7 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                 })()}
 
                 {/* Upload Section Selector for Ctrl+V */}
-                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 border border-slate-850 rounded-xl text-center text-xs text-slate-400" id="ctrl-v-category-selector">
+                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 border border-slate-855 rounded-xl text-center text-xs text-slate-400" id="ctrl-v-category-selector">
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('product')}
@@ -1077,56 +1256,13 @@ export default function RmaEntry({ products, onSaveTriage, onNavigateToStock }: 
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Step 4: Final Destination Decision */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-decision">
-                <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">4</span>
-                  Decisão de Direcionamento Final
-                </h3>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Setor de Destino</label>
-                  <select 
-                    value={destinationSector}
-                    onChange={(e) => setDestinationSector(e.target.value as DestinationSectorType)}
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold focus:outline-none"
-                    style={{
-                      color: destinationSector === 'Principal' ? '#10B981' : destinationSector === 'Openbox' ? '#F59E0B' : '#EF4444'
-                    }}
-                    id="select-destination-sector"
-                  >
-                    <option value="Principal" style={{ color: '#10B981', backgroundColor: '#0f172a' }}>
-                      🟢 Estoque Principal (Perfeito estado, volta para venda como novo)
-                    </option>
-                    <option value="Openbox" style={{ color: '#F59E0B', backgroundColor: '#0f172a' }}>
-                      🟠 Openbox (Caixa aberta/danificada ou pequenas marcas, funcional)
-                    </option>
-                    <option value="RMA" style={{ color: '#EF4444', backgroundColor: '#0f172a' }}>
-                      🔴 RMA (Produto com defeito técnico real)
-                    </option>
-                  </select>
-                </div>
-
-                <div className="bg-slate-950 p-3.5 border border-slate-850 rounded-xl text-xs text-slate-450 leading-relaxed">
-                  {destinationSector === 'Principal' && (
-                    <span><strong>Estoque Principal:</strong> O produto será registrado como disponível no catálogo de novos. Requer que o estado do aparelho seja Novo e com embalagem Perfeita.</span>
-                  )}
-                  {destinationSector === 'Openbox' && (
-                    <span><strong>Openbox:</strong> O produto será disponibilizado em estoque especial para venda promocional de outlet devido a pequenas avarias estéticas ou caixa aberta.</span>
-                  )}
-                  {destinationSector === 'RMA' && (
-                    <span><strong>RMA:</strong> Encaminhado para a fila técnica de reparo. O produto aguardará diagnóstico avançado e troca de componentes na oficina.</span>
-                  )}
-                </div>
 
                 {/* Form Buttons */}
-                <div className="flex gap-3 pt-4 justify-end">
+                <div className="pt-4">
                   <button 
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full py-3 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-bold shadow-lg shadow-sky-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    className="w-full py-3.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-bold shadow-lg shadow-sky-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer"
                     id="btn-save-triage"
                   >
                     {isSubmitting ? (

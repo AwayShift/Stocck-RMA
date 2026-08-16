@@ -66,7 +66,7 @@ export default function ExcelBaseCatalogImportModal({
   const [previewFilter, setPreviewFilter] = useState('');
   
   // Default values to apply to rows that don't specify them
-  const [defaultVoltage, setDefaultVoltage] = useState<'110V' | '220V' | 'Bivolt' | 'N/A'>('Bivolt');
+  const [defaultVoltage, setDefaultVoltage] = useState<'110V' | '220V' | 'Bivolt' | 'N/A'>('N/A');
   const [defaultCategory, setDefaultCategory] = useState<string>('');
   const [defaultBrand, setDefaultBrand] = useState<string>('');
 
@@ -97,7 +97,7 @@ export default function ExcelBaseCatalogImportModal({
           name: p.name.trim(),
           brand: p.brand || defaultBrand || (existing ? existing.brand || '' : ''),
           category: p.category || defaultCategory || (existing ? existing.category || '' : ''),
-          voltage: p.voltage || defaultVoltage || (existing ? existing.voltage : 'Bivolt'),
+          voltage: p.voltage || defaultVoltage || (existing ? existing.voltage : 'N/A'),
           description: p.description || p.name.trim(),
           accessories: p.accessories || (existing ? existing.accessories || '' : ''),
           isExisting: !!existing,
@@ -282,13 +282,18 @@ export default function ExcelBaseCatalogImportModal({
               </div>
               <div className="text-xs space-y-1">
                 <p className="font-semibold text-slate-200">
-                  Formato Suportado (Exemplo da Imagem):
+                  Colunas Suportadas na Planilha:
                 </p>
                 <div className="flex flex-wrap items-center gap-2 text-slate-400">
                   <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-sky-300 font-mono">Coluna A: SKU</span>
                   <span className="text-slate-600 font-bold">→</span>
                   <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-emerald-300 font-mono">Coluna B: Descrição</span>
-                  <span className="text-slate-500 text-[11px] ml-1">(Ex: 16791 | A DROP DISSEY ISSEY MIYAKE EDP - 50ML)</span>
+                  <span className="text-slate-600 font-bold">→</span>
+                  <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-amber-300 font-mono">Coluna C: Marca</span>
+                  <span className="text-slate-600 font-bold">→</span>
+                  <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-purple-300 font-mono">Coluna D: Categoria</span>
+                  <span className="text-slate-600 font-bold">→</span>
+                  <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-cyan-300 font-mono">Coluna E: Voltagem</span>
                 </div>
               </div>
             </div>
@@ -402,10 +407,10 @@ export default function ExcelBaseCatalogImportModal({
                     onChange={(e) => setDefaultVoltage(e.target.value as any)}
                     className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-medium focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                   >
+                    <option value="N/A">N/A (Sem especificação)</option>
                     <option value="Bivolt">Bivolt</option>
                     <option value="110V">110V</option>
                     <option value="220V">220V</option>
-                    <option value="N/A">N/A (Sem Tensão)</option>
                   </select>
                 </div>
 
@@ -494,11 +499,12 @@ export default function ExcelBaseCatalogImportModal({
                           className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-900"
                         />
                       </th>
-                      <th className="p-3 w-32">SKU</th>
+                      <th className="p-3 w-28">SKU</th>
                       <th className="p-3">Descrição / Nome do Produto</th>
-                      <th className="p-3 w-28">Voltagem</th>
+                      <th className="p-3 w-32">Marca</th>
                       <th className="p-3 w-32">Categoria</th>
-                      <th className="p-3 w-28 text-center">Status</th>
+                      <th className="p-3 w-24">Voltagem</th>
+                      <th className="p-3 w-24 text-center">Status</th>
                       <th className="p-3 w-12 text-center">Ação</th>
                     </tr>
                   </thead>
@@ -533,16 +539,13 @@ export default function ExcelBaseCatalogImportModal({
                           />
                         </td>
                         <td className="p-3">
-                          <select
-                            value={item.voltage}
-                            onChange={(e) => updateItemField(item.id, 'voltage', e.target.value)}
-                            className="w-full px-2 py-1 bg-slate-950/80 border border-slate-700/80 rounded text-slate-300 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                          >
-                            <option value="Bivolt">Bivolt</option>
-                            <option value="110V">110V</option>
-                            <option value="220V">220V</option>
-                            <option value="N/A">N/A</option>
-                          </select>
+                          <input
+                            type="text"
+                            placeholder="Marca / Fabricante"
+                            value={item.brand}
+                            onChange={(e) => updateItemField(item.id, 'brand', e.target.value)}
+                            className="w-full px-2 py-1 bg-slate-950/80 border border-slate-700/80 rounded text-amber-300 font-medium text-xs placeholder-slate-600 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                          />
                         </td>
                         <td className="p-3">
                           <input
@@ -550,8 +553,20 @@ export default function ExcelBaseCatalogImportModal({
                             placeholder="Categoria"
                             value={item.category}
                             onChange={(e) => updateItemField(item.id, 'category', e.target.value)}
-                            className="w-full px-2 py-1 bg-slate-950/80 border border-slate-700/80 rounded text-slate-300 text-xs placeholder-slate-600 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                            className="w-full px-2 py-1 bg-slate-950/80 border border-slate-700/80 rounded text-purple-300 font-medium text-xs placeholder-slate-600 focus:ring-1 focus:ring-purple-500 focus:outline-none"
                           />
+                        </td>
+                        <td className="p-3">
+                          <select
+                            value={item.voltage}
+                            onChange={(e) => updateItemField(item.id, 'voltage', e.target.value)}
+                            className="w-full px-2 py-1 bg-slate-950/80 border border-slate-700/80 rounded text-slate-300 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                          >
+                            <option value="N/A">N/A</option>
+                            <option value="Bivolt">Bivolt</option>
+                            <option value="110V">110V</option>
+                            <option value="220V">220V</option>
+                          </select>
                         </td>
                         <td className="p-3 text-center">
                           {item.isExisting ? (

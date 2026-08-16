@@ -1,6 +1,6 @@
 {
   "name": "RMA Flow & Triagem de Estoque",
-  "description": "Sistema avançado de gestão logística de devoluções (RMA), triagem com fotos categorizadas, rich text, controle de estoque físico e fluxo de entradas com importação de planilhas Excel e consolidação semanal.",
+  "description": "Stocck RMA - Sistema avançado de gestão e triagem de devoluções, controle de estoque físico e fluxo de entradas.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -69,19 +69,26 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
         const user = userCredential.user;
 
+        // Auto-assign admin if master email, else user-selected role
+        const finalRole = user.email === 'alessandro.away6@gmail.com' ? 'admin' : role;
+
         // Save custom metadata (Name & Role) in firestore 'users' collection
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          email: user.email,
-          name: name.trim(),
-          role: role,
-          createdAt: new Date().toISOString()
-        });
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            uid: user.uid,
+            email: user.email,
+            name: name.trim(),
+            role: finalRole,
+            createdAt: new Date().toISOString()
+          });
+        } catch (dbErr) {
+          console.warn('Profile doc will be synchronized on login state hook:', dbErr);
+        }
 
         setSuccessMessage('Sua conta foi criada com sucesso! Redirecionando...');
         setTimeout(() => {
           onLoginSuccess();
-        }, 1500);
+        }, 1200);
 
       } else {
         // Sign In existing user
@@ -118,9 +125,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           </div>
           <div>
             <h1 className="text-2xl font-black tracking-tight text-white flex items-center justify-center gap-1.5">
-              RMA<span className="text-sky-400 font-bold">Flow</span>
+              Stocck <span className="text-sky-400 font-bold">RMA</span>
             </h1>
-            <p className="text-xs text-slate-400">Portal Logístico de Devoluções & Triagem</p>
+            <p className="text-xs text-slate-400 font-medium">Gestão e Triagem</p>
           </div>
         </div>
 

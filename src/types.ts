@@ -138,3 +138,13 @@ export interface InflowWeekSummary {
   totalOpenbox: number;
   totalEs: number;
 }
+
+export interface UserAccount {
+  uid: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'operator';
+  createdAt?: string;
+  lastLogin?: string;
+}
+

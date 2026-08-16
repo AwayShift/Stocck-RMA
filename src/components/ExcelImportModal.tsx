@@ -36,8 +36,11 @@ interface ParsedRow {
   sti: string;
   serialNumber?: string;
   productName: string;
+  brand?: string;
+  category?: string;
   packaging: string;
   observations: string;
+  customerReason?: string;
   categoryOrSector: string;
   destinationSector: DestinationSectorType;
   packageStatus: PackageStatusType;
@@ -121,22 +124,67 @@ export default function ExcelImportModal({
           // Flexible key lookup
           const keys = Object.keys(row);
           const getKey = (possibleNames: string[]) => {
-            const foundKey = keys.find(k => possibleNames.some(p => k.toLowerCase().trim().includes(p.toLowerCase())));
+            const foundKey = keys.find(k => {
+              const kClean = k.toLowerCase().trim();
+              return possibleNames.some(p => {
+                const pClean = p.toLowerCase().trim();
+                return kClean === pClean || kClean.includes(pClean);
+              });
+            });
             return foundKey ? String(row[foundKey]).trim() : '';
           };
 
-          const sku = getKey(['sku', 'cod']);
-          const sti = getKey(['sti', 'rastreio', 'tracking', 'etiqueta']);
-          const serialNumber = getKey(['serial', 's/n', 'sn', 'serie', 'numero de serie']);
+          // Strict search for Serial Number (do not capture STI)
+          const getSerialKey = () => {
+            const candidates = [
+              'número de série', 'numero de serie', 'número de serie', 'numero de série',
+              'nº de série', 'nº de serie', 'n° de serie', 'nº serie', 'n° serie', 'num serie',
+              's/n', 'sn', 'n/s', 'serial number', 'serial'
+            ];
+            for (const cand of candidates) {
+              const foundKey = keys.find(k => {
+                const clean = k.toLowerCase().trim();
+                if (clean === cand) return true;
+                if (cand === 's/n' || cand === 'sn' || cand === 'n/s') {
+                  return clean === 's/n' || clean === 'sn' || clean === 's / n' || clean === 'n/s';
+                }
+                return clean.includes(cand);
+              });
+              if (foundKey && String(row[foundKey]).trim()) {
+                const val = String(row[foundKey]).trim();
+                const upper = val.toUpperCase();
+                if (upper !== 'N/A' && upper !== 'SEM SERIAL' && upper !== 'NA' && upper !== '-') {
+                  return val;
+                }
+              }
+            }
+            return '';
+          };
+
+          const sku = getKey(['sku', 'cod', 'código', 'codigo']);
+          const sti = getKey(['sti', 'rastreio', 'tracking', 'etiqueta', 'código sti', 'codigo sti']);
+          const rawSerial = getSerialKey();
+
+          // Ensure serialNumber is purely the product serial if present in sheet, never STI
+          const serialNumber = (rawSerial && rawSerial !== sti) ? rawSerial : '';
+
           const productName = getKey(['descrição', 'descricao', 'produto', 'nome']);
+          const brand = getKey(['marca', 'brand', 'fabricante']);
+          const category = getKey(['categoria do produto', 'categoria produto', 'cat', 'categoria', 'segmento', 'grupo']);
           const packaging = getKey(['embalagem', 'caixa', 'pacote']);
-          const observations = getKey(['observação', 'observacao', 'obs', 'motivo', 'detalhes', 'laudo']);
-          const categoryOrSector = getKey(['categoria', 'setor', 'destino', 'category']);
+
+          // Observações: exatas da planilha
+          const observations = getKey(['observação', 'observações', 'observacao', 'observacoes', 'obs', 'detalhes', 'laudo', 'parecer']);
+
+          // Motivo: apenas se houver coluna explícita de motivo na planilha
+          const explicitReason = getKey(['motivo da devolução', 'motivo devolucao', 'motivo de devolução', 'motivo retorno', 'motivo do retorno', 'motivo']);
+
+          const categoryOrSector = getKey(['setor', 'destino', 'categoria/setor']);
 
           // Match with catalog product if SKU matches
           const matchedProduct = products.find(p => p.sku && sku && p.sku.toLowerCase() === sku.toLowerCase());
 
-          const destSector = determineSector(categoryOrSector, selectedDefaultSector);
+          const destSector = determineSector(categoryOrSector || category, selectedDefaultSector);
           const pkgStatus = determinePackageStatus(packaging);
 
           return {
@@ -145,9 +193,12 @@ export default function ExcelImportModal({
             sti: sti || `STI-${sku || 'OB'}-${Math.floor(10000 + Math.random() * 90000)}`,
             serialNumber: serialNumber || '',
             productName: productName || (matchedProduct ? matchedProduct.name : 'Produto de Inventário sem Nome'),
+            brand: brand || (matchedProduct ? matchedProduct.brand : ''),
+            category: category || (matchedProduct ? matchedProduct.category : ''),
             packaging: packaging || 'Na caixa',
-            observations: observations || 'Item importado do inventário OpenBox',
-            categoryOrSector: categoryOrSector || destSector,
+            observations: observations || '',
+            customerReason: explicitReason || '',
+            categoryOrSector: categoryOrSector || category || destSector,
             destinationSector: destSector,
             packageStatus: pkgStatus,
             matchedProduct,
@@ -194,32 +245,45 @@ export default function ExcelImportModal({
     setParsedRows(prev => prev.map(r => r.id === id ? { ...r, destinationSector: sector } : r));
   };
 
+  const handleUpdateRowField = (id: string, field: 'serialNumber' | 'observations' | 'brand' | 'category', value: string) => {
+    setParsedRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  };
+
   // Download Sample Template
   const handleDownloadSample = () => {
     const sampleData = [
       {
         'SKU': '1650',
         'STI': '13509873',
+        'Número de Série': 'BL-A1-998822',
         'Descrição do produto': 'Impressora 3D Bambu Lab A1 com AMS Lite Combo',
+        'Marca': 'Bambu Lab',
+        'Categoria': 'Impressão 3D',
         'Embalagem': 'Na caixa',
-        'Observações': 'Revisada',
-        'Categoria': 'Openbox'
+        'Observações': 'Revisada, sem detalhes de uso, testada e higienizada',
+        'Setor': 'Openbox'
       },
       {
         'SKU': 'AIR-FRY-45L',
         'STI': 'ML-88192031',
+        'Número de Série': '',
         'Descrição do produto': 'Fritadeira Elétrica AirFryer Touch 4.5L',
+        'Marca': 'Mondial',
+        'Categoria': 'Eletroportáteis',
         'Embalagem': 'Na caixa',
-        'Observações': 'Sem detalhes de uso, testada e higienizada',
-        'Categoria': 'Openbox'
+        'Observações': 'Testada e funcionando 100%',
+        'Setor': 'Openbox'
       },
       {
         'SKU': 'ASP-VRT-1600',
         'STI': 'SHP-7729102',
+        'Número de Série': 'SN-ELT-4401',
         'Descrição do produto': 'Aspirador de Pó Vertical Ultra 1600W',
+        'Marca': 'Electrolux',
+        'Categoria': 'Eletroportáteis',
         'Embalagem': 'Sem caixa',
         'Observações': 'Substituído filtro HEPA, pronto para estoque',
-        'Categoria': 'Estoque Principal'
+        'Setor': 'Estoque Principal'
       }
     ];
 
@@ -243,22 +307,33 @@ export default function ExcelImportModal({
     try {
       const triageUnitsToSave: TriageUnit[] = selectedRows.map((row, idx) => {
         const timestamp = new Date(Date.now() + idx * 1000).toISOString();
+
+        // Determinar o Motivo da Devolução: se veio coluna específica na planilha, usa ela;
+        // caso contrário, define o padrão de inventário sem misturar com as Observações.
+        const defaultReason = row.destinationSector === 'Openbox' ? 'Inventário OpenBox' : 'Entrada de Estoque';
+        const finalCustomerReason = row.customerReason && row.customerReason.trim() !== '' 
+          ? row.customerReason.trim() 
+          : defaultReason;
+
         return {
           id: `tr-excel-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
           trackingCode: row.sti,
-          serialNumber: row.serialNumber || '',
+          // Serial: somente se existir na planilha (nunca inclui o STI quando não tiver serial)
+          serialNumber: row.serialNumber && row.serialNumber.trim() !== '' ? row.serialNumber.trim() : '',
           baseProductId: row.matchedProduct?.id || `bp-import-${row.sku}`,
           baseProductName: row.productName,
           baseProductSku: row.sku,
-          baseProductVoltage: row.matchedProduct?.voltage || 'Bivolt',
+          baseProductVoltage: row.matchedProduct?.voltage || 'N/A',
           platform: selectedDefaultPlatform,
-          customerReason: row.observations || 'Inventário OpenBox (Importação de Planilha Excel)',
-          deviceStatus: 'Usado',
+          // Motivo da Devolução separado das Observações
+          customerReason: finalCustomerReason,
+          deviceStatus: row.destinationSector === 'Principal' ? 'Novo' : 'Usado',
           packageStatus: row.packageStatus,
           accessoriesInclusion: row.packaging ? `Embalagem: ${row.packaging}` : 'Conforme inventário',
           destinationSector: row.destinationSector,
-          notes: `<p><strong>Item Importado via Planilha de Inventário:</strong></p><ul><li><strong>SKU:</strong> ${row.sku}</li><li><strong>Código STI / Rastreio:</strong> ${row.sti}</li><li><strong>Embalagem:</strong> ${row.packaging}</li><li><strong>Observações / Laudo:</strong> ${row.observations}</li></ul>`,
-          photosProduct: row.matchedProduct?.imageUrl ? [row.matchedProduct.imageUrl] : [],
+          // Observações: coloca APENAS as mesmas observações que constam na planilha
+          notes: row.observations ? row.observations.trim() : '',
+          photosProduct: (row.destinationSector === 'Principal' && row.matchedProduct?.imageUrl) ? [row.matchedProduct.imageUrl] : [],
           photosBox: [],
           photosAccessories: [],
           createdAt: timestamp,
@@ -457,11 +532,13 @@ export default function ExcelImportModal({
                   <thead className="bg-slate-900 sticky top-0 z-10 text-slate-400 border-b border-slate-800 font-mono uppercase text-[10px]">
                     <tr>
                       <th className="p-3 w-10 text-center">#</th>
-                      <th className="p-3">SKU / Catálogo</th>
-                      <th className="p-3">Código STI</th>
+                      <th className="p-3">SKU</th>
+                      <th className="p-3">STI</th>
+                      <th className="p-3">Serial (S/N)</th>
                       <th className="p-3">Descrição do Produto</th>
+                      <th className="p-3">Marca</th>
                       <th className="p-3">Embalagem</th>
-                      <th className="p-3">Destino (Setor)</th>
+                      <th className="p-3">Destino</th>
                       <th className="p-3">Observações</th>
                     </tr>
                   </thead>
@@ -496,8 +573,22 @@ export default function ExcelImportModal({
                         <td className="p-3 font-mono text-slate-300 font-semibold">
                           #{row.sti}
                         </td>
-                        <td className="p-3 text-white font-medium max-w-[220px] truncate" title={row.productName}>
+                        <td className="p-3 font-mono text-xs">
+                          {row.serialNumber ? (
+                            <span className="text-amber-300 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                              {row.serialNumber}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 text-[10px] italic">
+                              Sem Serial
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-white font-medium max-w-[200px] truncate" title={row.productName}>
                           {row.productName}
+                        </td>
+                        <td className="p-3 text-slate-300 text-xs font-semibold">
+                          {row.brand || <span className="text-slate-600">-</span>}
                         </td>
                         <td className="p-3 text-slate-300">
                           <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] font-semibold">
@@ -522,7 +613,7 @@ export default function ExcelImportModal({
                           </select>
                         </td>
                         <td className="p-3 text-slate-400 max-w-[180px] truncate" title={row.observations}>
-                          {row.observations}
+                          {row.observations || <span className="text-slate-600 italic">-</span>}
                         </td>
                       </tr>
                     ))}

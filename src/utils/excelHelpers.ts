@@ -131,7 +131,7 @@ export async function parseInflowExcelFile(file: File): Promise<{
         const rmaIdx = headerRow.findIndex(h => h.includes('RMA') || h.includes('TRIAGEM'));
         const estoqueIdx = headerRow.findIndex(h => h.includes('ESTOQUE') || h.includes('STOCK') || h.includes('ALMOXARIFADO'));
         const openboxIdx = headerRow.findIndex(h => h.includes('OPENBOX') || h.includes('OPEN BOX') || h.includes('OPEN-BOX'));
-        const esIdx = headerRow.findIndex(h => h === 'ES' || h.includes('E.S.') || h.includes('ESPECIAL') || h.includes('SUPLEMENTAR'));
+        const esIdx = headerRow.findIndex(h => h === 'ES' || h.includes('E.S.') || h.includes('ESPIRITO SANTO') || h.includes('ESPÍRITO SANTO') || h.includes('ESPECIAL') || h.includes('SUPLEMENTAR'));
         const notesIdx = headerRow.findIndex(h => h.includes('OBS') || h.includes('NOTA') || h.includes('NOTE'));
 
         if (dateIdx === -1) {
@@ -452,12 +452,12 @@ export async function parseCatalogExcelFile(file: File): Promise<{
         const headerRow: string[] = (rawJson[0] || []).map((h: any) => String(h).trim().toUpperCase());
         
         // Find column indices
-        const skuIdx = headerRow.findIndex(h => h === 'SKU' || h.includes('SKU') || h.includes('CÓD') || h.includes('COD'));
-        const descIdx = headerRow.findIndex(h => h.includes('DESCRIÇÃO') || h.includes('DESCRICAO') || h.includes('PRODUTO') || h.includes('NOME') || h.includes('DESCRIPTION'));
-        const brandIdx = headerRow.findIndex(h => h.includes('MARCA') || h.includes('BRAND') || h.includes('FABRICANTE'));
-        const catIdx = headerRow.findIndex(h => h.includes('CATEGORIA') || h.includes('CATEGORY') || h.includes('SETOR'));
-        const voltIdx = headerRow.findIndex(h => h.includes('VOLT') || h.includes('TENSAO') || h.includes('TENSÃO'));
-        const accIdx = headerRow.findIndex(h => h.includes('ACESSORIO') || h.includes('ACESSÓRIO') || h.includes('ACCESSOR'));
+        const skuIdx = headerRow.findIndex(h => h === 'SKU' || h.includes('SKU') || h.includes('CÓD') || h.includes('COD') || h.includes('ITEM') || h.includes('REFERÊNCIA') || h.includes('REFERENCIA'));
+        const descIdx = headerRow.findIndex(h => h.includes('DESCRIÇÃO') || h.includes('DESCRICAO') || h.includes('PRODUTO') || h.includes('NOME') || h.includes('DESCRIPTION') || h.includes('TITLE') || h.includes('TÍTULO') || h.includes('TITULO'));
+        const brandIdx = headerRow.findIndex(h => h === 'MARCA' || h.includes('MARCA') || h.includes('BRAND') || h.includes('FABRICANTE') || h.includes('FABRIC') || h.includes('MAKE'));
+        const catIdx = headerRow.findIndex(h => h === 'CATEGORIA' || h.includes('CATEGORIA') || h.includes('CATEGORY') || h.includes('CATEG') || h.includes('SETOR') || h.includes('SEGMENTO') || h.includes('GRUPO') || h.includes('DEPARTAMENTO') || h.includes('DEPTO') || h.includes('FAMILIA') || h.includes('FAMÍLIA') || h.includes('LINHA'));
+        const voltIdx = headerRow.findIndex(h => h.includes('VOLT') || h.includes('TENSAO') || h.includes('TENSÃO') || h.includes('VOLTAGEM'));
+        const accIdx = headerRow.findIndex(h => h.includes('ACESSORIO') || h.includes('ACESSÓRIO') || h.includes('ACCESSOR') || h.includes('ITENS'));
 
         const effectiveSkuIdx = skuIdx !== -1 ? skuIdx : 0;
         const effectiveDescIdx = descIdx !== -1 ? descIdx : 1;
@@ -502,13 +502,21 @@ export async function parseCatalogExcelFile(file: File): Promise<{
           // Optional extra columns
           const brand = brandIdx !== -1 && row[brandIdx] ? String(row[brandIdx]).trim() : '';
           const category = catIdx !== -1 && row[catIdx] ? String(row[catIdx]).trim() : '';
-          let voltage: '110V' | '220V' | 'Bivolt' | 'N/A' = 'Bivolt';
+          let voltage: '110V' | '220V' | 'Bivolt' | 'N/A' = 'N/A';
           if (voltIdx !== -1 && row[voltIdx]) {
             const vStr = String(row[voltIdx]).toUpperCase().trim();
             if (vStr.includes('110') || vStr.includes('127')) voltage = '110V';
             else if (vStr.includes('220')) voltage = '220V';
-            else if (vStr.includes('BIVOLT') || vStr.includes('BI')) voltage = 'Bivolt';
+            else if (vStr.includes('BIVOLT') || vStr.includes('BI-VOLT') || vStr.includes('BIV')) voltage = 'Bivolt';
             else if (vStr.includes('N/A') || vStr.includes('NA') || vStr.includes('SEM')) voltage = 'N/A';
+            else voltage = 'N/A';
+          } else {
+            // Check if product description explicitly specifies voltage
+            const descUpper = name.toUpperCase();
+            if (descUpper.includes('110V') || descUpper.includes('127V')) voltage = '110V';
+            else if (descUpper.includes('220V')) voltage = '220V';
+            else if (descUpper.includes('BIVOLT') || descUpper.includes('BI-VOLT')) voltage = 'Bivolt';
+            else voltage = 'N/A';
           }
           const accessories = accIdx !== -1 && row[accIdx] ? String(row[accIdx]).trim() : '';
 
@@ -560,19 +568,43 @@ export function downloadBaseCatalogTemplate() {
   const sampleData = [
     {
       'SKU': 16791,
-      'Descrição': 'A DROP DISSEY ISSEY MIYAKE EDP - 50ML'
+      'Descrição': 'A DROP DISSEY ISSEY MIYAKE EDP - 50ML',
+      'Marca': 'Issey Miyake',
+      'Categoria': 'Perfumaria & Beleza',
+      'Voltagem': 'N/A',
+      'Acessórios': 'Frasco 50ml, Caixa Original'
     },
     {
       'SKU': 17408,
-      'Descrição': 'ACABAMENTO PARA REGISTRO BASE DECA 3/4" RIVA'
+      'Descrição': 'ACABAMENTO PARA REGISTRO BASE DECA 3/4" RIVA',
+      'Marca': 'Deca',
+      'Categoria': 'Metais e Hidráulica',
+      'Voltagem': 'N/A',
+      'Acessórios': 'Kit de fixação, Manual'
     },
     {
       'SKU': 16351,
-      'Descrição': 'ACCESS POINT UBIQUITI U6+ UNIFI 6 PLUS SEM FONTE - U6+I'
+      'Descrição': 'ACCESS POINT UBIQUITI U6+ UNIFI 6 PLUS SEM FONTE - U6+I',
+      'Marca': 'Ubiquiti',
+      'Categoria': 'Redes & Conectividade',
+      'Voltagem': 'Bivolt',
+      'Acessórios': 'Suporte de montagem de teto'
     },
     {
       'SKU': 17354,
-      'Descrição': 'ACCESS POINT UBIQUITI U7 LITE UNIFI WIFI 7 DUAL BAND 4988 MBPS POE SEM FONTE'
+      'Descrição': 'ACCESS POINT UBIQUITI U7 LITE UNIFI WIFI 7 DUAL BAND 4988 MBPS POE SEM FONTE',
+      'Marca': 'Ubiquiti',
+      'Categoria': 'Redes & Conectividade',
+      'Voltagem': 'Bivolt',
+      'Acessórios': 'Suporte de parede, Manual'
+    },
+    {
+      'SKU': 18502,
+      'Descrição': 'FRITADEIRA ELETRICA AIRFRYER TOUCH DIGITAL 4.5L 1500W',
+      'Marca': 'Mondial',
+      'Categoria': 'Eletroportáteis',
+      'Voltagem': '110V',
+      'Acessórios': 'Cesto antiaderente, Livro de receitas'
     }
   ];
 
@@ -580,13 +612,17 @@ export function downloadBaseCatalogTemplate() {
   
   // Set explicit column widths
   ws['!cols'] = [
-    { wch: 15 },
-    { wch: 65 }
+    { wch: 15 }, // SKU
+    { wch: 65 }, // Descrição
+    { wch: 20 }, // Marca
+    { wch: 26 }, // Categoria
+    { wch: 14 }, // Voltagem
+    { wch: 35 }  // Acessórios
   ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Catálogo de Produtos');
-  XLSX.writeFile(wb, 'modelo_catalogo_base_sku.xlsx');
+  XLSX.writeFile(wb, 'modelo_catalogo_base_completo.xlsx');
 }
 
 /**
@@ -598,7 +634,7 @@ export function exportBaseCatalogToExcel(products: any[], filename = 'catalogo_b
     'Descrição': p.name,
     'Marca': p.brand || '',
     'Categoria': p.category || '',
-    'Voltagem': p.voltage || 'Bivolt',
+    'Voltagem': p.voltage || 'N/A',
     'Acessórios': p.accessories || ''
   }));
 

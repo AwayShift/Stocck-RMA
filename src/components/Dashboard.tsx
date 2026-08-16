@@ -15,16 +15,18 @@ import {
   ShoppingCart, 
   Layers 
 } from 'lucide-react';
-import { TriageUnit, PlatformType, DestinationSectorType, isMigrationUnit } from '../types';
+import { TriageUnit, PlatformType, DestinationSectorType, isMigrationUnit, BaseProduct } from '../types';
+import { getUnitResolvedPhotos } from '../utils/productImages';
 
 interface DashboardProps {
   units: TriageUnit[];
+  products?: BaseProduct[];
   onViewUnit: (unit: TriageUnit) => void;
   onNavigateToStock: () => void;
   onResetData: () => void;
 }
 
-export default function Dashboard({ units, onViewUnit, onNavigateToStock, onResetData }: DashboardProps) {
+export default function Dashboard({ units, products = [], onViewUnit, onNavigateToStock, onResetData }: DashboardProps) {
   // Filter for today's units (based on local timezone, excluding migration imports)
   const todayUnits = units.filter(u => {
     try {
@@ -226,6 +228,9 @@ export default function Dashboard({ units, onViewUnit, onNavigateToStock, onRese
 
                   const hourStr = new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
+                  const resolved = getUnitResolvedPhotos(unit, products);
+                  const mainPhoto = resolved.mainPhoto;
+
                   return (
                     <div 
                       key={unit.id}
@@ -236,8 +241,8 @@ export default function Dashboard({ units, onViewUnit, onNavigateToStock, onRese
                       <div className="flex items-center gap-3 w-full sm:w-auto">
                         {/* Thumbnail of product photo or placeholder */}
                         <div className="w-12 h-12 rounded-lg bg-slate-900 border border-slate-800 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                          {unit.photosProduct && unit.photosProduct.length > 0 ? (
-                            <img src={unit.photosProduct[0]} alt={unit.baseProductName} className="w-full h-full object-cover" />
+                          {mainPhoto ? (
+                            <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-cover" />
                           ) : (
                             <Package className="w-6 h-6 text-slate-500" />
                           )}
