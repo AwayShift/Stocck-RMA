@@ -112,8 +112,8 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
             <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
             Resetar Banco de Dados
           </button>
-          <div className="flex items-center gap-2 px-3 py-2 bg-slate-950 rounded-lg border border-slate-850 text-xs text-slate-300">
-            <Calendar className="w-4 h-4 text-sky-450" />
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300">
+            <Calendar className="w-4 h-4 text-sky-400" />
             <span>{getFormattedLocalDate()}</span>
           </div>
         </div>
@@ -150,8 +150,8 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
               <Package className="w-6 h-6" />
             </div>
           </div>
-          <div className="mt-5 text-sm text-slate-350">
-            <span className="text-emerald-405 font-bold">+{sectorCountsToday.Principal} hoje</span> direcionados para revenda
+          <div className="mt-5 text-sm text-slate-400">
+            <span className="text-emerald-400 font-bold">+{sectorCountsToday.Principal} hoje</span> direcionados para revenda
           </div>
           <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/5 rounded-full filter blur-xl group-hover:scale-150 transition-transform"></div>
         </div>
@@ -167,8 +167,8 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
               <Sparkles className="w-6 h-6" />
             </div>
           </div>
-          <div className="mt-5 text-sm text-slate-350">
-            <span className="text-amber-405 font-bold">+{sectorCountsToday.Openbox} hoje</span> caixa aberta / marcas leves
+          <div className="mt-5 text-sm text-slate-400">
+            <span className="text-amber-400 font-bold">+{sectorCountsToday.Openbox} hoje</span> caixa aberta / marcas leves
           </div>
           <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-amber-500/5 rounded-full filter blur-xl group-hover:scale-150 transition-transform"></div>
         </div>
@@ -184,8 +184,8 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
               <AlertTriangle className="w-6 h-6" />
             </div>
           </div>
-          <div className="mt-5 text-sm text-slate-350">
-            <span className="text-rose-405 font-bold">+{sectorCountsToday.RMA} hoje</span> falhas técnicas / defeito real
+          <div className="mt-5 text-sm text-slate-400">
+            <span className="text-rose-400 font-bold">+{sectorCountsToday.RMA} hoje</span> falhas técnicas / defeito real
           </div>
           <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-rose-500/5 rounded-full filter blur-xl group-hover:scale-150 transition-transform"></div>
         </div>
@@ -198,19 +198,18 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
           <div>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 bg-sky-550 rounded-full animate-ping"></span>
+                <h3 className="text-lg font-bold text-white">
                   Histórico de Triagem de Hoje
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">Últimas devoluções recebidas e processadas hoje no setor</p>
               </div>
-              <span className="px-2.5 py-1 bg-sky-500/10 text-sky-450 rounded-full text-xs font-bold border border-sky-500/20">
+              <span className="px-2.5 py-1 bg-sky-500/10 text-sky-400 rounded-full text-xs font-bold border border-sky-500/20">
                 {totalReceivedToday} Devoluções
               </span>
             </div>
 
             {todayUnits.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4 border border-dashed border-slate-850 rounded-xl bg-slate-950" id="no-returns-today">
+              <div className="flex flex-col items-center justify-center py-12 px-4 border border-dashed border-slate-800 rounded-xl bg-slate-950" id="no-returns-today">
                 <Package className="w-12 h-12 text-slate-600 mb-3" />
                 <p className="text-slate-300 font-medium text-sm">Nenhuma devolução realizada hoje ainda.</p>
                 <p className="text-slate-500 text-xs text-center max-w-sm mt-1">Vá até o módulo "Entrada de RMA" para registrar e fazer a triagem do primeiro retorno.</p>
@@ -235,7 +234,7 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
                     <div 
                       key={unit.id}
                       onClick={() => onViewUnit(unit)}
-                      className="group flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-4 bg-slate-950 border border-slate-850 rounded-xl hover:border-slate-600 hover:bg-slate-900/50 transition-all cursor-pointer"
+                      className="group flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-4 bg-slate-950 border border-slate-800/80 rounded-xl hover:border-slate-700 hover:bg-slate-900/50 transition-all cursor-pointer"
                       id={`activity-item-${unit.id}`}
                     >
                       <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -289,13 +288,13 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
               </div>
             )}
           </div>
-          <div className="mt-6 pt-4 border-t border-slate-800 flex justify-between items-center text-xs text-slate-450">
+          <div className="mt-6 pt-4 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
             <span>Operador Atual: <strong>Logística Sênior</strong></span>
             <span>Total Geral: {totalInStock} unidades no estoque ativo</span>
           </div>
         </div>
 
-        {/* Right Side: Platforms Breakdown & Sector Chart (4 cols) */}
+        {/* Right Side: Platforms Breakdown (4 cols) */}
         <div className="lg:col-span-4 space-y-6" id="dashboard-right-side">
           {/* Platform Performance metrics card */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl" id="platforms-card">
@@ -332,20 +331,6 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
                 );
               })}
             </div>
-          </div>
-
-          {/* Quick instructions or useful statistics */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-850 border border-sky-500/10 rounded-2xl p-6 shadow-xl" id="quick-actions-card">
-            <h4 className="text-sm font-bold text-white flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-sky-450" />
-              Fluxo Logístico de Devoluções
-            </h4>
-            <ul className="text-xs text-slate-300 mt-4 space-y-2.5 list-disc pl-4 leading-relaxed">
-              <li><strong>Passo 1:</strong> Cadastre produtos de referência no Catálogo para manter a padronização.</li>
-              <li><strong>Passo 2:</strong> Quando um produto for devolvido, preencha a ficha de entrada, anexe fotos e faça o laudo técnico.</li>
-              <li><strong>Passo 3:</strong> Defina o destino final (Estoque Principal, Openbox, RMA).</li>
-              <li><strong>Passo 4:</strong> Controle o estoque ativo, mova produtos se necessário e dê baixa ao retirar do galpão.</li>
-            </ul>
           </div>
         </div>
       </div>

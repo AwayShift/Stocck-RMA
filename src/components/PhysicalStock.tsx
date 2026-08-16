@@ -24,6 +24,7 @@ import {
   LayoutGrid,
   List,
   Check,
+  Copy,
   FileSpreadsheet,
   Upload,
   Pencil,
@@ -33,7 +34,9 @@ import {
   Camera,
   Image as ImageIcon,
   Download,
-  ChevronDown
+  ChevronDown,
+  Clipboard,
+  ClipboardPaste
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
 import ExcelImportModal from './ExcelImportModal';
@@ -91,6 +94,7 @@ interface PhysicalStockProps {
   initialSelectedUnit?: TriageUnit | null;
   onClearSelectedUnit?: () => void;
   onSaveTriage?: (unit: TriageUnit) => Promise<void>;
+  enableSpreadsheetImport?: boolean;
 }
 
 export default function PhysicalStock({ 
@@ -101,7 +105,8 @@ export default function PhysicalStock({
   onCheckoutUnit,
   initialSelectedUnit,
   onClearSelectedUnit,
-  onSaveTriage
+  onSaveTriage,
+  enableSpreadsheetImport = true
 }: PhysicalStockProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'Todos' | DestinationSectorType | 'Baixado'>('Todos');
@@ -120,6 +125,34 @@ export default function PhysicalStock({
 
   // Multi-select state
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
+
+  // Quick copy state
+  const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
+
+  const handleCopyCode = async (text: string, key: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    if (!text || text === 'Não Informado' || text === 'N/D') return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedCodeKey(key);
+      setTimeout(() => {
+        setCopiedCodeKey(prev => (prev === key ? null : prev));
+      }, 1800);
+    } catch (err) {
+      console.error('Failed to copy text:', err);
+    }
+  };
 
   // Quick edit/action states
   const [editingSector, setEditingSector] = useState<DestinationSectorType | ''>('');
@@ -213,22 +246,144 @@ export default function PhysicalStock({
     }
   };
 
-  const handleAddPhotoFile = async (category: 'photosProduct' | 'photosBox' | 'photosAccessories', e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!editForm || !e.target.files || !e.target.files[0]) return;
-    const file = e.target.files[0];
+  const handleProcessImageFiles = async (files: File[], targetCategory: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
+    if (!editForm || files.length === 0) return;
     try {
-      const base64 = await compressImageToBase64(file);
-      const existing = editForm[category] || [];
+      const base64Promises = files.map(file => compressImageToBase64(file));
+      const base64List = await Promise.all(base64Promises);
+      const existing = editForm[targetCategory] || [];
       setEditForm({
         ...editForm,
-        [category]: [...existing, base64]
+        [targetCategory]: [...existing, ...base64List]
       });
-      // Reset input value so same file can be chosen again if needed
-      e.target.value = '';
+      const catLabel = targetCategory === 'photosProduct' ? 'Aparelho' : targetCategory === 'photosBox' ? 'Embalagem' : 'Acessórios';
+      setActionSuccess(`${files.length} foto(s) adicionada(s) para Fotos do ${catLabel}!`);
+      setTimeout(() => setActionSuccess(null), 3000);
     } catch (err) {
-      alert('Erro ao carregar a imagem.');
+      console.error(err);
+      setActionError('Erro ao processar imagem.');
+      setTimeout(() => setActionError(null), 3000);
     }
   };
+
+  const handleAddPhotoFile = async (category: 'photosProduct' | 'photosBox' | 'photosAccessories', e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editForm || !e.target.files || e.target.files.length === 0) return;
+    const files = Array.from(e.target.files) as File[];
+    await handleProcessImageFiles(files, category);
+    e.target.value = '';
+  };
+
+  const handlePasteFromClipboard = async (targetCategory: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
+    try {
+      if (navigator.clipboard && (navigator.clipboard as any).read) {
+        const items = await (navigator.clipboard as any).read();
+        const imageFiles: File[] = [];
+        for (const item of items) {
+          for (const type of item.types) {
+            if (type.startsWith('image/')) {
+              const blob = await item.getType(type);
+              const file = new File([blob], `clipboard-${Date.now()}.${type.split('/')[1] || 'png'}`, { type });
+              imageFiles.push(file);
+            }
+          }
+        }
+        if (imageFiles.length > 0) {
+          await handleProcessImageFiles(imageFiles, targetCategory);
+          return;
+        }
+      }
+      
+      // Fallback: check clipboard text if it is an image URL or data URI
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('data:image/'))) {
+          if (!editForm) return;
+          const existing = editForm[targetCategory] || [];
+          setEditForm({
+            ...editForm,
+            [targetCategory]: [...existing, text.trim()]
+          });
+          const catLabel = targetCategory === 'photosProduct' ? 'Aparelho' : targetCategory === 'photosBox' ? 'Embalagem' : 'Acessórios';
+          setActionSuccess(`Link de imagem colado para Fotos do ${catLabel}!`);
+          setTimeout(() => setActionSuccess(null), 3000);
+          return;
+        }
+      }
+
+      setActionError('Nenhuma imagem encontrada na área de transferência. Copie uma imagem ou use Ctrl+V.');
+      setTimeout(() => setActionError(null), 3500);
+    } catch (err: any) {
+      console.warn('Clipboard read error:', err);
+      setActionError('Dica: Pressione Ctrl+V no teclado para colar a imagem diretamente.');
+      setTimeout(() => setActionError(null), 3500);
+    }
+  };
+
+  const handleEditModalPaste = async (e: React.ClipboardEvent | ClipboardEvent, targetCategory?: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
+    const cat = targetCategory || urlInputCategory;
+    const imageFiles: File[] = [];
+
+    // 1. Check clipboardData.files (files copied from filesystem)
+    if (e.clipboardData?.files && e.clipboardData.files.length > 0) {
+      for (let i = 0; i < e.clipboardData.files.length; i++) {
+        const file = e.clipboardData.files[i];
+        if (file.type.indexOf('image/') !== -1) {
+          imageFiles.push(file);
+        }
+      }
+    }
+
+    // 2. Check clipboardData.items (screenshots / copied web images)
+    if (imageFiles.length === 0 && e.clipboardData?.items) {
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image/') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            imageFiles.push(file);
+          }
+        }
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      if ('stopPropagation' in e) {
+        e.stopPropagation();
+      }
+      await handleProcessImageFiles(imageFiles, cat);
+    }
+  };
+
+  const handleDropPhoto = async (e: React.DragEvent, category: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const allFiles = Array.from(e.dataTransfer.files) as File[];
+      const imageFiles = allFiles.filter(f => f.type.startsWith('image/'));
+      if (imageFiles.length > 0) {
+        await handleProcessImageFiles(imageFiles, category);
+      }
+    }
+  };
+
+  // Global paste event listener during edit mode
+  useEffect(() => {
+    if (!isEditingUnit) return;
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      // If typing in input/textarea, only intercept if clipboard has image files/screenshots
+      const items = e.clipboardData?.items ? (Array.from(e.clipboardData.items) as DataTransferItem[]) : [];
+      const hasImage = items.some(item => item.type.startsWith('image/'));
+      
+      if (hasImage) {
+        handleEditModalPaste(e, urlInputCategory);
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => {
+      window.removeEventListener('paste', handleGlobalPaste);
+    };
+  }, [isEditingUnit, urlInputCategory, editForm]);
 
   const handleAddPhotoUrl = (category: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
     if (!editForm || !imageUrlInput.trim()) return;
@@ -687,25 +842,27 @@ export default function PhysicalStock({
             <span>Exportar Planilha Excel ({filteredUnits.length})</span>
           </button>
 
-          <button
-            onClick={() => setIsExcelModalOpen(true)}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2 cursor-pointer shrink-0"
-            id="btn-open-excel-import"
-            title="Importar planilha Excel de inventário OpenBox e direcionar por categorias"
-          >
-            <FileSpreadsheet className="w-4.5 h-4.5 text-white" />
-            <span>Importar Tabela Excel (OpenBox)</span>
-          </button>
+          {enableSpreadsheetImport && (
+            <button
+              onClick={() => setIsExcelModalOpen(true)}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2 cursor-pointer shrink-0"
+              id="btn-open-excel-import"
+              title="Importar planilha Excel de inventário OpenBox e direcionar por categorias"
+            >
+              <FileSpreadsheet className="w-4.5 h-4.5 text-white" />
+              <span>Importar Tabela Excel (OpenBox)</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Main Stock layout Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden" id="stock-main-card">
         {/* Navigation Tabs bar */}
-        <div className="flex flex-wrap border-b border-slate-850 bg-slate-950 p-2 gap-1" id="stock-tabs">
+        <div className="flex flex-wrap border-b border-slate-800 bg-slate-950 p-2 gap-1" id="stock-tabs">
           <button 
             onClick={() => setActiveTab('Todos')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'Todos' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/15' : 'text-slate-455 hover:text-white hover:bg-slate-850'}`}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'Todos' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/15' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
           >
             Todos Ativos ({units.filter(u => u.status === 'Estoque').length})
           </button>
@@ -1237,42 +1394,47 @@ export default function PhysicalStock({
 
       {/* Complete unit details / Edit Modal Sheet */}
       {currentUnit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto" id="stock-details-modal">
-          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-8 animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto" id="stock-details-modal">
+          <div className="w-full max-w-5xl bg-slate-900 border border-slate-800/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-4 sm:my-8 animate-in fade-in zoom-in-95 duration-200">
             
             {/* Modal Header */}
-            <div className="flex justify-between items-center px-6 py-4 bg-slate-950 border-b border-slate-800">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded">
+            <div className="px-6 py-4 bg-slate-950/90 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-xs font-black text-sky-400 bg-sky-500/15 border border-sky-500/30 px-2.5 py-0.5 rounded-md flex items-center gap-1.5" title="Código SKU">
+                    <span className="text-[10px] text-sky-300/70 font-sans font-bold">SKU</span>
                     {isEditingUnit && editForm ? editForm.baseProductSku : currentUnit.baseProductSku}
                   </span>
-                  <span className="font-mono text-xs text-slate-500">
-                    Caso: #{isEditingUnit && editForm ? editForm.trackingCode : currentUnit.trackingCode}
+
+                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md border ${
+                    (isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector) === 'Principal'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : (isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector) === 'Openbox'
+                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                  }`}>
+                    Setor: {isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector}
                   </span>
-                  {(isEditingUnit && editForm ? editForm.serialNumber : currentUnit.serialNumber) && (
-                    <span className="font-mono text-xs text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded" title="Número de Série">
-                      S/N: {isEditingUnit && editForm ? editForm.serialNumber : currentUnit.serialNumber}
-                    </span>
-                  )}
+
                   {isEditingUnit && (
-                    <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-bold rounded">
+                    <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black rounded-md uppercase tracking-wider">
                       Modo Edição
                     </span>
                   )}
                 </div>
-                <h3 className="text-base font-bold text-white mt-1">
+
+                <h3 className="text-lg sm:text-xl font-black text-white tracking-tight pt-0.5">
                   {isEditingUnit && editForm ? editForm.baseProductName : currentUnit.baseProductName}
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                 {isEditingUnit ? (
                   <>
                     <button 
                       type="button"
                       onClick={() => { setIsEditingUnit(false); setEditForm(null); }}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                     >
                       Cancelar
                     </button>
@@ -1280,9 +1442,9 @@ export default function PhysicalStock({
                       type="button"
                       disabled={isSavingEdit}
                       onClick={handleSaveEdit}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
                     >
-                      <Save className="w-3.5 h-3.5" />
+                      <Save className="w-4 h-4" />
                       <span>{isSavingEdit ? 'Salvando...' : 'Salvar Alterações'}</span>
                     </button>
                   </>
@@ -1291,8 +1453,8 @@ export default function PhysicalStock({
                     <button 
                       type="button"
                       onClick={() => handleStartEdit(currentUnit)}
-                      className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-sky-600/20 flex items-center gap-1.5 cursor-pointer"
-                      title="Editar imagens, descrição, SKU e campos do produto"
+                      className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-sky-600/20 flex items-center gap-1.5 cursor-pointer"
+                      title="Editar imagens, descrição, SKU e especificações do produto"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                       <span>Editar Produto</span>
@@ -1300,7 +1462,7 @@ export default function PhysicalStock({
                     <button 
                       type="button"
                       onClick={handleCloseDetails}
-                      className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-800 transition-colors cursor-pointer"
+                      className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800 transition-colors cursor-pointer"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -1312,21 +1474,21 @@ export default function PhysicalStock({
             {/* Modal Body: Switch between View Mode and Edit Mode */}
             {isEditingUnit && editForm ? (
               /* EDIT MODE CONTENT */
-              <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh]">
-                <div className="p-3 bg-sky-950/60 border border-sky-500/30 rounded-xl text-sky-200 text-xs flex items-center gap-2">
+              <div className="p-6 sm:p-8 space-y-6 overflow-y-auto max-h-[75vh]">
+                <div className="p-3.5 bg-sky-950/60 border border-sky-500/30 rounded-xl text-sky-200 text-xs flex items-center gap-2">
                   <Pencil className="w-4 h-4 text-sky-400 shrink-0" />
                   <span>Modo de edição do produto. Altere imagens, descrição, nome, SKU e especificações do item.</span>
                 </div>
 
                 {/* Section 1: Main Info */}
-                <div className="space-y-4 bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                <div className="space-y-4 bg-slate-950 p-5 border border-slate-800 rounded-xl">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
-                    <Package className="w-3.5 h-3.5" />
-                    Dados do Produto & Identificação
+                    <Package className="w-4 h-4" />
+                    Dados Principais & Identificação Técnica
                   </h4>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="sm:col-span-3">
                       <label className="block text-[11px] font-bold text-slate-300 mb-1">
                         Nome do Produto
                       </label>
@@ -1349,19 +1511,6 @@ export default function PhysicalStock({
                         onChange={(e) => setEditForm({ ...editForm, baseProductSku: e.target.value })} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-sky-400 font-mono focus:outline-none focus:border-sky-500" 
                         placeholder="Ex: 1650"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        Código STI / Rastreio
-                      </label>
-                      <input 
-                        type="text" 
-                        value={editForm.trackingCode} 
-                        onChange={(e) => setEditForm({ ...editForm, trackingCode: e.target.value })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
-                        placeholder="Ex: 13509873"
                       />
                     </div>
 
@@ -1396,6 +1545,19 @@ export default function PhysicalStock({
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Código STI / Rastreio
+                      </label>
+                      <input 
+                        type="text" 
+                        value={editForm.trackingCode} 
+                        onChange={(e) => setEditForm({ ...editForm, trackingCode: e.target.value })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
+                        placeholder="Ex: 13509873"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
                         Setor de Destino
                       </label>
                       <select 
@@ -1412,9 +1574,9 @@ export default function PhysicalStock({
                 </div>
 
                 {/* Section 2: Diagnostics & Condition */}
-                <div className="space-y-4 bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                <div className="space-y-4 bg-slate-950 p-5 border border-slate-800 rounded-xl">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <AlertTriangle className="w-4 h-4" />
                     Condição, Motivo & Acessórios
                   </h4>
 
@@ -1479,9 +1641,9 @@ export default function PhysicalStock({
                 </div>
 
                 {/* Section 3: Technical Report / Detailed Description */}
-                <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                <div className="space-y-3 bg-slate-950 p-5 border border-slate-800 rounded-xl">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5" />
+                    <FileText className="w-4 h-4" />
                     Laudo Técnico de Entrada / Descrição Detalhada
                   </h4>
                   <textarea 
@@ -1494,26 +1656,81 @@ export default function PhysicalStock({
                 </div>
 
                 {/* Section 4: Photo Gallery Editor */}
-                <div className="space-y-4 bg-slate-950 p-4 border border-slate-800 rounded-xl">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                      <Camera className="w-3.5 h-3.5" />
-                      Gerenciar Galeria de Fotos ({ (editForm.photosProduct?.length || 0) + (editForm.photosBox?.length || 0) + (editForm.photosAccessories?.length || 0) })
-                    </h4>
+                <div 
+                  className="space-y-4 bg-slate-950 p-5 border border-slate-800 rounded-xl"
+                  onPaste={(e) => handleEditModalPaste(e, urlInputCategory)}
+                  id="edit-photo-gallery-manager"
+                >
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                        <Camera className="w-4 h-4" />
+                        Gerenciar Galeria de Fotos ({ (editForm.photosProduct?.length || 0) + (editForm.photosBox?.length || 0) + (editForm.photosAccessories?.length || 0) })
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Faça upload, cole prints de tela com <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-sky-400 font-mono text-[10px]">Ctrl+V</kbd> ou insira links diretos.
+                      </p>
+                    </div>
 
-                    {/* Category selector for URL addition */}
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-400 text-[10px]">Adicionar Para:</span>
+                    {/* Category selector */}
+                    <div className="flex items-center gap-2 text-xs self-stretch sm:self-auto justify-between sm:justify-end">
+                      <span className="text-slate-400 text-[11px] font-medium">Adicionar Para:</span>
                       <select 
                         value={urlInputCategory}
                         onChange={(e) => setUrlInputCategory(e.target.value as any)}
-                        className="bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-[11px] font-bold text-white cursor-pointer"
+                        className="bg-slate-900 border border-slate-700 hover:border-sky-500 rounded-lg px-3 py-1.5 text-xs font-bold text-white cursor-pointer transition-colors shadow-sm"
                       >
-                        <option value="photosProduct">Fotos do Aparelho</option>
-                        <option value="photosBox">Fotos da Embalagem</option>
-                        <option value="photosAccessories">Fotos dos Acessórios</option>
+                        <option value="photosProduct">Fotos do Aparelho ({editForm.photosProduct?.length || 0})</option>
+                        <option value="photosBox">Fotos da Embalagem ({editForm.photosBox?.length || 0})</option>
+                        <option value="photosAccessories">Fotos dos Acessórios ({editForm.photosAccessories?.length || 0})</option>
                       </select>
                     </div>
+                  </div>
+
+                  {/* Target Category Quick Switcher Tabs */}
+                  <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-900/90 border border-slate-800 rounded-xl text-center text-xs">
+                    <button 
+                      type="button" 
+                      onClick={() => setUrlInputCategory('photosProduct')}
+                      className={`py-2 px-2 rounded-lg font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                        urlInputCategory === 'photosProduct' 
+                          ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20' 
+                          : 'hover:bg-slate-800 hover:text-white text-slate-400'
+                      }`}
+                    >
+                      <span>Aparelho ({editForm.photosProduct?.length || 0})</span>
+                      {urlInputCategory === 'photosProduct' && (
+                        <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V Alvo</span>
+                      )}
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => setUrlInputCategory('photosBox')}
+                      className={`py-2 px-2 rounded-lg font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                        urlInputCategory === 'photosBox' 
+                          ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20' 
+                          : 'hover:bg-slate-800 hover:text-white text-slate-400'
+                      }`}
+                    >
+                      <span>Embalagem ({editForm.photosBox?.length || 0})</span>
+                      {urlInputCategory === 'photosBox' && (
+                        <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V Alvo</span>
+                      )}
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => setUrlInputCategory('photosAccessories')}
+                      className={`py-2 px-2 rounded-lg font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                        urlInputCategory === 'photosAccessories' 
+                          ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20' 
+                          : 'hover:bg-slate-800 hover:text-white text-slate-400'
+                      }`}
+                    >
+                      <span>Acessórios ({editForm.photosAccessories?.length || 0})</span>
+                      {urlInputCategory === 'photosAccessories' && (
+                        <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V Alvo</span>
+                      )}
+                    </button>
                   </div>
 
                   {/* Smart Base Product Image & Saved Photo Options for Estoque Principal */}
@@ -1589,7 +1806,7 @@ export default function PhysicalStock({
                               className={`p-2.5 rounded-lg text-left transition-all flex flex-col justify-between gap-2 group ${
                                 origSavedCount > 0 
                                   ? 'bg-slate-950 hover:bg-emerald-950/40 border border-slate-800 hover:border-emerald-500/50 cursor-pointer' 
-                                  : 'bg-slate-950/50 border border-slate-850 opacity-40 cursor-not-allowed'
+                                  : 'bg-slate-950/50 border border-slate-800 opacity-40 cursor-not-allowed'
                               }`}
                               title={origSavedCount > 0 ? "Restaurar fotos que já estavam cadastradas na triagem deste item" : "Nenhuma foto salva anteriormente"}
                             >
@@ -1665,25 +1882,46 @@ export default function PhysicalStock({
                     return null;
                   })()}
 
-                  {/* Add photo inputs */}
-                  <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
-                    <div className="flex flex-col sm:flex-row items-center gap-2">
-                      <label className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1.5 shrink-0">
+                  {/* Add photo inputs toolbar with Paste Button */}
+                  <div className="p-3.5 bg-slate-900 rounded-xl border border-slate-800 space-y-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Upload from Computer */}
+                      <label className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 shadow-sm hover:shadow">
                         <Upload className="w-3.5 h-3.5" />
                         <span>Upload do Computador</span>
                         <input 
                           type="file" 
+                          multiple
                           accept="image/*" 
                           onChange={(e) => handleAddPhotoFile(urlInputCategory, e)} 
                           className="hidden" 
                         />
                       </label>
 
-                      <div className="flex-1 w-full flex items-center gap-2">
+                      {/* Paste Image from Clipboard Button */}
+                      <button
+                        type="button"
+                        onClick={() => handlePasteFromClipboard(urlInputCategory)}
+                        className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-bold rounded-lg text-xs transition-all flex items-center gap-1.5 shrink-0 shadow-sm hover:shadow cursor-pointer"
+                        title="Colar imagem ou screenshot copiado para a categoria selecionada"
+                      >
+                        <ClipboardPaste className="w-3.5 h-3.5" />
+                        <span>Colar Imagem</span>
+                        <span className="text-[10px] bg-sky-700/80 px-1 py-0.5 rounded font-mono font-normal">Ctrl+V</span>
+                      </button>
+
+                      {/* URL input */}
+                      <div className="flex-1 min-w-[240px] flex items-center gap-2">
                         <input 
                           type="text" 
                           value={imageUrlInput} 
                           onChange={(e) => setImageUrlInput(e.target.value)} 
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddPhotoUrl(urlInputCategory);
+                            }
+                          }}
                           placeholder="Cole o link da imagem (URL https://...)" 
                           className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500" 
                         />
@@ -1696,25 +1934,67 @@ export default function PhysicalStock({
                         </button>
                       </div>
                     </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-0.5">
+                      <span className="flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-sky-400" />
+                        Destino ativo: <strong className="text-sky-300">
+                          {urlInputCategory === 'photosProduct' ? 'Fotos do Aparelho' : urlInputCategory === 'photosBox' ? 'Fotos da Embalagem' : 'Fotos dos Acessórios'}
+                        </strong>
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Você também pode arrastar e soltar arquivos de imagem diretamente nas caixas abaixo.
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Categories preview grids with delete overlay */}
+                  {/* Categories preview grids with delete overlay and dropzones */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Product Photos */}
-                    <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
-                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-1">
-                        <span>Fotos do Aparelho</span>
-                        <span className="text-sky-400">({editForm.photosProduct?.length || 0})</span>
+                    <div 
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => handleDropPhoto(e, 'photosProduct')}
+                      onPaste={(e) => handleEditModalPaste(e, 'photosProduct')}
+                      onClick={() => setUrlInputCategory('photosProduct')}
+                      className={`p-3.5 rounded-xl border transition-all space-y-2.5 ${
+                        urlInputCategory === 'photosProduct' 
+                          ? 'bg-slate-900/90 border-sky-500/60 shadow-lg shadow-sky-500/5 ring-1 ring-sky-500/30' 
+                          : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-2">
+                        <span className="flex items-center gap-1.5">
+                          <ImageIcon className="w-3.5 h-3.5 text-sky-400" />
+                          <span>Fotos do Aparelho</span>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sky-400">({editForm.photosProduct?.length || 0})</span>
+                          {urlInputCategory === 'photosProduct' && (
+                            <span className="text-[9px] bg-sky-500/20 text-sky-300 px-1 py-0.5 rounded font-mono">Ativo</span>
+                          )}
+                        </div>
                       </div>
+
                       {editForm.photosProduct && editForm.photosProduct.length > 0 ? (
                         <div className="grid grid-cols-2 gap-2">
                           {editForm.photosProduct.map((p, i) => (
-                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group">
-                              <img src={p} className="w-full h-full object-cover" />
+                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
+                              <img 
+                                src={p} 
+                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setFullscreenImage(p);
+                                }}
+                                alt={`Aparelho ${i + 1}`}
+                              />
                               <button 
                                 type="button" 
-                                onClick={() => handleRemovePhoto('photosProduct', i)}
-                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemovePhoto('photosProduct', i);
+                                }}
+                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
                                 title="Remover foto"
                               >
                                 <X className="w-3.5 h-3.5" />
@@ -1723,25 +2003,65 @@ export default function PhysicalStock({
                           ))}
                         </div>
                       ) : (
-                        <p className="text-[10px] text-slate-500 italic text-center py-4">Sem fotos do aparelho.</p>
+                        <div 
+                          className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-4 text-center cursor-pointer transition-colors bg-slate-950/40"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUrlInputCategory('photosProduct');
+                          }}
+                        >
+                          <Upload className="w-5 h-5 mx-auto text-slate-500 mb-1" />
+                          <p className="text-[11px] text-slate-300 font-semibold">Sem fotos do aparelho</p>
+                          <p className="text-[9px] text-slate-500 mt-0.5">Clique aqui, use Ctrl+V ou arraste imagens</p>
+                        </div>
                       )}
                     </div>
 
                     {/* Box Photos */}
-                    <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
-                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-1">
-                        <span>Fotos da Embalagem</span>
-                        <span className="text-sky-400">({editForm.photosBox?.length || 0})</span>
+                    <div 
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => handleDropPhoto(e, 'photosBox')}
+                      onPaste={(e) => handleEditModalPaste(e, 'photosBox')}
+                      onClick={() => setUrlInputCategory('photosBox')}
+                      className={`p-3.5 rounded-xl border transition-all space-y-2.5 ${
+                        urlInputCategory === 'photosBox' 
+                          ? 'bg-slate-900/90 border-sky-500/60 shadow-lg shadow-sky-500/5 ring-1 ring-sky-500/30' 
+                          : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-2">
+                        <span className="flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-sky-400" />
+                          <span>Fotos da Embalagem</span>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sky-400">({editForm.photosBox?.length || 0})</span>
+                          {urlInputCategory === 'photosBox' && (
+                            <span className="text-[9px] bg-sky-500/20 text-sky-300 px-1 py-0.5 rounded font-mono">Ativo</span>
+                          )}
+                        </div>
                       </div>
+
                       {editForm.photosBox && editForm.photosBox.length > 0 ? (
                         <div className="grid grid-cols-2 gap-2">
                           {editForm.photosBox.map((p, i) => (
-                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group">
-                              <img src={p} className="w-full h-full object-cover" />
+                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
+                              <img 
+                                src={p} 
+                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setFullscreenImage(p);
+                                }}
+                                alt={`Caixa ${i + 1}`}
+                              />
                               <button 
                                 type="button" 
-                                onClick={() => handleRemovePhoto('photosBox', i)}
-                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemovePhoto('photosBox', i);
+                                }}
+                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
                                 title="Remover foto"
                               >
                                 <X className="w-3.5 h-3.5" />
@@ -1750,25 +2070,65 @@ export default function PhysicalStock({
                           ))}
                         </div>
                       ) : (
-                        <p className="text-[10px] text-slate-500 italic text-center py-4">Sem fotos da caixa.</p>
+                        <div 
+                          className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-4 text-center cursor-pointer transition-colors bg-slate-950/40"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUrlInputCategory('photosBox');
+                          }}
+                        >
+                          <Upload className="w-5 h-5 mx-auto text-slate-500 mb-1" />
+                          <p className="text-[11px] text-slate-300 font-semibold">Sem fotos da caixa</p>
+                          <p className="text-[9px] text-slate-500 mt-0.5">Clique aqui, use Ctrl+V ou arraste imagens</p>
+                        </div>
                       )}
                     </div>
 
                     {/* Accessories Photos */}
-                    <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
-                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-1">
-                        <span>Fotos dos Acessórios</span>
-                        <span className="text-sky-400">({editForm.photosAccessories?.length || 0})</span>
+                    <div 
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => handleDropPhoto(e, 'photosAccessories')}
+                      onPaste={(e) => handleEditModalPaste(e, 'photosAccessories')}
+                      onClick={() => setUrlInputCategory('photosAccessories')}
+                      className={`p-3.5 rounded-xl border transition-all space-y-2.5 ${
+                        urlInputCategory === 'photosAccessories' 
+                          ? 'bg-slate-900/90 border-sky-500/60 shadow-lg shadow-sky-500/5 ring-1 ring-sky-500/30' 
+                          : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-2">
+                        <span className="flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-sky-400" />
+                          <span>Fotos dos Acessórios</span>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sky-400">({editForm.photosAccessories?.length || 0})</span>
+                          {urlInputCategory === 'photosAccessories' && (
+                            <span className="text-[9px] bg-sky-500/20 text-sky-300 px-1 py-0.5 rounded font-mono">Ativo</span>
+                          )}
+                        </div>
                       </div>
+
                       {editForm.photosAccessories && editForm.photosAccessories.length > 0 ? (
                         <div className="grid grid-cols-2 gap-2">
                           {editForm.photosAccessories.map((p, i) => (
-                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group">
-                              <img src={p} className="w-full h-full object-cover" />
+                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
+                              <img 
+                                src={p} 
+                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setFullscreenImage(p);
+                                }}
+                                alt={`Acessório ${i + 1}`}
+                              />
                               <button 
                                 type="button" 
-                                onClick={() => handleRemovePhoto('photosAccessories', i)}
-                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemovePhoto('photosAccessories', i);
+                                }}
+                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
                                 title="Remover foto"
                               >
                                 <X className="w-3.5 h-3.5" />
@@ -1777,7 +2137,17 @@ export default function PhysicalStock({
                           ))}
                         </div>
                       ) : (
-                        <p className="text-[10px] text-slate-500 italic text-center py-4">Sem fotos de acessórios.</p>
+                        <div 
+                          className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-4 text-center cursor-pointer transition-colors bg-slate-950/40"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUrlInputCategory('photosAccessories');
+                          }}
+                        >
+                          <Upload className="w-5 h-5 mx-auto text-slate-500 mb-1" />
+                          <p className="text-[11px] text-slate-300 font-semibold">Sem fotos de acessórios</p>
+                          <p className="text-[9px] text-slate-500 mt-0.5">Clique aqui, use Ctrl+V ou arraste imagens</p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1785,12 +2155,12 @@ export default function PhysicalStock({
               </div>
             ) : (
               /* VIEW MODE CONTENT */
-              <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
+              <div className="p-6 sm:p-8 space-y-6 overflow-y-auto max-h-[75vh]">
                 
                 {/* Duplicate warning banner inside detail modal */}
                 {(isDuplicateSti(currentUnit) || isDuplicateSerial(currentUnit)) && (
-                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2.5 text-xs text-amber-200">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3 text-xs text-amber-200">
+                    <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
                     <div>
                       <p className="font-bold text-amber-300">Atenção: Identificado Código Repetido no Estoque Físico</p>
                       <p className="text-[11px] text-amber-400/80 mt-0.5">
@@ -1801,62 +2171,200 @@ export default function PhysicalStock({
                   </div>
                 )}
 
-                {/* Top metadata grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-slate-950 p-4 border border-slate-850 rounded-xl text-xs">
-                  {currentUnit.destinationSector !== 'Openbox' && (
-                    <div>
-                      <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Origem / Canal</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}>
-                        {currentUnit.platform}
-                      </span>
+                {/* Technical Specifications Hero Bar */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 bg-slate-950 p-4 sm:p-5 border border-slate-800 rounded-2xl shadow-inner text-xs">
+                  {/* SKU */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Código SKU</span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyCode(currentUnit.baseProductSku, 'sku', e)}
+                        className={`text-[10px] flex items-center gap-1 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                          copiedCodeKey === 'sku'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'text-slate-400 hover:text-sky-400 hover:bg-slate-900'
+                        }`}
+                        title="Copiar Código SKU"
+                        id="btn-copy-sku"
+                      >
+                        {copiedCodeKey === 'sku' ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-[9px]">Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span className="text-[9px]">Copiar</span>
+                          </>
+                        )}
+                      </button>
                     </div>
-                  )}
-                  <div>
-                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Nº de Série (S/N)</span>
-                    <span className="font-semibold text-slate-200 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
-                      {currentUnit.serialNumber || 'Não Informado'}
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopyCode(currentUnit.baseProductSku, 'sku', e)}
+                      className="w-full text-left font-mono text-xs sm:text-sm font-extrabold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 px-2.5 py-1.5 rounded-lg border border-sky-500/25 block truncate transition-colors cursor-pointer group flex items-center justify-between"
+                      title="Clique para copiar SKU"
+                    >
+                      <span className="truncate">{currentUnit.baseProductSku}</span>
+                      <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60 text-sky-400 transition-opacity ml-1 shrink-0" />
+                    </button>
+                  </div>
+
+                  {/* STI Tracking Code */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Código STI</span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyCode(currentUnit.trackingCode.replace(/^#/, ''), 'sti', e)}
+                        className={`text-[10px] flex items-center gap-1 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                          copiedCodeKey === 'sti'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                        }`}
+                        title="Copiar Código STI"
+                        id="btn-copy-sti"
+                      >
+                        {copiedCodeKey === 'sti' ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-[9px]">Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span className="text-[9px]">Copiar</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopyCode(currentUnit.trackingCode.replace(/^#/, ''), 'sti', e)}
+                      className="w-full text-left font-mono text-xs sm:text-sm font-bold text-slate-200 bg-slate-900 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-800 block truncate transition-colors cursor-pointer group flex items-center justify-between"
+                      title="Clique para copiar Código STI"
+                    >
+                      <span className="truncate">{currentUnit.trackingCode.startsWith('#') ? currentUnit.trackingCode : `#${currentUnit.trackingCode}`}</span>
+                      <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60 text-slate-300 transition-opacity ml-1 shrink-0" />
+                    </button>
+                  </div>
+
+                  {/* Serial Number */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Nº de Série (S/N)</span>
+                      {currentUnit.serialNumber ? (
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCode(currentUnit.serialNumber || '', 'serial', e)}
+                          className={`text-[10px] flex items-center gap-1 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                            copiedCodeKey === 'serial'
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                          }`}
+                          title="Copiar Nº de Série"
+                          id="btn-copy-serial"
+                        >
+                          {copiedCodeKey === 'serial' ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span className="text-[9px]">Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span className="text-[9px]">Copiar</span>
+                            </>
+                          )}
+                        </button>
+                      ) : null}
+                    </div>
+                    {currentUnit.serialNumber ? (
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyCode(currentUnit.serialNumber || '', 'serial', e)}
+                        className="w-full text-left font-mono text-xs sm:text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 px-2.5 py-1.5 rounded-lg block truncate transition-colors cursor-pointer group flex items-center justify-between"
+                        title="Clique para copiar Número de Série"
+                      >
+                        <span className="truncate">{currentUnit.serialNumber}</span>
+                        <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60 text-slate-300 transition-opacity ml-1 shrink-0" />
+                      </button>
+                    ) : (
+                      <span className="font-mono text-xs sm:text-sm font-bold px-2.5 py-1.5 rounded-lg border block truncate text-slate-500 bg-slate-900/50 border-slate-800/60 italic">
+                        Não Informado
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Voltage */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Voltagem</span>
+                    <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 bg-amber-500/10 px-2.5 py-1.5 rounded-lg border border-amber-500/25 block truncate">
+                      {currentUnit.baseProductVoltage || 'N/A'}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Voltagem Elétrica</span>
-                    <span className="font-semibold text-slate-200 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">{currentUnit.baseProductVoltage}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Data de Triagem</span>
-                    <span className="font-semibold text-slate-300">{new Date(currentUnit.createdAt).toLocaleDateString('pt-BR')} {new Date(currentUnit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-450 block uppercase font-bold tracking-wider text-[9px] mb-1">Status Interno</span>
-                    <span className={`font-semibold px-2 py-0.5 rounded text-[10px] font-bold ${currentUnit.status === 'Estoque' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
-                      {currentUnit.status === 'Estoque' ? 'Em Estoque' : 'Baixado / Saída'}
+
+                  {/* Sector */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Setor Físico</span>
+                    <span className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border block truncate ${
+                      currentUnit.destinationSector === 'Principal'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : currentUnit.destinationSector === 'Openbox'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}>
+                      {currentUnit.destinationSector}
                     </span>
+                  </div>
+                </div>
+
+                {/* Secondary metadata: Origin & Dates */}
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-950/60 p-3.5 px-4 rounded-xl border border-slate-800/60">
+                  <div className="flex items-center gap-3">
+                    {currentUnit.destinationSector !== 'Openbox' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400 font-semibold text-[11px]">Canal:</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}>
+                          {currentUnit.platform}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5 text-slate-400">
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Data de Entrada: <strong className="text-slate-200">{new Date(currentUnit.createdAt).toLocaleDateString('pt-BR')} às {new Date(currentUnit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-slate-400 text-[11px]">
+                    <span>Aparelho: <strong className="text-slate-200 font-bold">{currentUnit.deviceStatus}</strong></span>
+                    <span className="text-slate-600">•</span>
+                    <span>Embalagem: <strong className="text-slate-200 font-bold">{currentUnit.packageStatus}</strong></span>
                   </div>
                 </div>
 
                 {/* Claims and Accessories details */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-850 space-y-2">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                  <div className="p-5 bg-slate-950/60 rounded-xl border border-slate-800/60 space-y-2.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
                       Motivo da Devolução (Cliente)
                     </h4>
-                    <p className="text-sm text-slate-300 leading-relaxed italic">
-                      "{currentUnit.customerReason}"
+                    <p className="text-sm text-slate-200 leading-relaxed italic bg-slate-900/60 p-3.5 rounded-lg border border-slate-800/40">
+                      "{currentUnit.customerReason || 'Sem motivo registrado.'}"
                     </p>
                   </div>
 
-                  <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-850 space-y-2">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <Info className="w-3.5 h-3.5 text-sky-400" />
+                  <div className="p-5 bg-slate-950/60 rounded-xl border border-slate-800/60 space-y-2.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                      <Info className="w-4 h-4 text-sky-400" />
                       Lista de Acessórios Recebidos
                     </h4>
-                    <p className="text-sm text-slate-300 leading-relaxed">
-                      {currentUnit.accessoriesInclusion || 'Nenhum acessório declared.'}
+                    <p className="text-sm text-slate-200 leading-relaxed bg-slate-900/60 p-3.5 rounded-lg border border-slate-800/40">
+                      {currentUnit.accessoriesInclusion || 'Nenhum acessório declarado.'}
                     </p>
-                    <div className="grid grid-cols-2 gap-2 pt-2 text-[10px] text-slate-450 border-t border-slate-800">
-                      <span>Aparelho: <strong>{currentUnit.deviceStatus}</strong></span>
-                      <span>Caixa: <strong>{currentUnit.packageStatus}</strong></span>
-                    </div>
                   </div>
                 </div>
 
@@ -1867,7 +2375,7 @@ export default function PhysicalStock({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                          <Sparkles className="w-4 h-4 text-sky-400" />
                           Galeria de Fotos da Triagem
                         </h4>
                         <div className="flex items-center gap-2">
@@ -1880,10 +2388,10 @@ export default function PhysicalStock({
                             <button
                               type="button"
                               onClick={() => handleStartEdit(currentUnit)}
-                              className="px-2 py-0.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                              className="px-2.5 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
                               title="Alterar opções de fotos (Base, Salvas ou Combinadas)"
                             >
-                              <Pencil className="w-2.5 h-2.5" />
+                              <Pencil className="w-3 h-3" />
                               Opções de Imagens
                             </button>
                           )}
@@ -1892,15 +2400,17 @@ export default function PhysicalStock({
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="gallery-categories">
                         {/* Category A: Product */}
-                        <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
-                          <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos do Aparelho ({resolved.photosProduct.length})</span>
+                        <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2.5">
+                          <span className="text-xs font-bold text-slate-300 block border-b border-slate-800 pb-1.5">
+                            Fotos do Aparelho ({resolved.photosProduct.length})
+                          </span>
                           {resolved.photosProduct.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-1.5">
+                            <div className="grid grid-cols-2 gap-2">
                               {resolved.photosProduct.map((p, i) => (
                                 <div 
                                   key={i} 
                                   onClick={() => setFullscreenImage(p)}
-                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-500 cursor-pointer relative group transition-colors"
                                 >
                                   <img src={p} className="w-full h-full object-cover" />
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
@@ -1910,20 +2420,22 @@ export default function PhysicalStock({
                               ))}
                             </div>
                           ) : (
-                            <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto do aparelho.</p>
+                            <p className="text-xs text-slate-500 italic py-4 text-center">Nenhuma foto do aparelho.</p>
                           )}
                         </div>
 
                         {/* Category B: Box */}
-                        <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
-                          <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos da Embalagem ({resolved.photosBox.length})</span>
+                        <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2.5">
+                          <span className="text-xs font-bold text-slate-300 block border-b border-slate-800 pb-1.5">
+                            Fotos da Embalagem ({resolved.photosBox.length})
+                          </span>
                           {resolved.photosBox.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-1.5">
+                            <div className="grid grid-cols-2 gap-2">
                               {resolved.photosBox.map((p, i) => (
                                 <div 
                                   key={i} 
                                   onClick={() => setFullscreenImage(p)}
-                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-500 cursor-pointer relative group transition-colors"
                                 >
                                   <img src={p} className="w-full h-full object-cover" />
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
@@ -1933,20 +2445,22 @@ export default function PhysicalStock({
                               ))}
                             </div>
                           ) : (
-                            <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto da caixa.</p>
+                            <p className="text-xs text-slate-500 italic py-4 text-center">Nenhuma foto da caixa.</p>
                           )}
                         </div>
 
                         {/* Category C: Accessories */}
-                        <div className="p-3 bg-slate-950/30 rounded-xl border border-slate-850 space-y-2">
-                          <span className="text-[11px] font-bold text-slate-400 block border-b border-slate-800 pb-1">Fotos dos Acessórios ({resolved.photosAccessories.length})</span>
+                        <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2.5">
+                          <span className="text-xs font-bold text-slate-300 block border-b border-slate-800 pb-1.5">
+                            Fotos dos Acessórios ({resolved.photosAccessories.length})
+                          </span>
                           {resolved.photosAccessories.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-1.5">
+                            <div className="grid grid-cols-2 gap-2">
                               {resolved.photosAccessories.map((p, i) => (
                                 <div 
                                   key={i} 
                                   onClick={() => setFullscreenImage(p)}
-                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-550 cursor-pointer relative group"
+                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-500 cursor-pointer relative group transition-colors"
                                 >
                                   <img src={p} className="w-full h-full object-cover" />
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
@@ -1956,7 +2470,7 @@ export default function PhysicalStock({
                               ))}
                             </div>
                           ) : (
-                            <p className="text-[10px] text-slate-500 italic py-3 text-center">Nenhuma foto de acessórios.</p>
+                            <p className="text-xs text-slate-500 italic py-4 text-center">Nenhuma foto de acessórios.</p>
                           )}
                         </div>
                       </div>
@@ -1965,24 +2479,24 @@ export default function PhysicalStock({
                 })()}
 
                 {/* Technical Report / Observations HTML Render */}
-                <div className="space-y-2" id="technical-report-view">
+                <div className="space-y-2.5" id="technical-report-view">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-sky-400" />
+                    <FileText className="w-4 h-4 text-sky-400" />
                     Laudo Técnico de Entrada (Triador)
                   </h4>
                   {currentUnit.notes ? (
                     <div 
-                      className="p-5 bg-slate-950 border border-slate-850 rounded-xl text-sm text-slate-300 leading-relaxed max-h-60 overflow-y-auto prose prose-invert prose-sm"
+                      className="p-5 bg-slate-950 border border-slate-800/60 rounded-xl text-sm text-slate-200 leading-relaxed max-h-64 overflow-y-auto prose prose-invert prose-sm"
                       dangerouslySetInnerHTML={{ __html: currentUnit.notes }}
                     />
                   ) : (
-                    <p className="p-4 text-xs text-slate-500 bg-slate-950 rounded-xl border border-slate-850 italic text-center">Sem observações descritivas fornecidas.</p>
+                    <p className="p-5 text-xs text-slate-500 bg-slate-950 rounded-xl border border-slate-800/60 italic text-center">Sem laudo técnico descritivo fornecido.</p>
                   )}
                 </div>
 
                 {/* Checkout details if already dispatched */}
                 {currentUnit.status === 'Baixado' && currentUnit.checkoutDate && (
-                  <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl text-xs flex items-center gap-2">
+                  <div className="p-4 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl text-xs flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Este produto foi retirado física e logicamente do galpão em <strong>{new Date(currentUnit.checkoutDate).toLocaleString('pt-BR')}</strong>.</span>
                   </div>
@@ -1991,16 +2505,16 @@ export default function PhysicalStock({
             )}
 
             {/* Modal Action Controls Bar */}
-            <div className="px-6 py-4 bg-slate-950 border-t border-slate-850 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="px-6 py-4 bg-slate-950 border-t border-slate-800/60 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               
               {/* Left Side Actions: Re-route / Move Sector (only if active in stock) */}
               {currentUnit.status === 'Estoque' ? (
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap">Mover de Setor:</span>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Mover de Setor:</span>
                   <select 
                     value={editingSector || currentUnit.destinationSector}
                     onChange={(e) => handleMoveSector(currentUnit, e.target.value as DestinationSectorType)}
-                    className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs font-bold focus:outline-none cursor-pointer"
+                    className="px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold focus:outline-none cursor-pointer"
                     style={{
                       color: (editingSector || currentUnit.destinationSector) === 'Principal' ? '#10B981' : (editingSector || currentUnit.destinationSector) === 'Openbox' ? '#F59E0B' : '#EF4444'
                     }}
@@ -2022,7 +2536,7 @@ export default function PhysicalStock({
                     type="button"
                     disabled={isSavingEdit}
                     onClick={handleSaveEdit}
-                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
                   >
                     <Save className="w-4 h-4" />
                     <span>{isSavingEdit ? 'Salvando...' : 'Salvar Alterações'}</span>
@@ -2032,7 +2546,7 @@ export default function PhysicalStock({
                     <button 
                       type="button"
                       onClick={() => handleExportExcel([currentUnit])}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                       title="Exportar este produto para planilha Excel (.xlsx)"
                       id="btn-modal-export-unit"
                     >
@@ -2042,7 +2556,7 @@ export default function PhysicalStock({
 
                     <button 
                       onClick={() => handleDelete(currentUnit.id)}
-                      className="px-3 py-2 bg-slate-800 hover:bg-rose-600/20 text-slate-405 hover:text-rose-400 border border-slate-750 hover:border-rose-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      className="px-3.5 py-2 bg-slate-800 hover:bg-rose-600/20 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
                       title="Apagar ficha técnica do banco"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -2052,7 +2566,7 @@ export default function PhysicalStock({
                     {currentUnit.status === 'Estoque' && (
                       <button 
                         onClick={() => handleCheckout(currentUnit.id)}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                        className="px-4.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
                         id="btn-stock-checkout"
                       >
                         <CheckCircle2 className="w-4 h-4" />

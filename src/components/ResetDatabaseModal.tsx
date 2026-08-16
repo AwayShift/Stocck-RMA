@@ -38,7 +38,6 @@ interface ResetDatabaseModalProps {
   userEmail: string;
   userRole: 'admin' | 'operator' | null;
   onSuccess: () => void;
-  onSwitchToAdmin?: () => Promise<void> | void;
   target?: ResetTargetType;
   itemCount?: number;
 }
@@ -49,7 +48,6 @@ export default function ResetDatabaseModal({
   userEmail,
   userRole,
   onSuccess,
-  onSwitchToAdmin,
   target = 'all',
   itemCount
 }: ResetDatabaseModalProps) {
@@ -277,25 +275,15 @@ export default function ResetDatabaseModal({
           </div>
 
           {/* Warning if not admin */}
-          {userRole !== 'admin' && onSwitchToAdmin && (
+          {userRole !== 'admin' && (
             <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col gap-2 text-xs text-amber-300">
               <div className="flex items-center gap-2 font-bold">
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>Privilégio de Administrador Necessário</span>
               </div>
               <p className="text-[11px] text-amber-200/80">
-                Apenas administradores podem resetar dados. Você pode alternar temporariamente para o cargo de Administrador para prosseguir com o reset.
+                Apenas usuários com privilégio de Administrador no Firestore podem executar o reset ou exclusão de coleções.
               </p>
-              <button
-                type="button"
-                onClick={async () => {
-                  await onSwitchToAdmin();
-                  setErrorMessage('');
-                }}
-                className="mt-1 py-1.5 px-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-white rounded-lg border border-amber-500/40 text-xs font-bold transition-all self-start cursor-pointer"
-              >
-                Alternar para Administrador
-              </button>
             </div>
           )}
 

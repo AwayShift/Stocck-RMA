@@ -474,7 +474,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
           type="button"
           onClick={handleQuickPreFill}
           disabled={products.length === 0}
-          className="flex items-center gap-2 px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-450 hover:text-sky-400 rounded-lg text-xs font-semibold border border-sky-500/20 disabled:opacity-50 transition-all cursor-pointer"
+          className="flex items-center gap-2 px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-lg text-xs font-semibold border border-sky-500/20 disabled:opacity-50 transition-all cursor-pointer"
           title="Preenche o formulário com dados de exemplo realistas"
           id="btn-prefill-rma"
         >

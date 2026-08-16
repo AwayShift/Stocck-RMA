@@ -1,20 +1,53 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <linearGradient id="stocckGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#0284c7" />
       <stop offset="100%" stop-color="#0369a1" />
     </linearGradient>
-    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="boxTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" />
+      <stop offset="100%" stop-color="#7dd3fc" />
+    </linearGradient>
+    <linearGradient id="boxLeft" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="boxRight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0ea5e9" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+    <linearGradient id="accentBadge" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#38bdf8" />
       <stop offset="100%" stop-color="#0284c7" />
     </linearGradient>
   </defs>
-  <!-- Rounded Icon Background Container -->
-  <rect width="64" height="64" rx="16" fill="url(#stocckGrad)" />
-  <!-- Inner Shield outline -->
-  <path d="M32 12C32 12 44 14.5 48 18V32C48 42.5 39.5 50.5 32 54C24.5 50.5 16 42.5 16 32V18C20 14.5 32 12 32 12Z" 
-        stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-  <!-- Center Logistics / Box check or exclamation -->
-  <path d="M32 23V34" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" />
-  <circle cx="32" cy="41" r="2.25" fill="#ffffff" />
+
+  <!-- Rounded App Icon Background Container -->
+  <rect width="64" height="64" rx="16" fill="url(#bgGrad)" />
+
+  <!-- Main Isometric Stock Box Container -->
+  <g transform="translate(0, 1)">
+    <!-- Isometric Box Top Face -->
+    <path d="M32 14L48 22.5L32 31L16 22.5Z" fill="#ffffff" fill-opacity="0.95" />
+    
+    <!-- Top Tape / Seam detail -->
+    <path d="M24 18.25L40 26.75" stroke="#0284c7" stroke-width="2" stroke-linecap="round" />
+
+    <!-- Isometric Box Left Face -->
+    <path d="M16 22.5L32 31V48L16 39.5Z" fill="#e0f2fe" />
+
+    <!-- Isometric Box Right Face -->
+    <path d="M32 31L48 22.5V39.5L32 48Z" fill="#bae6fd" />
+
+    <!-- Box Outer Outline & Inner Folds for depth -->
+    <path d="M32 14L48 22.5V39.5L32 48L16 39.5V22.5Z" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" />
+    <path d="M32 31V48" stroke="#0284c7" stroke-width="2" stroke-linecap="round" />
+  </g>
+
+  <!-- RMA Return / Inspection Circular Badge with Reverse Arrow (Triagem & Devoluções) -->
+  <circle cx="45" cy="45" r="11" fill="#0f172a" stroke="#38bdf8" stroke-width="2.5" />
+  <!-- Return / Sync / Triage Circular Arrow -->
+  <path d="M48 42C47.2 40.2 45.4 39 43.3 39C40.4 39 38 41.4 38 44.3C38 47.3 40.4 49.7 43.3 49.7C45.2 49.7 46.9 48.7 47.8 47.2" 
+        stroke="#38bdf8" stroke-width="2" stroke-linecap="round" />
+  <path d="M49 39V43H45" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
 </svg>

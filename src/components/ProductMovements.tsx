@@ -49,6 +49,7 @@ interface ProductMovementsProps {
   onDeleteDailyInflow?: (id: string) => Promise<void>;
   onSaveTriage: (unit: TriageUnit) => Promise<void>;
   userRole: 'admin' | 'operator' | null;
+  enableSpreadsheetImport?: boolean;
 }
 
 export default function ProductMovements({ 
@@ -59,7 +60,8 @@ export default function ProductMovements({
   onSaveBatchDailyInflows,
   onDeleteDailyInflow,
   onSaveTriage, 
-  userRole 
+  userRole,
+  enableSpreadsheetImport = true 
 }: ProductMovementsProps) {
   // Navigation & View mode
   const [activeView, setActiveView] = useState<'spreadsheet' | 'visual'>('spreadsheet');
@@ -637,13 +639,16 @@ export default function ProductMovements({
           </button>
 
           {/* Action: Excel Import */}
-          <button
-            onClick={() => setIsImportModalOpen(true)}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Importar Planilha</span>
-          </button>
+          {enableSpreadsheetImport && (
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+              id="btn-import-movements-excel"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Importar Planilha</span>
+            </button>
+          )}
 
           {/* Action: Export Excel */}
           <button
@@ -794,13 +799,15 @@ export default function ProductMovements({
                   </p>
                 </div>
                 <div className="flex items-center justify-center gap-3 pt-2">
-                  <button
-                    onClick={() => setIsImportModalOpen(true)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-md"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>Importar Planilha Excel</span>
-                  </button>
+                  {enableSpreadsheetImport && (
+                    <button
+                      onClick={() => setIsImportModalOpen(true)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-md"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Importar Planilha Excel</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleOpenManualEntry(`${selectedYear}-${String(selectedMonthIdx + 1).padStart(2, '0')}-01`)}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-md"

@@ -9,7 +9,8 @@ import {
   Database, 
   FolderMinus, 
   Package, 
-  ShieldAlert, 
+  PackageCheck,
+  ShieldAlert,
   LogOut,
   RefreshCw,
   User,
@@ -18,7 +19,8 @@ import {
   Layers,
   FileText,
   Download,
-  Users
+  Users,
+  Settings
 } from 'lucide-react';
 
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -52,7 +54,7 @@ import LogsAudit from './components/LogsAudit';
 import Login from './components/Login';
 import ProductMovements from './components/ProductMovements';
 import ResetDatabaseModal from './components/ResetDatabaseModal';
-import UserManagementModal from './components/UserManagementModal';
+import SettingsModal from './components/SettingsModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'rma' | 'catalog' | 'stock' | 'logs' | 'movement'>('dashboard');
@@ -70,11 +72,21 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  // Cross-component communication
+  // Cross-component communication & modals
   const [selectedTriageUnit, setSelectedTriageUnit] = useState<TriageUnit | null>(null);
-  const [isRbacModalOpen, setIsRbacModalOpen] = useState<boolean>(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
-  const [isUserManagementOpen, setIsUserManagementOpen] = useState<boolean>(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+
+  // System Settings: Spreadsheet Import Visibility Toggle
+  const [enableSpreadsheetImport, setEnableSpreadsheetImport] = useState<boolean>(() => {
+    const saved = localStorage.getItem('rmaflow_enable_spreadsheet_import');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const handleToggleSpreadsheetImport = (enabled: boolean) => {
+    setEnableSpreadsheetImport(enabled);
+    localStorage.setItem('rmaflow_enable_spreadsheet_import', String(enabled));
+  };
 
   // Listen for Authentication state
   useEffect(() => {
@@ -249,40 +261,15 @@ export default function App() {
     setIsResetModalOpen(true);
   };
 
-  // Helper to set specific role inside DB for testing/evaluating RBAC constraints
-  const handleSelectRole = async (targetRole: 'admin' | 'operator') => {
-    if (!user) return;
-    
-    // An Administrator is NEVER allowed to downgrade their account to Operator
-    if (userRole === 'admin' && targetRole === 'operator') {
-      alert('Acesso negado: Administradores possuem privilégio permanente e não podem rebaixar sua conta para Operador.');
-      return;
-    }
-
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await updateDoc(userDocRef, { role: targetRole });
-      setUserRole(targetRole);
-      await createAuditLog('TOGGLE_DEMO_ROLE', `Alterou permissões corporativas para: ${targetRole === 'admin' ? 'Administrador' : 'Logística Sênior (Operador)'}`);
-      setIsRbacModalOpen(false);
-    } catch (err) {
-      console.error('Failed to set role:', err);
-    }
-  };
-
-  // Helper to toggle role or open role selector
-  const handleToggleDemoRole = async () => {
-    if (!user) return;
-    if (userRole === 'admin') {
-      alert('Você já é um Administrador. Administradores não podem ser rebaixados para Operador.');
-      return;
-    }
-    await handleSelectRole('admin');
-  };
-
   const handleLogout = async () => {
-    if (window.confirm('Deseja realmente encerrar sua sessão corporativa segura?')) {
+    try {
       await signOut(auth);
+      setUser(null);
+      setUserRole(null);
+      setUserName('');
+      setActiveTab('dashboard');
+    } catch (err) {
+      console.error('Failed to logout:', err);
     }
   };
 
@@ -313,148 +300,130 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans" id="app-root">
       
       {/* Top Main Navigation Bar */}
-      <header className="bg-slate-900/80 border-b border-slate-800 backdrop-blur-sm sticky top-0 z-40 shadow-lg" id="main-header">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+      <header className="bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md sticky top-0 z-40 shadow-md" id="main-header">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-16 gap-4">
             
             {/* Logo and title (Clickable to access Dashboard) */}
             <button
               onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
-              className="flex items-center gap-3 text-left focus:outline-none cursor-pointer group hover:opacity-90 transition-opacity"
+              className="flex items-center gap-2.5 text-left focus:outline-none cursor-pointer group hover:opacity-90 transition-opacity shrink-0"
               title="Ir para o Dashboard"
             >
-              <div className="p-2.5 bg-sky-500 rounded-xl shadow-lg shadow-sky-500/20 text-white group-hover:scale-105 transition-all duration-200">
-                <ShieldAlert className="w-7 h-7 text-white" />
+              <div className="w-9 h-9 bg-gradient-to-br from-sky-500 to-sky-600 rounded-lg shadow-md shadow-sky-500/20 text-white flex items-center justify-center group-hover:scale-105 transition-all duration-200">
+                <Boxes className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-1.5">
+                <h1 className="text-base font-extrabold tracking-tight text-white flex items-center gap-1 leading-none">
                   Stocck <span className="text-sky-400 font-bold group-hover:text-sky-300 transition-colors">RMA</span>
                 </h1>
-                <p className="text-[11px] text-slate-400 tracking-wider uppercase font-extrabold">Gestão e Triagem</p>
+                <p className="text-[10px] text-slate-400 tracking-wider uppercase font-bold mt-0.5">Gestão e Triagem</p>
               </div>
             </button>
 
-            {/* Desktop Navigation Tabs */}
-            <nav className="hidden md:flex items-center gap-1.5">
-              
+            {/* Desktop Navigation Tabs (Sleek Segmented Pill) */}
+            <nav className="hidden lg:flex items-center gap-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800/80">
+              <button
+                onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'dashboard' ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm shadow-sky-500/5 font-bold' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                }`}
+                id="nav-dashboard"
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                Dashboard
+              </button>
+
               <button
                 onClick={() => { setActiveTab('rma'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'rma' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'rma' ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm shadow-sky-500/5 font-bold' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
                 id="nav-rma"
               >
-                <FolderMinus className="w-4.5 h-4.5" />
+                <FolderMinus className="w-3.5 h-3.5" />
                 Entrada de RMA
               </button>
 
               <button
                 onClick={() => { setActiveTab('catalog'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'catalog' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'catalog' ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm shadow-sky-500/5 font-bold' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
                 id="nav-catalog"
               >
-                <Database className="w-4.5 h-4.5" />
+                <Database className="w-3.5 h-3.5" />
                 Catálogo de Base
               </button>
 
               <button
                 onClick={() => { setActiveTab('stock'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'stock' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'stock' ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm shadow-sky-500/5 font-bold' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
                 id="nav-stock"
               >
-                <Package className="w-4.5 h-4.5" />
+                <Package className="w-3.5 h-3.5" />
                 Estoque Físico
               </button>
 
               <button
                 onClick={() => { setActiveTab('movement'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'movement' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'movement' ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm shadow-sky-500/5 font-bold' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
                 id="nav-movement"
               >
-                <Boxes className="w-4.5 h-4.5" />
+                <Boxes className="w-3.5 h-3.5" />
                 Fluxo de Entradas
               </button>
 
               <button
                 onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'logs' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'logs' ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-sm shadow-rose-500/5 font-bold' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                 }`}
                 id="nav-logs"
               >
-                <ShieldAlert className="w-4.5 h-4.5" />
+                <ShieldAlert className="w-3.5 h-3.5" />
                 Auditoria & Logs
               </button>
             </nav>
 
-            {/* Authenticated user profile, PRD download, and toggle helper */}
-            <div className="flex items-center gap-3">
-              {/* PRD Download for QA & Security Testing */}
+            {/* Authenticated user profile, actions, and logout */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Settings Button */}
+              <button
+                type="button"
+                onClick={() => setIsSettingsModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 hover:border-slate-700 transition-all cursor-pointer text-xs font-bold shadow-sm group"
+                title="Configurações do Sistema"
+                id="btn-open-settings"
+              >
+                <Settings className="w-4 h-4 text-sky-400 group-hover:rotate-45 transition-transform duration-300" />
+                <span className="hidden sm:inline">Configurações</span>
+              </button>
+
+              {/* PRD Download for QA & Testing */}
               <a
                 href="./PRD_RMA_FLOW.md"
                 download="PRD_RMA_FLOW.md"
-                className="hidden lg:flex items-center gap-1.5 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 rounded-lg text-xs font-black text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer shadow-sm"
-                title="Baixar o arquivo PRD completo (.MD) para testes de segurança e automação QA"
+                className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 rounded-lg text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer shadow-sm"
+                title="Baixar o arquivo PRD completo (.MD) para testes"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-400" />
-                Baixar PRD (QA)
+                <span>PRD</span>
               </a>
-
-              {/* User Management Button for Admin */}
-              {userRole === 'admin' && (
-                <button
-                  onClick={() => setIsUserManagementOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 rounded-lg text-xs font-black text-rose-300 hover:text-rose-200 cursor-pointer transition-all shadow-sm"
-                  title="Painel de controle de usuários e cargos de administradores no Firestore"
-                  id="btn-open-user-management"
-                >
-                  <Users className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Gestão de Usuários</span>
-                </button>
-              )}
-
-              {/* Quick RBAC role switcher for testing */}
-              <button
-                onClick={() => setIsRbacModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-lg text-xs font-black text-slate-400 hover:text-white cursor-pointer transition-all"
-                title="Troca o seu cargo de teste corporativo para avaliar as regras de segurança"
-                id="btn-toggle-rbac"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-sky-400 animate-spin" style={{ animationDuration: '6s' }} />
-                Alternar Cargo (RBAC)
-              </button>
-
-              <button 
-                onClick={() => setIsRbacModalOpen(true)}
-                className="flex items-center gap-2.5 text-right cursor-pointer hover:opacity-90 transition-opacity"
-                id="account-role-label"
-                title="Clique para alternar o cargo (Admin / Logística Sênior)"
-              >
-                <div className="hidden sm:block">
-                  <span className="text-sm font-bold text-white block leading-tight">{userName}</span>
-                  <span className={`text-[10px] font-black uppercase tracking-wider ${userRole === 'admin' ? 'text-rose-400' : 'text-sky-400'}`}>
-                    {userRole === 'admin' ? 'Admin' : 'Logística Sênior'}
-                  </span>
-                </div>
-                <div className="p-2.5 bg-slate-950 border border-slate-850 rounded-xl">
-                  <User className="w-5 h-5 text-slate-400" />
-                </div>
-              </button>
 
               {/* Secure logout */}
               <button 
                 onClick={handleLogout}
-                className="p-2.5 bg-slate-950 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-850 hover:border-rose-500/20 transition-all cursor-pointer"
-                title="Sair do Sistema"
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-950 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-800 hover:border-rose-500/30 transition-all cursor-pointer text-xs font-bold shadow-sm"
+                title="Sair da conta atual"
                 id="btn-logout"
               >
-                <LogOut className="w-5 h-5" />
+                <LogOut className="w-4 h-4" />
+                <span>Sair</span>
               </button>
             </div>
           </div>
@@ -462,7 +431,16 @@ export default function App() {
       </header>
 
       {/* Mobile Navigation Tabs (Secondary top bar) */}
-      <div className="md:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-4 flex gap-1 shadow-inner items-center" id="mobile-navigation">
+      <div className="lg:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-4 flex gap-1 shadow-inner items-center" id="mobile-navigation">
+        <button
+          onClick={() => setIsSettingsModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 shrink-0 hover:text-white"
+          title="Configurações"
+          id="mobile-btn-settings"
+        >
+          <Settings className="w-3.5 h-3.5 text-sky-400" />
+          <span>Configurações</span>
+        </button>
         <a
           href="./PRD_RMA_FLOW.md"
           download="PRD_RMA_FLOW.md"
@@ -525,16 +503,12 @@ export default function App() {
           <ShieldAlert className="w-3.5 h-3.5" />
           Auditoria
         </button>
-      </div>
-
-      {/* Mobile Demo Switcher */}
-      <div className="md:hidden bg-slate-950 px-4 py-2 flex justify-between items-center border-b border-slate-900 text-xs text-slate-400">
-        <span>Cargo de Teste: <strong className="uppercase text-sky-400">{userRole}</strong></span>
         <button
-          onClick={handleToggleDemoRole}
-          className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-[10px] font-bold"
+          onClick={handleLogout}
+          className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0 hover:bg-rose-500/20"
         >
-          Alternar Cargo
+          <LogOut className="w-3.5 h-3.5" />
+          Sair
         </button>
       </div>
 
@@ -599,6 +573,7 @@ export default function App() {
                 onSaveBatchProducts={handleSaveBatchProducts}
                 onDeleteProduct={handleDeleteProduct}
                 userRole={userRole}
+                enableSpreadsheetImport={enableSpreadsheetImport}
               />
             )}
 
@@ -621,6 +596,7 @@ export default function App() {
                 initialSelectedUnit={selectedTriageUnit}
                 onClearSelectedUnit={() => setSelectedTriageUnit(null)}
                 onSaveTriage={handleSaveTriage}
+                enableSpreadsheetImport={enableSpreadsheetImport}
               />
             )}
 
@@ -644,6 +620,7 @@ export default function App() {
                 onDeleteDailyInflow={handleDeleteDailyInflow}
                 onSaveTriage={handleSaveTriage}
                 userRole={userRole}
+                enableSpreadsheetImport={enableSpreadsheetImport}
               />
             )}
           </div>
@@ -663,112 +640,14 @@ export default function App() {
         </div>
       </footer>
 
-      {/* RBAC Role Selector Modal */}
-      {isRbacModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-[100]" id="modal-rbac-picker">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-sky-400" />
-                Alternar Cargo (RBAC)
-              </h3>
-              <button 
-                onClick={() => setIsRbacModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-            <p className="text-xs text-slate-300">
-              Selecione o perfil de usuário para testar as permissões do sistema em tempo real:
-            </p>
-            <div className="space-y-3">
-              <button
-                onClick={() => handleSelectRole('admin')}
-                className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                  userRole === 'admin' 
-                    ? 'bg-rose-500/10 border-rose-500/40 text-rose-300' 
-                    : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-                }`}
-                id="role-option-admin"
-              >
-                <div>
-                  <span className="font-bold text-sm block">Admin (Administrador)</span>
-                  <span className="text-[11px] text-slate-400">Acesso total: excluir itens, logs de auditoria e reset de banco</span>
-                </div>
-                {userRole === 'admin' && <span className="text-xs font-black text-rose-400">ATIVO</span>}
-              </button>
-
-              <button
-                onClick={() => {
-                  if (userRole === 'admin') {
-                    alert('Administradores possuem privilégios totais e não podem ser rebaixados para Operador.');
-                    return;
-                  }
-                  handleSelectRole('operator');
-                }}
-                disabled={userRole === 'admin'}
-                className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between ${
-                  userRole === 'admin'
-                    ? 'bg-slate-950/40 border-slate-800/60 opacity-60 cursor-not-allowed text-slate-500'
-                    : userRole === 'operator' 
-                      ? 'bg-sky-500/10 border-sky-500/40 text-sky-300 cursor-pointer' 
-                      : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300 cursor-pointer'
-                }`}
-                id="role-option-operator"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm block">Logística Sênior (Operador)</span>
-                    {userRole === 'admin' && (
-                      <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-bold">
-                        Rebaixamento Bloqueado
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-slate-400">Acesso operacional: triagem de RMA, estoque e catálogo de leitura</span>
-                </div>
-                {userRole === 'operator' && <span className="text-xs font-black text-sky-400">ATIVO</span>}
-              </button>
-            </div>
-
-            {userRole === 'admin' && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 text-rose-300 font-semibold">
-                  <Users className="w-4 h-4 text-rose-400" />
-                  <span>Gerenciar outros usuários do sistema</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRbacModalOpen(false);
-                    setIsUserManagementOpen(true);
-                  }}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs transition-all cursor-pointer"
-                >
-                  Abrir Gestão
-                </button>
-              </div>
-            )}
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setIsRbacModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs cursor-pointer"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* User Management & RBAC Control Modal */}
-      <UserManagementModal
-        isOpen={isUserManagementOpen}
-        onClose={() => setIsUserManagementOpen(false)}
-        currentUserEmail={user?.email || ''}
-        currentUserRole={userRole}
+      {/* System Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        enableSpreadsheetImport={enableSpreadsheetImport}
+        onToggleSpreadsheetImport={handleToggleSpreadsheetImport}
+        userRole={userRole}
+        userEmail={user?.email || ''}
       />
 
       {/* Database Reset Password Confirmation Modal */}
@@ -780,7 +659,6 @@ export default function App() {
         onSuccess={() => {
           setActiveTab('dashboard');
         }}
-        onSwitchToAdmin={() => handleSelectRole('admin')}
       />
     </div>
   );

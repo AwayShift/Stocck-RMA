@@ -22,7 +22,9 @@ import {
   RotateCcw,
   FileSpreadsheet,
   Download,
-  ChevronDown
+  ChevronDown,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { BaseProduct } from '../types';
 import { uploadFileToStorage, saveBatchBaseProducts } from '../lib/dbService';
@@ -36,9 +38,17 @@ interface BaseCatalogProps {
   onSaveBatchProducts?: (products: BaseProduct[]) => Promise<{ added: number; updated: number }>;
   onDeleteProduct: (id: string) => Promise<void>;
   userRole?: 'admin' | 'operator' | null;
+  enableSpreadsheetImport?: boolean;
 }
 
-export default function BaseCatalog({ products, onSaveProduct, onSaveBatchProducts, onDeleteProduct, userRole }: BaseCatalogProps) {
+export default function BaseCatalog({ 
+  products, 
+  onSaveProduct, 
+  onSaveBatchProducts, 
+  onDeleteProduct, 
+  userRole,
+  enableSpreadsheetImport = true 
+}: BaseCatalogProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedVoltage, setSelectedVoltage] = useState('Todas');
@@ -48,6 +58,16 @@ export default function BaseCatalog({ products, onSaveProduct, onSaveBatchProduc
   const [editingProduct, setEditingProduct] = useState<BaseProduct | null>(null);
   const [viewingProduct, setViewingProduct] = useState<BaseProduct | null>(null);
   const [activeViewImageIndex, setActiveViewImageIndex] = useState<number>(0);
+
+  // View Mode: Table (List) vs Grid (Cards)
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>(() => {
+    return (localStorage.getItem('rmaflow_base_catalog_view_mode') as 'table' | 'grid') || 'table';
+  });
+
+  const handleToggleViewMode = (mode: 'table' | 'grid') => {
+    setViewMode(mode);
+    localStorage.setItem('rmaflow_base_catalog_view_mode', mode);
+  };
 
   useEffect(() => {
     setActiveViewImageIndex(0);
@@ -381,7 +401,7 @@ export default function BaseCatalog({ products, onSaveProduct, onSaveBatchProduc
           </button>
 
           {/* Import Excel Spreadsheet Button (Matches user requirement) */}
-          {userRole === 'admin' && (
+          {userRole === 'admin' && enableSpreadsheetImport && (
             <button
               type="button"
               onClick={() => setIsExcelImportOpen(true)}
@@ -463,29 +483,63 @@ export default function BaseCatalog({ products, onSaveProduct, onSaveBatchProduc
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs text-slate-400 pt-2 border-t border-slate-850 gap-2">
-            <span>
-              Mostrando <strong>{displayedProducts.length}</strong> de <strong>{filteredProducts.length}</strong> produtos
-              {filteredProducts.length !== products.length && (
-                <span className="text-slate-500 ml-1">({products.length} no catálogo total)</span>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs text-slate-400 pt-2 border-t border-slate-850 gap-3">
+            <div className="flex items-center gap-3">
+              <span>
+                Mostrando <strong>{displayedProducts.length}</strong> de <strong>{filteredProducts.length}</strong> produtos
+                {filteredProducts.length !== products.length && (
+                  <span className="text-slate-500 ml-1">({products.length} no catálogo total)</span>
+                )}
+              </span>
+              {(searchTerm || selectedCategory !== 'Todas' || selectedVoltage !== 'Todas') && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedCategory('Todas');
+                    setSelectedVoltage('Todas');
+                  }}
+                  className="text-sky-400 hover:text-sky-300 font-bold transition-colors cursor-pointer text-xs"
+                >
+                  Limpar filtros
+                </button>
               )}
-            </span>
-            {(searchTerm || selectedCategory !== 'Todas' || selectedVoltage !== 'Todas') && (
+            </div>
+
+            {/* View Mode Toggle: Table (List) vs Grid (Cards) */}
+            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-end sm:self-auto" id="catalog-view-mode-toggle">
               <button
-                onClick={() => {
-                  setSearchTerm('');
-                  setSelectedCategory('Todas');
-                  setSelectedVoltage('Todas');
-                }}
-                className="text-sky-400 hover:text-sky-300 font-bold transition-colors cursor-pointer"
+                type="button"
+                onClick={() => handleToggleViewMode('table')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+                title="Modo Tabela / Lista"
+                id="btn-view-mode-table"
               >
-                Limpar filtros
+                <List className="w-3.5 h-3.5" />
+                <span>Tabela</span>
               </button>
-            )}
+              <button
+                type="button"
+                onClick={() => handleToggleViewMode('grid')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+                title="Modo Grade / Cards"
+                id="btn-view-mode-grid"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Grade</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Table representation */}
+        {/* Catalog representation: Table or Grid */}
         {filteredProducts.length === 0 ? (
           <div className="p-12 text-center flex flex-col items-center justify-center bg-slate-950" id="catalog-empty-state">
             <Database className="w-12 h-12 text-slate-600 mb-3" />
@@ -494,104 +548,258 @@ export default function BaseCatalog({ products, onSaveProduct, onSaveBatchProduc
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto" id="catalog-table-wrapper">
-              <table className="w-full border-collapse text-left text-sm text-slate-200" id="catalog-table">
-                <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 font-medium uppercase text-xs tracking-wider">
-                  <tr>
-                    <th scope="col" className="px-6 py-4">SKU Identificador</th>
-                    <th scope="col" className="px-6 py-4">Nome do Produto</th>
-                    <th scope="col" className="px-6 py-4">Voltagem Padrão</th>
-                    <th scope="col" className="px-6 py-4 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 bg-slate-900" id="catalog-table-body">
-                  {displayedProducts.map((product) => (
-                    <tr key={product.id} className="hover:bg-slate-800/50 transition-colors" id={`product-row-${product.id}`}>
-                      <td className="px-6 py-4 whitespace-nowrap font-mono font-bold text-sky-400">
-                        {product.sku}
-                      </td>
-                      <td className="px-6 py-4 font-semibold text-white">
+            {viewMode === 'table' ? (
+              <div className="overflow-x-auto" id="catalog-table-wrapper">
+                <table className="w-full border-collapse text-left text-sm text-slate-200" id="catalog-table">
+                  <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 font-medium uppercase text-xs tracking-wider">
+                    <tr>
+                      <th scope="col" className="px-6 py-4">SKU Identificador</th>
+                      <th scope="col" className="px-6 py-4">Nome do Produto</th>
+                      <th scope="col" className="px-6 py-4">Voltagem Padrão</th>
+                      <th scope="col" className="px-6 py-4 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 bg-slate-900" id="catalog-table-body">
+                    {displayedProducts.map((product) => (
+                      <tr key={product.id} className="hover:bg-slate-800/50 transition-colors" id={`product-row-${product.id}`}>
+                        <td className="px-6 py-4 whitespace-nowrap font-mono font-bold text-sky-400">
+                          {product.sku}
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-white">
+                          <div 
+                            onClick={() => setViewingProduct(product)}
+                            className="flex items-center gap-3 cursor-pointer group/item hover:opacity-90"
+                            title="Ver detalhes do produto"
+                          >
+                            {product.imageUrl ? (
+                              <div className="relative group/thumb">
+                                <img src={product.imageUrl} alt={product.name} className="w-10 h-10 object-cover rounded-lg border border-slate-800 group-hover/item:border-sky-500 bg-slate-950 flex-shrink-0 transition-colors" />
+                              </div>
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-[10px] text-slate-500 font-mono flex-shrink-0 group-hover/item:border-sky-500 transition-colors">
+                                N/D
+                              </div>
+                            )}
+                            <div>
+                              <div className="font-semibold text-white group-hover/item:text-sky-400 transition-colors flex items-center gap-1.5">
+                                {product.name}
+                                <Eye className="w-3.5 h-3.5 opacity-0 group-hover/item:opacity-100 text-sky-400 transition-opacity" />
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                                {product.brand && (
+                                  <span className="bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-750">
+                                    Marca: <strong className="text-slate-350">{product.brand}</strong>
+                                  </span>
+                                )}
+                                {product.category && (
+                                  <span className="bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-750">
+                                    Cat: <strong className="text-slate-350">{product.category}</strong>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 rounded text-xs font-bold ${
+                            product.voltage === 'Bivolt' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                            product.voltage === '110V' ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' :
+                            product.voltage === '220V' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
+                            'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                          }`}>
+                            {product.voltage}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right whitespace-nowrap">
+                          <div className="flex justify-end items-center gap-2">
+                            <button 
+                              onClick={() => setViewingProduct(product)}
+                              className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-sky-450 rounded-lg border border-slate-850 transition-colors cursor-pointer"
+                              title="Visualizar informações completas"
+                              id={`btn-view-${product.id}`}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            {userRole === 'admin' && (
+                              <>
+                                <button 
+                                  onClick={() => handleEditClick(product)}
+                                  className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-850 transition-colors cursor-pointer"
+                                  title="Editar produto"
+                                  id={`btn-edit-${product.id}`}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteClick(product.id, product.name)}
+                                  className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-850 hover:border-rose-500/30 transition-colors cursor-pointer"
+                                  title="Excluir produto"
+                                  id={`btn-delete-${product.id}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* Grid representation */
+              <div className="p-5" id="catalog-grid-wrapper">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4.5" id="catalog-grid">
+                  {displayedProducts.map((product) => {
+                    const allPhotos = [
+                      ...(product.images || []),
+                      ...(product.imagesProduct || []),
+                      ...(product.imagesBox || []),
+                      ...(product.imagesAccessories || []),
+                      ...(product.imageUrl ? [product.imageUrl] : [])
+                    ].filter((v, i, a) => a.indexOf(v) === i);
+
+                    const totalPhotos = allPhotos.length;
+                    const displayPhoto = product.imageUrl || allPhotos[0];
+
+                    return (
+                      <div 
+                        key={product.id}
+                        id={`product-card-${product.id}`}
+                        className="bg-slate-950 border border-slate-800 hover:border-sky-500/50 rounded-2xl overflow-hidden flex flex-col group transition-all duration-200 hover:shadow-xl hover:shadow-sky-500/5 hover:-translate-y-0.5"
+                      >
+                        {/* Image Thumbnail Header */}
                         <div 
                           onClick={() => setViewingProduct(product)}
-                          className="flex items-center gap-3 cursor-pointer group/item hover:opacity-90"
-                          title="Ver detalhes do produto"
+                          className="relative aspect-[4/3] w-full bg-slate-900/90 overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-850 group-hover:border-sky-500/30 transition-colors"
                         >
-                          {product.imageUrl ? (
-                            <div className="relative group/thumb">
-                              <img src={product.imageUrl} alt={product.name} className="w-10 h-10 object-cover rounded-lg border border-slate-800 group-hover/item:border-sky-500 bg-slate-950 flex-shrink-0 transition-colors" />
-                            </div>
+                          {displayPhoto ? (
+                            <img 
+                              src={displayPhoto} 
+                              alt={product.name} 
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
                           ) : (
-                            <div className="w-10 h-10 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-[10px] text-slate-500 font-mono flex-shrink-0 group-hover/item:border-sky-500 transition-colors">
-                              N/D
+                            <div className="flex flex-col items-center justify-center text-slate-600 gap-1.5 p-4 select-none">
+                              <ImageIcon className="w-8 h-8 stroke-1 text-slate-700" />
+                              <span className="text-[10px] font-mono font-medium text-slate-500">Sem imagem</span>
                             </div>
                           )}
-                          <div>
-                            <div className="font-semibold text-white group-hover/item:text-sky-400 transition-colors flex items-center gap-1.5">
-                              {product.name}
-                              <Eye className="w-3.5 h-3.5 opacity-0 group-hover/item:opacity-100 text-sky-400 transition-opacity" />
+
+                          {/* Voltage Badge (Top Left) */}
+                          <div className="absolute top-2.5 left-2.5">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shadow-md backdrop-blur-md ${
+                              product.voltage === 'Bivolt' ? 'bg-sky-950/85 text-sky-300 border border-sky-500/30' :
+                              product.voltage === '110V' ? 'bg-teal-950/85 text-teal-300 border border-teal-500/30' :
+                              product.voltage === '220V' ? 'bg-orange-950/85 text-orange-300 border border-orange-500/30' :
+                              'bg-slate-900/85 text-slate-300 border border-slate-700/50'
+                            }`}>
+                              {product.voltage}
+                            </span>
+                          </div>
+
+                          {/* Total Photos Badge (Top Right) */}
+                          {totalPhotos > 1 && (
+                            <div className="absolute top-2.5 right-2.5">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-950/85 backdrop-blur-md text-slate-200 border border-white/10 flex items-center gap-1 shadow-md">
+                                <ImageIcon className="w-3 h-3 text-sky-400" />
+                                <span>{totalPhotos}</span>
+                              </span>
                             </div>
-                            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                          )}
+
+                          {/* Quick Hover Overlay */}
+                          <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none backdrop-blur-[1px]">
+                            <span className="px-3 py-1.5 bg-sky-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transform scale-95 group-hover:scale-100 transition-transform">
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Ver Detalhes</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Card Body */}
+                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3 bg-slate-950">
+                          <div className="space-y-2">
+                            {/* SKU & Brand */}
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono text-xs font-bold text-sky-400 bg-sky-950/40 border border-sky-800/40 px-2 py-0.5 rounded-md truncate max-w-[65%]" title={product.sku}>
+                                {product.sku}
+                              </span>
                               {product.brand && (
-                                <span className="bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-750">
-                                  Marca: <strong className="text-slate-350">{product.brand}</strong>
+                                <span className="text-[10px] font-medium text-slate-400 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-800 truncate max-w-[35%]" title={product.brand}>
+                                  {product.brand}
                                 </span>
                               )}
+                            </div>
+
+                            {/* Product Name */}
+                            <h3 
+                              onClick={() => setViewingProduct(product)}
+                              className="font-bold text-sm text-white group-hover:text-sky-400 line-clamp-2 cursor-pointer transition-colors leading-snug" 
+                              title={product.name}
+                            >
+                              {product.name}
+                            </h3>
+
+                            {/* Category & Attributes */}
+                            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 pt-0.5">
                               {product.category && (
-                                <span className="bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-750">
-                                  Cat: <strong className="text-slate-350">{product.category}</strong>
+                                <span className="text-[10px] bg-slate-900 text-slate-300 px-2 py-0.5 rounded-md border border-slate-800 font-medium">
+                                  {product.category}
+                                </span>
+                              )}
+                              {product.accessories && (
+                                <span className="text-[10px] bg-slate-900 text-emerald-400/90 px-1.5 py-0.5 rounded-md border border-emerald-950/60 truncate" title={`Acessórios: ${product.accessories}`}>
+                                  Acessórios
                                 </span>
                               )}
                             </div>
                           </div>
+
+                          {/* Card Actions Footer */}
+                          <div className="pt-3 border-t border-slate-850 flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setViewingProduct(product)}
+                              className="flex-1 py-2 px-2.5 bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                              title="Ver especificações e galeria de fotos"
+                              id={`btn-view-card-${product.id}`}
+                            >
+                              <Eye className="w-3.5 h-3.5 text-sky-400" />
+                              <span>Detalhes</span>
+                            </button>
+
+                            {userRole === 'admin' && (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditClick(product)}
+                                  className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800 transition-colors cursor-pointer"
+                                  title="Editar produto"
+                                  id={`btn-edit-grid-${product.id}`}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteClick(product.id, product.name)}
+                                  className="p-2 bg-slate-900 hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 hover:border-rose-800/50 transition-colors cursor-pointer"
+                                  title="Excluir produto"
+                                  id={`btn-delete-grid-${product.id}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2.5 py-1 rounded text-xs font-bold ${
-                          product.voltage === 'Bivolt' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
-                          product.voltage === '110V' ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' :
-                          product.voltage === '220V' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
-                          'bg-slate-500/10 text-slate-400 border border-slate-500/20'
-                        }`}>
-                          {product.voltage}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right whitespace-nowrap">
-                        <div className="flex justify-end items-center gap-2">
-                          <button 
-                            onClick={() => setViewingProduct(product)}
-                            className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-sky-450 rounded-lg border border-slate-850 transition-colors cursor-pointer"
-                            title="Visualizar informações completas"
-                            id={`btn-view-${product.id}`}
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          {userRole === 'admin' && (
-                            <>
-                              <button 
-                                onClick={() => handleEditClick(product)}
-                                className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-850 transition-colors cursor-pointer"
-                                title="Editar produto"
-                                id={`btn-edit-${product.id}`}
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteClick(product.id, product.name)}
-                                className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-850 hover:border-rose-500/30 transition-colors cursor-pointer"
-                                title="Excluir produto"
-                                id={`btn-delete-${product.id}`}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Pagination / Mostrar Mais button */}
             <div className="p-5 bg-slate-950/80 border-t border-slate-800/80 flex flex-col items-center justify-center gap-2.5 text-center" id="catalog-pagination-footer">
