@@ -463,7 +463,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[#161F30] border border-[#26354A] rounded-2xl p-6 shadow-xl" id="rma-header">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <FolderMinus className="text-indigo-400 w-6 h-6" />
+            <FolderMinus className="text-rose-400 w-6 h-6" />
             Entrada de RMA e Triagem
           </h2>
           <p className="text-sm text-slate-400 mt-1">
@@ -474,11 +474,11 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
           type="button"
           onClick={handleQuickPreFill}
           disabled={products.length === 0}
-          className="flex items-center gap-2 px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-lg text-xs font-semibold border border-sky-500/20 disabled:opacity-50 transition-all cursor-pointer"
+          className="flex items-center gap-2 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 rounded-lg text-xs font-semibold border border-rose-500/20 disabled:opacity-50 transition-all cursor-pointer"
           title="Preenche o formulário com dados de exemplo realistas"
           id="btn-prefill-rma"
         >
-          <Zap className="w-3.5 h-3.5 text-sky-400" />
+          <Zap className="w-3.5 h-3.5 text-rose-400" />
           Preenchimento Rápido (Simulação)
         </button>
       </div>

@@ -16,7 +16,11 @@ import {
   ShieldCheck, 
   Info,
   Layers,
-  Sparkles
+  Sparkles,
+  HardDriveDownload,
+  HardDriveUpload,
+  Download,
+  RotateCcw
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -24,6 +28,7 @@ interface SettingsModalProps {
   onClose: () => void;
   enableSpreadsheetImport: boolean;
   onToggleSpreadsheetImport: (enabled: boolean) => void;
+  onOpenBackupModal?: (tab?: 'export' | 'restore') => void;
   userRole?: 'admin' | 'operator' | null;
   userEmail?: string;
 }
@@ -33,6 +38,7 @@ export default function SettingsModal({
   onClose,
   enableSpreadsheetImport,
   onToggleSpreadsheetImport,
+  onOpenBackupModal,
   userRole,
   userEmail
 }: SettingsModalProps) {
@@ -175,6 +181,65 @@ export default function SettingsModal({
                     <span className="truncate">Fluxo Entradas</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Local Backup & Restore */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <HardDriveDownload className="w-4 h-4 text-indigo-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Backup e Cópia de Segurança Local
+              </h3>
+            </div>
+
+            <div className="p-4 bg-slate-950/70 rounded-xl border border-indigo-500/20 space-y-3.5">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 mt-0.5">
+                  <HardDriveDownload className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white">
+                      Cópia de Segurança Completa (.JSON)
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                      Offline & Portável
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Exporte todos os produtos, unidades de estoque, laudos técnicos com fotos base64, fluxo diário de entradas e histórico de auditoria diretamente para o seu computador.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenBackupModal?.('export');
+                  }}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                  id="btn-settings-open-export-backup"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Gerar Backup Agora</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenBackupModal?.('restore');
+                  }}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  id="btn-settings-open-restore-backup"
+                >
+                  <RotateCcw className="w-4 h-4 text-indigo-400" />
+                  <span>Restaurar de Arquivo</span>
+                </button>
               </div>
             </div>
           </div>

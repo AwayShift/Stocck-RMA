@@ -152,7 +152,7 @@ export default function ExcelInflowImportModal({
                 <div className="flex flex-wrap items-center gap-2 text-slate-400">
                   <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-200 font-mono">DATA</span>
                   <span className="text-slate-600 font-bold">→</span>
-                  <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-sky-300 font-mono">RMA</span>
+                  <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-rose-400 font-mono">RMA</span>
                   <span className="text-slate-600 font-bold">→</span>
                   <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-emerald-300 font-mono">ESTOQUE</span>
                   <span className="text-slate-600 font-bold">→</span>
@@ -276,7 +276,7 @@ export default function ExcelInflowImportModal({
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center shadow-xs">
                   <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">RMA</span>
-                  <span className="text-xl font-black text-sky-400">{totalRma}</span>
+                  <span className="text-xl font-black text-rose-400">{totalRma}</span>
                 </div>
                 <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center shadow-xs">
                   <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Estoque</span>
@@ -302,10 +302,10 @@ export default function ExcelInflowImportModal({
                   <thead className="bg-slate-800 text-slate-300 font-bold sticky top-0 uppercase tracking-wider text-[10px] border-b border-slate-700">
                     <tr>
                       <th className="py-2.5 px-3">Data</th>
-                      <th className="py-2.5 px-3 text-center">RMA</th>
-                      <th className="py-2.5 px-3 text-center">Estoque</th>
-                      <th className="py-2.5 px-3 text-center">Openbox</th>
-                      <th className="py-2.5 px-3 text-center">ES</th>
+                      <th className="py-2.5 px-3 text-center text-rose-400">RMA</th>
+                      <th className="py-2.5 px-3 text-center text-emerald-400">Estoque</th>
+                      <th className="py-2.5 px-3 text-center text-amber-400">Openbox</th>
+                      <th className="py-2.5 px-3 text-center text-purple-400">ES</th>
                       <th className="py-2.5 px-3 text-center bg-slate-800/90 font-black text-emerald-400">Total Dia</th>
                       <th className="py-2.5 px-3">Observações</th>
                     </tr>
@@ -316,7 +316,7 @@ export default function ExcelInflowImportModal({
                         <td className="py-2 px-3 font-semibold text-white">
                           {formatBrDate(rec.date)} <span className="text-slate-500 font-normal text-[10px]">({getWeekdayName(rec.date)})</span>
                         </td>
-                        <td className="py-2 px-3 text-center font-bold text-sky-400">{rec.rma}</td>
+                        <td className="py-2 px-3 text-center font-bold text-rose-400">{rec.rma}</td>
                         <td className="py-2 px-3 text-center font-bold text-emerald-400">{rec.estoque}</td>
                         <td className="py-2 px-3 text-center font-bold text-amber-400">{rec.openbox}</td>
                         <td className="py-2 px-3 text-center font-bold text-purple-400">{rec.es}</td>

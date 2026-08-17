@@ -653,3 +653,466 @@ export function exportBaseCatalogToExcel(products: any[], filename = 'catalogo_b
   XLSX.writeFile(wb, filename);
 }
 
+/**
+ * Normalizes header string removing accents, special characters, multiple spaces
+ */
+export function normalizeExcelHeader(h: any): string {
+  if (h === undefined || h === null) return '';
+  return String(h)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export interface StockInventoryParsedRow {
+  sku: string;
+  productName: string;
+  serialNumber: string;
+  sti: string;
+  packaging: string;
+  observations: string;
+  customerReason: string;
+  brand: string;
+  categoryOrSector: string;
+}
+
+export interface StockInventoryParseResult {
+  success: boolean;
+  rows: StockInventoryParsedRow[];
+  serialsFoundCount: number;
+  stiFoundCount: number;
+  availableSheets: string[];
+  activeSheetName: string;
+  errors: string[];
+  totalRows: number;
+}
+
+/**
+ * Helper to intelligently extract brand name from product title if not specified
+ */
+export function extractBrandFromTitle(title: string): string {
+  if (!title) return '';
+  const upper = title.toUpperCase();
+  const knownBrands = [
+    'PHILCO', 'MULTILASER', 'CADENCE', 'EPSON', 'ELGIN', 'MONDIAL', 
+    'BRITANIA', 'BRITÂNIA', 'OSTER', 'ARNO', 'LOGITECH', 'SAMSUNG', 
+    'LG', 'DELL', 'ACER', 'ASUS', 'LENOVO', 'MOTOROLA', 'XIAOMI', 
+    'APPLE', 'WALITA', 'ELECTROLUX', 'CONSUL', 'BRASTEMP', 'JBL', 
+    'HAYOM', 'REDDRAGON', 'REDRAGON', 'WARRIOR', 'KNUP', 'TP-LINK', 
+    'INTELBRAS', 'GA.MA', 'TAIFF', 'MALLORY', 'MIDEA', 'AGRATTO',
+    'POSITIVO', 'SANDISK', 'KINGSTON', 'CORSAIR', 'HYPERX', 'RAZER'
+  ];
+
+  for (const brand of knownBrands) {
+    // Check whole word boundary
+    const regex = new RegExp(`\\b${brand}\\b`, 'i');
+    if (regex.test(upper)) {
+      // Capitalize first letter properly
+      if (brand === 'LG' || brand === 'JBL' || brand === 'TP-LINK') return brand;
+      return brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
+    }
+  }
+  return '';
+}
+
+/**
+ * Parses an Excel file for Physical Stock / Openbox inventory
+ * Strictly distinguishes and extracts:
+ * Col A: STI (Tracking/Case/Ticket)
+ * Col B: SKU (Product Code)
+ * Col C: DESCRIÇÃO DO PRODUTO (Product Title)
+ * Col D: SERIAL (Manufacturer Hardware Serial)
+ * Col E: SITUAÇÃO (Packaging condition: NA CAIXA, SEM / CAIXA, etc.)
+ * Col F: OBSERVAÇÃO (Notes, Return reason, Warranty info)
+ */
+export async function parseStockInventoryExcelFile(
+  file: File,
+  targetSheetName?: string
+): Promise<StockInventoryParseResult> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const availableSheets = workbook.SheetNames || [];
+        
+        if (availableSheets.length === 0) {
+          return resolve({
+            success: false,
+            rows: [],
+            serialsFoundCount: 0,
+            stiFoundCount: 0,
+            availableSheets: [],
+            activeSheetName: '',
+            errors: ['A planilha está vazia ou não contém abas válidas.'],
+            totalRows: 0
+          });
+        }
+
+        // Determine which sheet to parse
+        const activeSheetName = targetSheetName && availableSheets.includes(targetSheetName)
+          ? targetSheetName
+          : availableSheets[0];
+
+        const worksheet = workbook.Sheets[activeSheetName];
+        if (!worksheet) {
+          return resolve({
+            success: false,
+            rows: [],
+            serialsFoundCount: 0,
+            stiFoundCount: 0,
+            availableSheets,
+            activeSheetName,
+            errors: [`A aba "${activeSheetName}" não foi encontrada no arquivo.`],
+            totalRows: 0
+          });
+        }
+
+        // Read raw 2D array
+        const rawMatrix: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+        if (rawMatrix.length === 0) {
+          return resolve({
+            success: false,
+            rows: [],
+            serialsFoundCount: 0,
+            stiFoundCount: 0,
+            availableSheets,
+            activeSheetName,
+            errors: [`A aba "${activeSheetName}" está vazia.`],
+            totalRows: 0
+          });
+        }
+
+        // Find the actual header row (scanning first 15 rows)
+        let headerRowIdx = 0;
+        let highestScore = 0;
+
+        for (let r = 0; r < Math.min(rawMatrix.length, 15); r++) {
+          const row = rawMatrix[r] || [];
+          let score = 0;
+          row.forEach((cell: any) => {
+            const norm = normalizeExcelHeader(cell);
+            if (norm === 'sti' || norm.startsWith('sti') || norm.includes('sti') || norm.includes('rastreio')) score += 4;
+            if (norm === 'sku' || norm.includes('sku') || norm.startsWith('cod')) score += 4;
+            if (norm.includes('descricao') || norm.includes('produto') || norm === 'item') score += 3;
+            if (norm === 'serial' || norm === 'serie' || norm === 'sn' || norm === 's/n' || norm.includes('serial')) score += 4;
+            if (norm.includes('situacao') || norm.includes('embalagem') || norm.includes('caixa')) score += 3;
+            if (norm.includes('observac') || norm.includes('obs')) score += 3;
+          });
+
+          if (score > highestScore) {
+            highestScore = score;
+            headerRowIdx = r;
+          }
+        }
+
+        const headerRow = (rawMatrix[headerRowIdx] || []).map(normalizeExcelHeader);
+
+        // 1. STI: Column A / Tracking code (strictly excludes Serial / SKU)
+        let stiIdx = headerRow.findIndex(h => {
+          if (h.includes('serial') || h.includes('serie') || h === 'sn' || h === 's/n' || h === 'sku') return false;
+          if (h === 'sti' || h.startsWith('sti') || h.endsWith('sti') || h.includes('sti')) return true;
+          if (h === 'codigo sti' || h === 'cod sti' || h === 'n sti' || h === 'no sti' || h === 'num sti' || h === 'numero sti') return true;
+          if (h === 'rastreio' || h === 'codigo de rastreio' || h === 'cod rastreio' || h === 'tracking' || h === 'etiqueta' || h === 'ticket' || h === 'caso') return true;
+          return false;
+        });
+
+        // 2. SKU: Column B / Product Code
+        let skuIdx = headerRow.findIndex(h => {
+          if (h === 'sti' || h.startsWith('sti') || h.includes('codigo sti') || h.includes('serial') || h.includes('serie')) return false;
+          if (h === 'sku' || h.includes('sku')) return true;
+          if (h === 'cod' || h === 'codigo' || h === 'ref' || h === 'referencia' || h === 'cod item' || h === 'codigo item') return true;
+          if (h === 'cod produto' || h === 'codigo do produto' || h === 'codigo produto' || h === 'cod prod' || h === 'cod da mercadoria') return true;
+          return false;
+        });
+
+        // 3. DESCRIÇÃO DO PRODUTO: Column C / Product Title
+        let descIdx = headerRow.findIndex(h => {
+          if (h === 'cod produto' || h === 'codigo do produto' || h === 'situacao do produto' || h.includes('serial') || h.includes('sti')) return false;
+          if (h === 'descricao do produto' || h === 'descricao' || h === 'produto' || h === 'nome do produto' || h === 'nome' || h === 'item' || h === 'titulo' || h === 'mercadoria' || h === 'modelo') return true;
+          if (h.includes('descricao') || (h.includes('produto') && !h.includes('codigo') && !h.includes('situacao'))) return true;
+          return false;
+        });
+
+        // 4. SERIAL: Column D / Hardware Serial Number (strictly excludes STI)
+        let serialIdx = headerRow.findIndex(h => {
+          if (h.includes('sti') || h.includes('rastreio') || h.includes('tracking') || h === 'sku') return false;
+          if (h === 'serial' || h === 'serie' || h === 'sn' || h === 's/n' || h === 'n/s' || h === 'ns' || h === 'serial number') return true;
+          if (h === 'numero de serie' || h === 'num de serie' || h === 'num serie' || h === 'no de serie' || h === 'n de serie' || h === 'codigo de serie' || h === 'cod de serie' || h === 'no serie') return true;
+          if (h.includes('serial') || h.includes('numero de serie') || h.includes('num serie') || h.includes('no serie')) return true;
+          if (h.startsWith('sn ') || h.endsWith(' sn') || h.includes('s/n')) return true;
+          return false;
+        });
+
+        // 5. SITUAÇÃO / EMBALAGEM: Column E
+        let pkgIdx = headerRow.findIndex(h => {
+          if (h === 'situacao' || h === 'embalagem' || h === 'caixa' || h === 'pacote' || h === 'condicao' || h === 'estado') return true;
+          if (h === 'situacao da embalagem' || h === 'situacao do produto' || h === 'condicao da caixa' || h === 'estado do produto' || h === 'status da embalagem') return true;
+          if (h.includes('embalagem') || h.includes('situacao') || h.includes('caixa') || h.includes('condicao')) return true;
+          return false;
+        });
+
+        // 6. OBSERVAÇÃO: Column F
+        let obsIdx = headerRow.findIndex(h => {
+          if (h === 'observacao' || h === 'observacoes' || h === 'obs' || h === 'detalhes' || h === 'laudo' || h === 'parecer' || h === 'apontamentos') return true;
+          if (h === 'motivo' || h === 'defeito' || h === 'problema' || h === 'reclamacao' || h === 'retorno' || h === 'motivo da devolucao' || h === 'retorno garantia') return true;
+          if (h.includes('observac') || h.includes('obs') || h.includes('motivo') || h.includes('defeito') || h.includes('retorno')) return true;
+          return false;
+        });
+
+        // Positional defaults if standard 6-column format (Col A=STI, Col B=SKU, Col C=DESC, Col D=SERIAL, Col E=SITUAÇÃO, Col F=OBS)
+        if (stiIdx === -1 && headerRow.length >= 2) {
+          // If first column header or data has STI pattern
+          const sampleCell = String(rawMatrix[headerRowIdx + 1]?.[0] || '');
+          if (sampleCell.toUpperCase().startsWith('STI') || headerRow[0] === 'sti') {
+            stiIdx = 0;
+          }
+        }
+
+        const effectiveStiIdx = stiIdx !== -1 ? stiIdx : (headerRow.length >= 6 ? 0 : -1);
+        const effectiveSkuIdx = skuIdx !== -1 ? skuIdx : (effectiveStiIdx === 0 ? 1 : 0);
+        const effectiveDescIdx = descIdx !== -1 ? descIdx : (effectiveSkuIdx === 1 ? 2 : 1);
+        const effectiveSerialIdx = serialIdx !== -1 ? serialIdx : (headerRow.length >= 6 ? 3 : -1);
+        const effectivePkgIdx = pkgIdx !== -1 ? pkgIdx : (headerRow.length >= 6 ? 4 : -1);
+        const effectiveObsIdx = obsIdx !== -1 ? obsIdx : (headerRow.length >= 6 ? 5 : -1);
+
+        const brandIdx = headerRow.findIndex(h => 
+          h === 'marca' || h === 'brand' || h === 'fabricante' || h.includes('marca') || h.includes('fabricante')
+        );
+
+        const catIdx = headerRow.findIndex(h => 
+          h === 'setor' || h === 'destino' || h === 'categoria' || h === 'segmento' || h === 'departamento' || 
+          h.includes('setor') || h.includes('destino') || h.includes('categoria')
+        );
+
+        const parsedRows: StockInventoryParsedRow[] = [];
+        let serialsFound = 0;
+        let stiFound = 0;
+        const errors: string[] = [];
+
+        for (let i = headerRowIdx + 1; i < rawMatrix.length; i++) {
+          const row = rawMatrix[i];
+          if (!row || row.length === 0 || row.every((c: any) => c === '' || c === null || c === undefined)) {
+            continue; // Skip empty rows
+          }
+
+          const rawSku = effectiveSkuIdx !== -1 ? row[effectiveSkuIdx] : '';
+          const rawDesc = effectiveDescIdx !== -1 ? row[effectiveDescIdx] : '';
+
+          const sku = String(rawSku !== undefined && rawSku !== null ? rawSku : '').trim().toUpperCase();
+          const productName = String(rawDesc !== undefined && rawDesc !== null ? rawDesc : '').trim();
+
+          // If both SKU and Product Name are empty, skip row
+          if (!sku && !productName) {
+            continue;
+          }
+
+          // 1. Extract STI strictly
+          let rawSti = effectiveStiIdx !== -1 && row[effectiveStiIdx] !== undefined && row[effectiveStiIdx] !== null ? String(row[effectiveStiIdx]).trim() : '';
+          const stiUpper = rawSti.toUpperCase();
+          let sti = '';
+          if (
+            rawSti && 
+            stiUpper !== 'N/A' && 
+            stiUpper !== 'SEM STI' && 
+            stiUpper !== 'NA' && 
+            stiUpper !== '-' && 
+            stiUpper !== 'NULL' && 
+            stiUpper !== 'UNDEFINED' && 
+            stiUpper !== 'NONE'
+          ) {
+            sti = rawSti;
+            stiFound++;
+          }
+
+          // 2. Extract Serial Number strictly
+          let rawSerial = effectiveSerialIdx !== -1 && row[effectiveSerialIdx] !== undefined && row[effectiveSerialIdx] !== null ? String(row[effectiveSerialIdx]).trim() : '';
+          const serialUpper = rawSerial.toUpperCase();
+          let serialNumber = '';
+          if (
+            rawSerial && 
+            serialUpper !== 'N/A' && 
+            serialUpper !== 'SEM SERIAL' && 
+            serialUpper !== 'NA' && 
+            serialUpper !== '-' && 
+            serialUpper !== 'S/N' && 
+            serialUpper !== 'NULL' && 
+            serialUpper !== 'UNDEFINED' && 
+            serialUpper !== 'NONE' && 
+            serialUpper !== 'NÃO' && 
+            serialUpper !== 'NAO'
+          ) {
+            serialNumber = rawSerial;
+            serialsFound++;
+          }
+
+          // 3. Extract Packaging / Situação
+          const rawPkg = effectivePkgIdx !== -1 && row[effectivePkgIdx] !== undefined && row[effectivePkgIdx] !== null ? String(row[effectivePkgIdx]).trim() : '';
+          let packaging = rawPkg || 'Na caixa';
+          const pkgUpper = packaging.toUpperCase();
+          if (pkgUpper.includes('SEM') || pkgUpper.includes('S/') || pkgUpper.includes('FORA')) {
+            packaging = 'Sem / Caixa';
+          } else if (pkgUpper.includes('DANIFICAD') || pkgUpper.includes('AVARIAD')) {
+            packaging = 'Danificada';
+          } else if (pkgUpper.includes('NA CAIXA') || pkgUpper.includes('PERFEIT')) {
+            packaging = 'Na caixa';
+          }
+
+          // 4. Extract Observations
+          const rawObs = effectiveObsIdx !== -1 && row[effectiveObsIdx] !== undefined && row[effectiveObsIdx] !== null ? String(row[effectiveObsIdx]).trim() : '';
+
+          // 5. Extract Brand: explicit column or auto-extracted from product name
+          let brand = brandIdx !== -1 && row[brandIdx] !== undefined && row[brandIdx] !== null ? String(row[brandIdx]).trim() : '';
+          if (!brand && productName) {
+            brand = extractBrandFromTitle(productName);
+          }
+
+          // 6. Extract Category / Sector
+          const categoryOrSector = catIdx !== -1 && row[catIdx] !== undefined && row[catIdx] !== null ? String(row[catIdx]).trim() : '';
+
+          parsedRows.push({
+            sku: sku || 'SKU-INDEF',
+            productName: productName || 'Produto Importado',
+            serialNumber,
+            sti,
+            packaging,
+            observations: rawObs,
+            customerReason: rawObs || 'Entrada de Estoque',
+            brand,
+            categoryOrSector
+          });
+        }
+
+        resolve({
+          success: parsedRows.length > 0,
+          rows: parsedRows,
+          serialsFoundCount: serialsFound,
+          stiFoundCount: stiFound,
+          availableSheets,
+          activeSheetName,
+          errors,
+          totalRows: parsedRows.length
+        });
+      } catch (err: any) {
+        console.error('Error parsing stock inventory excel:', err);
+        resolve({
+          success: false,
+          rows: [],
+          serialsFoundCount: 0,
+          stiFoundCount: 0,
+          availableSheets: [],
+          activeSheetName: '',
+          errors: [`Falha ao ler planilha: ${err?.message || 'Arquivo corrompido ou formato inválido'}`],
+          totalRows: 0
+        });
+      }
+    };
+
+    reader.onerror = () => {
+      resolve({
+        success: false,
+        rows: [],
+        serialsFoundCount: 0,
+        stiFoundCount: 0,
+        availableSheets: [],
+        activeSheetName: '',
+        errors: ['Erro ao ler arquivo do computador.'],
+        totalRows: 0
+      });
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * Downloads a pre-formatted Excel template for Physical Stock & OpenBox inventory
+ * Matches EXACTLY the 6-column structure:
+ * Col A: STI
+ * Col B: SKU
+ * Col C: DESCRIÇÃO DO PRODUTO
+ * Col D: SERIAL
+ * Col E: SITUAÇÃO
+ * Col F: OBSERVAÇÃO
+ */
+export function downloadStockInventoryTemplate() {
+  const stockData = [
+    {
+      'STI': 'STI135638',
+      'SKU': 16552,
+      'DESCRIÇÃO DO PRODUTO': 'FORNO ELÉTRICO 17L PHILCO PRETO 2 RESISTÊNCIAS PFE17P 220V - PHILCO',
+      'SERIAL': '',
+      'SITUAÇÃO': 'NA CAIXA',
+      'OBSERVAÇÃO': ''
+    },
+    {
+      'STI': 'STI135454',
+      'SKU': 16552,
+      'DESCRIÇÃO DO PRODUTO': 'FORNO ELÉTRICO 17L PHILCO PRETO 2 RESISTÊNCIAS PFE17P 220V - PHILCO',
+      'SERIAL': '',
+      'SITUAÇÃO': 'NA CAIXA',
+      'OBSERVAÇÃO': 'RETORNO GARANTIA'
+    },
+    {
+      'STI': 'STI 135635',
+      'SKU': 16541,
+      'DESCRIÇÃO DO PRODUTO': 'ASPIRADOR DE PÓ PHILCO PAS1450C 2 EM 1 1300W 220V - PHILCO',
+      'SERIAL': '',
+      'SITUAÇÃO': 'NA CAIXA',
+      'OBSERVAÇÃO': ''
+    },
+    {
+      'STI': 'STI135625',
+      'SKU': 9157,
+      'DESCRIÇÃO DO PRODUTO': 'VOLANTE MULTILASER JS087 MULTI PLATAF C/MARCHA+PEDAL JS087 - MULTILASER',
+      'SERIAL': '',
+      'SITUAÇÃO': 'NA CAIXA',
+      'OBSERVAÇÃO': ''
+    },
+    {
+      'STI': 'STI 135607',
+      'SKU': 8937,
+      'DESCRIÇÃO DO PRODUTO': 'Tablet Infantil Princesas com Controle Parental MULTILASER',
+      'SERIAL': '',
+      'SITUAÇÃO': 'NA CAIXA',
+      'OBSERVAÇÃO': 'MARCAS DE USO'
+    },
+    {
+      'STI': 'STI134976',
+      'SKU': 12624,
+      'DESCRIÇÃO DO PRODUTO': 'IMPRESSORA TÉRMICA NÃO FISCAL EPSON TM T88VII-C31CJ57062',
+      'SERIAL': 'XB4F027290',
+      'SITUAÇÃO': 'SEM / CAIXA',
+      'OBSERVAÇÃO': ''
+    },
+    {
+      'STI': 'STI135425',
+      'SKU': 16299,
+      'DESCRIÇÃO DO PRODUTO': 'IMPRESSORA TÉRMICA NÃO FISCAL ELGIN I8',
+      'SERIAL': '',
+      'SITUAÇÃO': 'SEM / CAIXA',
+      'OBSERVAÇÃO': ''
+    }
+  ];
+
+  const ws = XLSX.utils.json_to_sheet(stockData);
+  ws['!cols'] = [
+    { wch: 18 }, // A: STI
+    { wch: 14 }, // B: SKU
+    { wch: 65 }, // C: DESCRIÇÃO DO PRODUTO
+    { wch: 22 }, // D: SERIAL
+    { wch: 18 }, // E: SITUAÇÃO
+    { wch: 32 }  // F: OBSERVAÇÃO
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventario_Estoque');
+  XLSX.writeFile(wb, 'modelo_importacao_estoque.xlsx');
+}
+
+

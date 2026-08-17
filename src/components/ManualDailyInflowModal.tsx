@@ -177,10 +177,10 @@ export default function ManualDailyInflowModal({
             {/* RMA */}
             <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-sky-400 uppercase tracking-wider">
+                <label className="text-xs font-bold text-rose-400 uppercase tracking-wider">
                   RMA (Triagem)
                 </label>
-                <span className="text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 rounded">
                   Qtd
                 </span>
               </div>
@@ -190,7 +190,7 @@ export default function ManualDailyInflowModal({
                 value={rma === 0 ? '' : rma}
                 onChange={(e) => setRma(Math.max(0, parseInt(e.target.value, 10) || 0))}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xl font-black text-sky-400 focus:outline-none focus:border-sky-500 text-center"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xl font-black text-rose-400 focus:outline-none focus:border-rose-500 text-center"
               />
               <div className="flex items-center justify-center gap-1">
                 <button
@@ -203,14 +203,14 @@ export default function ManualDailyInflowModal({
                 <button
                   type="button"
                   onClick={() => adjustValue(setRma, 1)}
-                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-sky-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-rose-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +1
                 </button>
                 <button
                   type="button"
                   onClick={() => adjustValue(setRma, 10)}
-                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-sky-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-rose-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +10
                 </button>

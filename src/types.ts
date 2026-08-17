@@ -148,3 +148,53 @@ export interface UserAccount {
   lastLogin?: string;
 }
 
+export interface SystemBackupMetadata {
+  version: string;
+  appName: string;
+  systemIdentifier: string;
+  exportedAt: string; // ISO 8601
+  exportedAtFormatted: string; // BR format
+  exportedBy: {
+    uid?: string;
+    email?: string;
+    name?: string;
+  };
+  collectionsCount: {
+    products: number;
+    triageUnits: number;
+    dailyInflows: number;
+    cases?: number;
+    logs?: number;
+  };
+}
+
+export interface SystemBackupPayload {
+  metadata: SystemBackupMetadata;
+  data: {
+    products: BaseProduct[];
+    triageUnits: TriageUnit[];
+    dailyInflows: DailyInflowRecord[];
+    cases?: CaseTracking[];
+    logs?: any[];
+  };
+  settings?: {
+    enableSpreadsheetImport?: boolean;
+    [key: string]: any;
+  };
+}
+
+export interface BackupValidationResult {
+  isValid: boolean;
+  error?: string;
+  metadata?: SystemBackupMetadata;
+  payload?: SystemBackupPayload;
+  stats?: {
+    productsCount: number;
+    triageUnitsCount: number;
+    dailyInflowsCount: number;
+    logsCount: number;
+    casesCount: number;
+    fileSizeBytes: number;
+  };
+}
+

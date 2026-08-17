@@ -722,7 +722,7 @@ export default function ProductMovements({
             <div className="bg-[#0f172a]/70 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">RMA (Triagem)</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-blue-400">{monthTotals.totalRma}</span>
+                <span className="text-2xl font-black text-rose-400">{monthTotals.totalRma}</span>
                 <span className="text-[10px] text-slate-500 font-bold">un</span>
               </div>
               <span className="text-[10px] text-slate-500 mt-1">Garantia / Devoluções</span>
@@ -824,7 +824,7 @@ export default function ProductMovements({
                   <thead>
                     <tr className="bg-slate-950 text-slate-300 font-extrabold uppercase tracking-wider text-[11px] border-b border-slate-800">
                       <th className="py-3 px-4 w-44">DATA</th>
-                      <th className="py-3 px-4 text-center w-24 text-blue-400">RMA</th>
+                      <th className="py-3 px-4 text-center w-24 text-rose-400">RMA</th>
                       <th className="py-3 px-4 text-center w-28 text-emerald-400">ESTOQUE</th>
                       <th className="py-3 px-4 text-center w-28 text-amber-400">OPENBOX</th>
                       <th className="py-3 px-4 text-center w-24 text-purple-400">ES</th>
@@ -887,7 +887,7 @@ export default function ProductMovements({
                                 </td>
 
                                 {/* RMA */}
-                                <td className="py-3 px-4 text-center font-mono font-bold text-blue-400">
+                                <td className="py-3 px-4 text-center font-mono font-bold text-rose-400">
                                   {record.rma}
                                 </td>
 
@@ -953,7 +953,7 @@ export default function ProductMovements({
                       <td className="py-4 px-4 uppercase tracking-wider">
                         TOTAL GERAL DO MÊS ({monthName})
                       </td>
-                      <td className="py-4 px-4 text-center font-mono text-blue-400 text-sm">{monthTotals.totalRma}</td>
+                      <td className="py-4 px-4 text-center font-mono text-rose-400 text-sm">{monthTotals.totalRma}</td>
                       <td className="py-4 px-4 text-center font-mono text-emerald-400 text-sm">{monthTotals.totalEstoque}</td>
                       <td className="py-4 px-4 text-center font-mono text-amber-400 text-sm">{monthTotals.totalOpenbox}</td>
                       <td className="py-4 px-4 text-center font-mono text-purple-400 text-sm">{monthTotals.totalEs}</td>

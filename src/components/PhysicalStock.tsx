@@ -36,7 +36,10 @@ import {
   Download,
   ChevronDown,
   Clipboard,
-  ClipboardPaste
+  ClipboardPaste,
+  Sliders,
+  Zap,
+  Tag
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
 import ExcelImportModal from './ExcelImportModal';
@@ -109,6 +112,10 @@ export default function PhysicalStock({
   enableSpreadsheetImport = true
 }: PhysicalStockProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState<string>('Todas');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
+  const [selectedVoltage, setSelectedVoltage] = useState<string>('Todas');
+
   const [activeTab, setActiveTab] = useState<'Todos' | DestinationSectorType | 'Baixado'>('Todos');
   const [visibleCount, setVisibleCount] = useState(20);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(initialSelectedUnit?.id || null);
@@ -457,6 +464,56 @@ export default function PhysicalStock({
     return units.filter(u => u.status === 'Estoque' && (isDuplicateSti(u) || isDuplicateSerial(u))).length;
   }, [units, duplicateStiSet, duplicateSerialSet]);
 
+  // Unique Brands from catalog products and units
+  const uniqueBrands = React.useMemo(() => {
+    const brandsSet = new Set<string>();
+    products.forEach(p => {
+      if (p.brand && p.brand.trim() && p.brand.trim() !== 'N/A' && p.brand.trim() !== 'Não Informado') {
+        brandsSet.add(p.brand.trim());
+      }
+    });
+    units.forEach(u => {
+      const bp = findBaseProduct(u, products);
+      if (bp?.brand && bp.brand.trim() && bp.brand.trim() !== 'N/A' && bp.brand.trim() !== 'Não Informado') {
+        brandsSet.add(bp.brand.trim());
+      }
+    });
+    return Array.from(brandsSet).sort();
+  }, [products, units]);
+
+  // Unique Categories from catalog products and units
+  const uniqueCategories = React.useMemo(() => {
+    const categoriesSet = new Set<string>();
+    products.forEach(p => {
+      if (p.category && p.category.trim() && p.category.trim() !== 'Todas') {
+        categoriesSet.add(p.category.trim());
+      }
+    });
+    units.forEach(u => {
+      const bp = findBaseProduct(u, products);
+      if (bp?.category && bp.category.trim() && bp.category.trim() !== 'Todas') {
+        categoriesSet.add(bp.category.trim());
+      }
+    });
+    return Array.from(categoriesSet).sort();
+  }, [products, units]);
+
+  const handleClearAllFilters = () => {
+    setSearchTerm('');
+    setSelectedBrand('Todas');
+    setSelectedCategory('Todas');
+    setSelectedVoltage('Todas');
+    setFilterOnlyDuplicates(false);
+  };
+
+  const hasActiveFilters = Boolean(
+    searchTerm.trim() || 
+    selectedBrand !== 'Todas' || 
+    selectedCategory !== 'Todas' || 
+    selectedVoltage !== 'Todas' || 
+    filterOnlyDuplicates
+  );
+
   // Filter logic
   const filteredUnits = units.filter(unit => {
     // 0. Filter only duplicate items if toggle is active
@@ -464,11 +521,49 @@ export default function PhysicalStock({
       return false;
     }
 
-    // 1. Search filter
+    const baseProd = findBaseProduct(unit, products);
+
+    // 1. Brand filter
+    if (selectedBrand !== 'Todas') {
+      const targetBrand = selectedBrand.trim().toLowerCase();
+      const unitBrand = (baseProd?.brand || '').trim().toLowerCase();
+      if (unitBrand !== targetBrand) {
+        return false;
+      }
+    }
+
+    // 2. Category filter
+    if (selectedCategory !== 'Todas') {
+      const targetCategory = selectedCategory.trim().toLowerCase();
+      const unitCategory = (baseProd?.category || '').trim().toLowerCase();
+      if (unitCategory !== targetCategory) {
+        return false;
+      }
+    }
+
+    // 3. Voltage filter
+    if (selectedVoltage !== 'Todas') {
+      const targetVoltage = selectedVoltage.trim().toLowerCase();
+      const unitVoltage = (unit.baseProductVoltage || baseProd?.voltage || '').trim().toLowerCase();
+      if (unitVoltage !== targetVoltage) {
+        return false;
+      }
+    }
+
+    // 4. Search filter (supports SKU, Name, STI, Serial, Platform, Notes, Reason, etc.)
     const term = searchTerm.toLowerCase().trim();
+    const brandName = (baseProd?.brand || '').toLowerCase();
+    const categoryName = (baseProd?.category || '').toLowerCase();
+    const baseProdName = (baseProd?.name || '').toLowerCase();
+    const baseProdSku = (baseProd?.sku || '').toLowerCase();
+
     const matchesSearch = !term ||
       (unit.baseProductName || '').toLowerCase().includes(term) ||
       (unit.baseProductSku || '').toLowerCase().includes(term) ||
+      baseProdName.includes(term) ||
+      baseProdSku.includes(term) ||
+      brandName.includes(term) ||
+      categoryName.includes(term) ||
       (unit.trackingCode || '').toLowerCase().includes(term) ||
       (unit.serialNumber || '').toLowerCase().includes(term) ||
       (unit.destinationSector !== 'Openbox' && (unit.platform || '').toLowerCase().includes(term)) ||
@@ -477,22 +572,21 @@ export default function PhysicalStock({
       (unit.notes || '').toLowerCase().includes(term) ||
       (unit.id || '').toLowerCase().includes(term);
 
-    // 2. Tab sector filter
+    // 5. Tab sector filter
     if (activeTab === 'Todos') {
       return matchesSearch && unit.status === 'Estoque';
     } else if (activeTab === 'Baixado') {
       return matchesSearch && unit.status === 'Baixado';
     } else {
       const matchesSector = unit.destinationSector === activeTab;
-      // If a search term is present, allow finding the matching item across active stock items
-      return unit.status === 'Estoque' && (term ? matchesSearch : (matchesSearch && matchesSector));
+      return unit.status === 'Estoque' && matchesSearch && matchesSector;
     }
   });
 
-  // Reset pagination limit when search term, sector tab, or duplicate filter changes
+  // Reset pagination limit when search term, filters, sector tab, or duplicate filter changes
   useEffect(() => {
     setVisibleCount(20);
-  }, [searchTerm, activeTab, filterOnlyDuplicates]);
+  }, [searchTerm, selectedBrand, selectedCategory, selectedVoltage, activeTab, filterOnlyDuplicates]);
 
   // Slice filtered units according to current pagination limit (20 items per page)
   const displayedUnits = filteredUnits.slice(0, visibleCount);
@@ -896,144 +990,304 @@ export default function PhysicalStock({
           </button>
         </div>
 
-        {/* Search Input and Batch Actions bar */}
-        <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-slate-900" id="stock-search-bar">
-          <div className="flex flex-1 items-center gap-4 max-w-xl">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-              <input 
-                type="text"
-                placeholder="Pesquisar por SKU, Nome, Plataforma ou Código de Rastreio..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
-                id="input-stock-search"
-              />
-            </div>
-            {filteredUnits.length > 0 && activeTab !== 'Baixado' && (
-              <button
-                type="button"
-                onClick={handleToggleSelectAll}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer select-none shrink-0 ${
-                  filteredUnits.every(u => selectedUnitIds.includes(u.id))
-                    ? 'bg-sky-500/10 border-sky-500/40 text-sky-400 shadow-sm'
-                    : selectedUnitIds.length > 0
-                    ? 'bg-sky-950/40 border-sky-800/50 text-sky-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
-                }`}
-                id="btn-select-all"
-                title={filteredUnits.every(u => selectedUnitIds.includes(u.id)) ? "Deselecionar todos" : "Selecionar todos os produtos filtrados"}
-              >
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                  filteredUnits.every(u => selectedUnitIds.includes(u.id))
-                    ? 'bg-sky-500 border-sky-400 text-white shadow-sm'
-                    : selectedUnitIds.length > 0
-                    ? 'bg-sky-500/20 border-sky-500/50 text-sky-400'
-                    : 'border-slate-700 bg-slate-900'
-                }`}>
-                  {filteredUnits.every(u => selectedUnitIds.includes(u.id)) && (
-                    <Check className="w-3 h-3 stroke-[3]" />
-                  )}
-                  {!filteredUnits.every(u => selectedUnitIds.includes(u.id)) && selectedUnitIds.length > 0 && (
-                    <div className="w-1.5 h-1.5 rounded-xs bg-sky-400" />
-                  )}
-                </div>
-                <span>
-                  {filteredUnits.every(u => selectedUnitIds.includes(u.id))
-                    ? `Todos Selecionados (${selectedUnitIds.length})`
-                    : selectedUnitIds.length > 0
-                    ? `Selecionados (${selectedUnitIds.length}/${filteredUnits.length})`
-                    : `Selecionar Todos (${filteredUnits.length})`}
-                </span>
-              </button>
-            )}
-          </div>
+        {/* Search and Filters Controls Bar */}
+        <div className="p-5 border-b border-slate-800 bg-slate-900 space-y-4" id="stock-search-bar">
+          {/* Top row: Search input and Action controls */}
+          <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
+            <div className="flex flex-1 items-center gap-3 max-w-2xl">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                <input 
+                  type="text"
+                  placeholder="Pesquisar por SKU, Nome, Plataforma, STI, Serial ou Laudo..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-9 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                  id="input-stock-search"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    title="Limpar pesquisa"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
 
-          <div className="flex items-center gap-3 justify-between sm:justify-end flex-wrap">
-            {selectedUnitIds.length > 0 && (
-              <>
+              {filteredUnits.length > 0 && activeTab !== 'Baixado' && (
                 <button
                   type="button"
-                  onClick={() => {
-                    const selectedUnits = units.filter(u => selectedUnitIds.includes(u.id));
-                    handleExportExcel(selectedUnits);
-                  }}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-sky-300 hover:text-white font-bold rounded-xl text-xs transition-all border border-slate-700 hover:border-sky-500/50 flex items-center gap-1.5 cursor-pointer shadow-sm animate-in fade-in"
-                  id="btn-export-selected"
-                  title="Exportar apenas as unidades selecionadas para planilha Excel"
+                  onClick={handleToggleSelectAll}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer select-none shrink-0 ${
+                    filteredUnits.every(u => selectedUnitIds.includes(u.id))
+                      ? 'bg-sky-500/10 border-sky-500/40 text-sky-400 shadow-sm'
+                      : selectedUnitIds.length > 0
+                      ? 'bg-sky-950/40 border-sky-800/50 text-sky-300'
+                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                  }`}
+                  id="btn-select-all"
+                  title={filteredUnits.every(u => selectedUnitIds.includes(u.id)) ? "Deselecionar todos" : "Selecionar todos os produtos filtrados"}
                 >
-                  <Download className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Exportar ({selectedUnitIds.length})</span>
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                    filteredUnits.every(u => selectedUnitIds.includes(u.id))
+                      ? 'bg-sky-500 border-sky-400 text-white shadow-sm'
+                      : selectedUnitIds.length > 0
+                      ? 'bg-sky-500/20 border-sky-500/50 text-sky-400'
+                      : 'border-slate-700 bg-slate-900'
+                  }`}>
+                    {filteredUnits.every(u => selectedUnitIds.includes(u.id)) && (
+                      <Check className="w-3 h-3 stroke-[3]" />
+                    )}
+                    {!filteredUnits.every(u => selectedUnitIds.includes(u.id)) && selectedUnitIds.length > 0 && (
+                      <div className="w-1.5 h-1.5 rounded-xs bg-sky-400" />
+                    )}
+                  </div>
+                  <span>
+                    {filteredUnits.every(u => selectedUnitIds.includes(u.id))
+                      ? `Todos (${selectedUnitIds.length})`
+                      : selectedUnitIds.length > 0
+                      ? `(${selectedUnitIds.length}/${filteredUnits.length})`
+                      : `Selecionar (${filteredUnits.length})`}
+                  </span>
                 </button>
-
-                <button
-                  onClick={handleBatchCheckout}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2 cursor-pointer animate-in fade-in"
-                  id="btn-batch-checkout"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Dar Baixa em Lote ({selectedUnitIds.length})</span>
-                </button>
-              </>
-            )}
-
-            {/* Filter Duplicates button */}
-            <button 
-              type="button"
-              onClick={() => setFilterOnlyDuplicates(prev => !prev)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
-                filterOnlyDuplicates
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-lg shadow-amber-500/20 scale-105'
-                  : duplicateUnitsCount > 0
-                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
-                  : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
-              }`}
-              title="Filtrar produtos com STI ou Serial repetidos"
-              id="btn-filter-duplicates"
-            >
-              <AlertTriangle className={`w-3.5 h-3.5 ${filterOnlyDuplicates ? 'text-slate-950' : 'text-amber-400'}`} />
-              <span>{filterOnlyDuplicates ? 'Apenas Duplicados' : `Duplicados (${duplicateUnitsCount})`}</span>
-              {duplicateUnitsCount > 0 && !filterOnlyDuplicates && (
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
               )}
-            </button>
-
-            {/* View switcher: Grid vs List/Linhas */}
-            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-0.5" id="stock-view-switcher">
-              <button
-                onClick={() => handleSetViewMode('grid')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  viewMode === 'grid' 
-                    ? 'bg-sky-500 text-white shadow-sm' 
-                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                }`}
-                title="Visualização em Grade"
-                id="btn-view-grid"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Grade</span>
-              </button>
-              <button
-                onClick={() => handleSetViewMode('list')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  viewMode === 'list' 
-                    ? 'bg-sky-500 text-white shadow-sm' 
-                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                }`}
-                title="Visualização em Linhas"
-                id="btn-view-list"
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>Linhas</span>
-              </button>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Filter className="w-3.5 h-3.5 text-sky-400" />
+            <div className="flex items-center gap-2.5 justify-between xl:justify-end flex-wrap">
+              {selectedUnitIds.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const selectedUnits = units.filter(u => selectedUnitIds.includes(u.id));
+                      handleExportExcel(selectedUnits);
+                    }}
+                    className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-sky-300 hover:text-white font-bold rounded-xl text-xs transition-all border border-slate-700 hover:border-sky-500/50 flex items-center gap-1.5 cursor-pointer shadow-sm animate-in fade-in"
+                    id="btn-export-selected"
+                    title="Exportar apenas as unidades selecionadas para planilha Excel"
+                  >
+                    <Download className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Exportar ({selectedUnitIds.length})</span>
+                  </button>
+
+                  <button
+                    onClick={handleBatchCheckout}
+                    className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2 cursor-pointer animate-in fade-in"
+                    id="btn-batch-checkout"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Baixa em Lote ({selectedUnitIds.length})</span>
+                  </button>
+                </>
+              )}
+
+              {/* Filter Duplicates button */}
+              <button 
+                type="button"
+                onClick={() => setFilterOnlyDuplicates(prev => !prev)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  filterOnlyDuplicates
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-lg shadow-amber-500/20 scale-105'
+                    : duplicateUnitsCount > 0
+                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
+                    : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
+                }`}
+                title="Filtrar produtos com STI ou Serial repetidos"
+                id="btn-filter-duplicates"
+              >
+                <AlertTriangle className={`w-3.5 h-3.5 ${filterOnlyDuplicates ? 'text-slate-950' : 'text-amber-400'}`} />
+                <span>{filterOnlyDuplicates ? 'Apenas Duplicados' : `Duplicados (${duplicateUnitsCount})`}</span>
+                {duplicateUnitsCount > 0 && !filterOnlyDuplicates && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                )}
+              </button>
+
+              {/* View switcher: Grid vs List/Linhas */}
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-0.5" id="stock-view-switcher">
+                <button
+                  onClick={() => handleSetViewMode('grid')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    viewMode === 'grid' 
+                      ? 'bg-sky-500 text-white shadow-sm' 
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                  title="Visualização em Grade"
+                  id="btn-view-grid"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Grade</span>
+                </button>
+                <button
+                  onClick={() => handleSetViewMode('list')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    viewMode === 'list' 
+                      ? 'bg-sky-500 text-white shadow-sm' 
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                  title="Visualização em Linhas"
+                  id="btn-view-list"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span>Linhas</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter Controls Row: Marcas, Categoria, Voltagem */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800" id="stock-filter-controls">
+            {/* 1. Filter by Marca (Brand) */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Sliders className="w-3 h-3 text-purple-400" />
+                <span>Marca</span>
+              </label>
+              <select
+                value={selectedBrand}
+                onChange={(e) => setSelectedBrand(e.target.value)}
+                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors truncate ${
+                  selectedBrand !== 'Todas' ? 'border-purple-500/50 bg-purple-950/20 text-purple-300' : 'border-slate-800'
+                }`}
+                id="select-filter-stock-brand"
+              >
+                <option value="Todas">Todas as Marcas ({uniqueBrands.length})</option>
+                {uniqueBrands.map(brand => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 2. Filter by Categoria */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-3 h-3 text-emerald-400" />
+                <span>Categoria</span>
+              </label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors truncate ${
+                  selectedCategory !== 'Todas' ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' : 'border-slate-800'
+                }`}
+                id="select-filter-stock-category"
+              >
+                <option value="Todas">Todas as Categorias ({uniqueCategories.length})</option>
+                {uniqueCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. Filter by Voltagem */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Zap className="w-3 h-3 text-amber-400" />
+                <span>Tensão / Voltagem</span>
+              </label>
+              <select
+                value={selectedVoltage}
+                onChange={(e) => setSelectedVoltage(e.target.value)}
+                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors truncate ${
+                  selectedVoltage !== 'Todas' ? 'border-amber-500/50 bg-amber-950/20 text-amber-300' : 'border-slate-800'
+                }`}
+                id="select-filter-stock-voltage"
+              >
+                <option value="Todas">Todas as Voltagens</option>
+                <option value="110V">110V</option>
+                <option value="220V">220V</option>
+                <option value="Bivolt">Bivolt</option>
+                <option value="N/A">N/A (Pilhas / USB / Bateria)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Active Filter Badges & Results Counter Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-850 text-xs text-slate-400" id="stock-filter-summary">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Filter className="w-3.5 h-3.5 text-sky-400 shrink-0" />
               <span>
                 Exibindo <strong className="text-sky-400">{displayedUnits.length}</strong> de <strong className="text-white">{filteredUnits.length}</strong> {filteredUnits.length === 1 ? 'unidade' : 'unidades'}
+                {activeTab !== 'Todos' && (
+                  <span className="text-slate-500 ml-1">
+                    no setor {activeTab}
+                  </span>
+                )}
               </span>
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleClearAllFilters}
+                  className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-sky-400 hover:text-sky-300 rounded-lg text-[11px] font-bold border border-slate-700 transition-colors cursor-pointer"
+                  id="btn-clear-stock-filters"
+                  title="Remover todos os filtros aplicados"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Limpar Filtros</span>
+                </button>
+              )}
             </div>
+
+            {/* Active Filter Badges */}
+            {hasActiveFilters && (
+              <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                {selectedBrand !== 'Todas' && (
+                  <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300 font-medium flex items-center gap-1">
+                    <span>Marca: {selectedBrand}</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setSelectedBrand('Todas')} 
+                      className="hover:text-white transition-colors cursor-pointer"
+                      title="Remover filtro de Marca"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+                {selectedCategory !== 'Todas' && (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-medium flex items-center gap-1">
+                    <span>Cat: {selectedCategory}</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setSelectedCategory('Todas')} 
+                      className="hover:text-white transition-colors cursor-pointer"
+                      title="Remover filtro de Categoria"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+                {selectedVoltage !== 'Todas' && (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 font-medium flex items-center gap-1">
+                    <span>Voltagem: {selectedVoltage}</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setSelectedVoltage('Todas')} 
+                      className="hover:text-white transition-colors cursor-pointer"
+                      title="Remover filtro de Voltagem"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+                {searchTerm && (
+                  <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300 flex items-center gap-1">
+                    <span>Busca: "{searchTerm}"</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setSearchTerm('')} 
+                      className="hover:text-white transition-colors cursor-pointer"
+                      title="Limpar texto de busca"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1177,7 +1431,41 @@ export default function PhysicalStock({
                       <p className="text-xs text-slate-400 line-clamp-1 mt-1">
                         Motivo: {unit.customerReason}
                       </p>
-                      <p className="text-[10px] text-slate-450 font-medium mt-1.5 flex items-center gap-1 font-mono">
+
+                      {/* Brand, Category, Voltage attributes */}
+                      {(() => {
+                        const baseProd = findBaseProduct(unit, products);
+                        const bBrand = baseProd?.brand && baseProd.brand.trim() !== 'N/A' && baseProd.brand.trim() !== 'Não Informado' ? baseProd.brand.trim() : null;
+                        const bCat = baseProd?.category && baseProd.category.trim() !== 'Todas' ? baseProd.category.trim() : null;
+                        const bVolt = unit.baseProductVoltage || (baseProd?.voltage && baseProd.voltage !== 'N/A' ? baseProd.voltage : null);
+
+                        if (!bBrand && !bCat && (!bVolt || bVolt === 'N/A')) return null;
+
+                        return (
+                          <div className="flex items-center gap-1.5 flex-wrap pt-2">
+                            {bBrand && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30 flex items-center gap-1" title={`Marca: ${bBrand}`}>
+                                <Sliders className="w-2.5 h-2.5" />
+                                <span>{bBrand}</span>
+                              </span>
+                            )}
+                            {bCat && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title={`Categoria: ${bCat}`}>
+                                <Layers className="w-2.5 h-2.5" />
+                                <span>{bCat}</span>
+                              </span>
+                            )}
+                            {bVolt && bVolt !== 'N/A' && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1" title={`Tensão: ${bVolt}`}>
+                                <Zap className="w-2.5 h-2.5" />
+                                <span>{bVolt}</span>
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      <p className="text-[10px] text-slate-450 font-medium mt-2 flex items-center gap-1 font-mono">
                         <Clock className="w-3.5 h-3.5 text-sky-450 shrink-0" />
                         <span>Entrada:</span>
                         <span className="text-slate-300 font-semibold">
@@ -1324,9 +1612,43 @@ export default function PhysicalStock({
                         {unit.baseProductName}
                       </h4>
 
-                      <p className="text-xs text-slate-400 line-clamp-1">
-                        Motivo: {unit.customerReason}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs text-slate-400 line-clamp-1">
+                          Motivo: {unit.customerReason}
+                        </p>
+
+                        {(() => {
+                          const baseProd = findBaseProduct(unit, products);
+                          const bBrand = baseProd?.brand && baseProd.brand.trim() !== 'N/A' && baseProd.brand.trim() !== 'Não Informado' ? baseProd.brand.trim() : null;
+                          const bCat = baseProd?.category && baseProd.category.trim() !== 'Todas' ? baseProd.category.trim() : null;
+                          const bVolt = unit.baseProductVoltage || (baseProd?.voltage && baseProd.voltage !== 'N/A' ? baseProd.voltage : null);
+
+                          if (!bBrand && !bCat && (!bVolt || bVolt === 'N/A')) return null;
+
+                          return (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {bBrand && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30 flex items-center gap-1" title={`Marca: ${bBrand}`}>
+                                  <Sliders className="w-2.5 h-2.5" />
+                                  <span>{bBrand}</span>
+                                </span>
+                              )}
+                              {bCat && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title={`Categoria: ${bCat}`}>
+                                  <Layers className="w-2.5 h-2.5" />
+                                  <span>{bCat}</span>
+                                </span>
+                              )}
+                              {bVolt && bVolt !== 'N/A' && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1" title={`Tensão: ${bVolt}`}>
+                                  <Zap className="w-2.5 h-2.5" />
+                                  <span>{bVolt}</span>
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
 
