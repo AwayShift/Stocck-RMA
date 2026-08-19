@@ -19,12 +19,21 @@ import {
   Search,
   Check,
   ChevronDown,
-  X
+  X,
+  Link as LinkIcon,
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType } from '../types';
 import { uploadFileToStorage } from '../lib/dbService';
 import { RichTextEditor } from './RichTextEditor';
 import { getBaseProductImages } from '../utils/productImages';
+import { processSafeImageUpload, processSafeImageUrl } from '../lib/imageSecurityService';
+
+// Image compression and pixel sanitization utility
+const compressImageToBase64 = async (file: File): Promise<string> => {
+  return await processSafeImageUpload(file, 1200, 1000, 0.75);
+};
 
 interface RmaEntryProps {
   products: BaseProduct[];
@@ -32,50 +41,6 @@ interface RmaEntryProps {
   onSaveTriage: (unit: TriageUnit) => Promise<void>;
   onNavigateToStock: () => void;
 }
-
-// Image compression utility
-const compressImageToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
-        const MAX_HEIGHT = 600;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const base64 = canvas.toDataURL('image/jpeg', 0.7); // Compress at 70% JPEG quality
-          resolve(base64);
-        } else {
-          resolve(e.target?.result as string);
-        }
-      };
-      img.onerror = () => reject(new Error('Falha ao ler imagem.'));
-      img.src = e.target?.result as string;
-    };
-    reader.onerror = () => reject(new Error('Falha ao ler arquivo.'));
-    reader.readAsDataURL(file);
-  });
-};
 
 export default function RmaEntry({ products, units = [], onSaveTriage, onNavigateToStock }: RmaEntryProps) {
   // Select Base Product state & search query
@@ -126,11 +91,40 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
 
   // Fields of Analysis
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatusType>('Usado');
+  const [isCustomDeviceStatus, setIsCustomDeviceStatus] = useState(false);
+  const [customDeviceStatusText, setCustomDeviceStatusText] = useState('');
+
   const [packageStatus, setPackageStatus] = useState<PackageStatusType>('Danificada');
-  const [accessoriesInclusion, setAccessoriesInclusion] = useState('Todos os acessórios inclusos.');
+  const [isCustomPackageStatus, setIsCustomPackageStatus] = useState(false);
+  const [customPackageStatusText, setCustomPackageStatusText] = useState('');
+
+  const [accessoriesInclusion, setAccessoriesInclusion] = useState('');
 
   // Sector Destination
   const [destinationSector, setDestinationSector] = useState<DestinationSectorType>('Openbox');
+
+  // Helper to change destination sector and automatically standardize conditions
+  const handleSelectDestinationSector = (sector: DestinationSectorType) => {
+    setDestinationSector(sector);
+    setIsCustomDeviceStatus(false);
+    setCustomDeviceStatusText('');
+    setIsCustomPackageStatus(false);
+    setCustomPackageStatusText('');
+
+    if (sector === 'Principal') {
+      setDeviceStatus('Novo');
+      setPackageStatus('Perfeita');
+      setAccessoriesInclusion('Todos os acessórios inclusos.');
+    } else if (sector === 'Openbox') {
+      setDeviceStatus('Usado');
+      setPackageStatus('Danificada');
+      setAccessoriesInclusion('');
+    } else if (sector === 'RMA') {
+      setDeviceStatus('Danificado');
+      setPackageStatus('Danificada');
+      setAccessoriesInclusion('');
+    }
+  };
 
   // Photo categories state
   const [photosProduct, setPhotosProduct] = useState<string[]>([]);
@@ -140,6 +134,11 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
   // Active upload zone for Ctrl+V
   const [activeUploadCategory, setActiveUploadCategory] = useState<'product' | 'box' | 'accessories'>('product');
 
+  // URL Photo state
+  const [urlPhotoInput, setUrlPhotoInput] = useState('');
+  const [isSanitizingUrl, setIsSanitizingUrl] = useState(false);
+  const [urlPhotoError, setUrlPhotoError] = useState<string | null>(null);
+
   // Rich-text observations HTML state
   const [notes, setNotes] = useState('');
 
@@ -147,6 +146,34 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Handle URL photo addition with sanitization
+  const handleAddPhotoByUrl = async (category: 'product' | 'box' | 'accessories') => {
+    if (!urlPhotoInput.trim()) return;
+    const url = urlPhotoInput.trim();
+    setIsSanitizingUrl(true);
+    setUrlPhotoError(null);
+    setErrorMessage('');
+
+    try {
+      const sanitizedUrlOrBase64 = await processSafeImageUrl(url, 1200, 1000, 0.75);
+      if (category === 'product') {
+        setPhotosProduct(prev => [...prev, sanitizedUrlOrBase64]);
+      } else if (category === 'box') {
+        setPhotosBox(prev => [...prev, sanitizedUrlOrBase64]);
+      } else {
+        setPhotosAccessories(prev => [...prev, sanitizedUrlOrBase64]);
+      }
+      setUrlPhotoInput('');
+      const catLabel = category === 'product' ? 'Produto' : category === 'box' ? 'Embalagem' : 'Acessórios';
+      setSuccessMessage(`Foto via link desinfectada e adicionada para ${catLabel}!`);
+      setTimeout(() => setSuccessMessage(''), 2500);
+    } catch (err: any) {
+      setUrlPhotoError(err?.message || 'Erro ao validar imagem por link.');
+    } finally {
+      setIsSanitizingUrl(false);
+    }
+  };
 
   // Image upload handler
   const handlePhotoUpload = async (files: FileList | null, category: 'product' | 'box' | 'accessories') => {
@@ -342,16 +369,12 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
         return;
       }
     }
-    let finalTrackingCode = trackingCode.trim();
-    if (!finalTrackingCode) {
-      if (destinationSector === 'Openbox') {
-        finalTrackingCode = `STI-${Math.floor(10000 + Math.random() * 90000)}`;
-      } else if (destinationSector === 'Principal') {
-        finalTrackingCode = `PRIN-${Math.floor(10000 + Math.random() * 90000)}`;
-      } else {
-        finalTrackingCode = `RMA-${Math.floor(10000 + Math.random() * 90000)}`;
-      }
-    }
+    // Keep tracking code as entered by user, or blank if not provided (STI is exclusively for controlled openbox items)
+    const finalTrackingCode = trackingCode.trim();
+
+    // Determine final device status and package status (presets vs manual description)
+    const finalDeviceStatus = (isCustomDeviceStatus ? customDeviceStatusText.trim() : deviceStatus) || 'Usado';
+    const finalPackageStatus = (isCustomPackageStatus ? customPackageStatusText.trim() : packageStatus) || 'Danificada';
 
     const refProduct = products.find(p => p.id === selectedProductId) || products.find(
       p => p.sku.toLowerCase() === productSearchTerm.trim().toLowerCase() ||
@@ -392,8 +415,8 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       baseProductVoltage: refProduct.voltage,
       platform,
       customerReason: customerReason.trim(),
-      deviceStatus,
-      packageStatus,
+      deviceStatus: finalDeviceStatus,
+      packageStatus: finalPackageStatus,
       accessoriesInclusion: accessoriesInclusion.trim(),
       destinationSector,
       notes: notes, // HTML rich-text
@@ -412,7 +435,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       setSelectedProductId('');
       setProductSearchTerm('');
       setCustomerReason('');
-      setAccessoriesInclusion('Todos os acessórios inclusos.');
+      handleSelectDestinationSector('Openbox');
       setPhotosProduct([]);
       setPhotosBox([]);
       setPhotosAccessories([]);
@@ -532,7 +555,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   {/* Card 1: Estoque Principal */}
                   <button
                     type="button"
-                    onClick={() => setDestinationSector('Principal')}
+                    onClick={() => handleSelectDestinationSector('Principal')}
                     className={`py-2 px-3 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'Principal'
                         ? 'bg-emerald-500/15 border-emerald-500 shadow-sm shadow-emerald-500/10 ring-1 ring-emerald-500/40 text-emerald-300 font-bold'
@@ -549,7 +572,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   {/* Card 2: Openbox */}
                   <button
                     type="button"
-                    onClick={() => setDestinationSector('Openbox')}
+                    onClick={() => handleSelectDestinationSector('Openbox')}
                     className={`py-2 px-3 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'Openbox'
                         ? 'bg-amber-500/15 border-amber-500 shadow-sm shadow-amber-500/10 ring-1 ring-amber-500/40 text-amber-300 font-bold'
@@ -566,7 +589,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   {/* Card 3: RMA */}
                   <button
                     type="button"
-                    onClick={() => setDestinationSector('RMA')}
+                    onClick={() => handleSelectDestinationSector('RMA')}
                     className={`py-2 px-3 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'RMA'
                         ? 'bg-rose-500/15 border-rose-500 shadow-sm shadow-rose-500/10 ring-1 ring-rose-500/40 text-rose-300 font-bold'
@@ -756,6 +779,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                       <option value="Mercado Livre">Mercado Livre</option>
                       <option value="Shopee">Shopee</option>
                       <option value="Amazon">Amazon</option>
+                      <option value="Amazon Ta Novo">Amazon Ta Novo</option>
                       <option value="Kabum">Kabum</option>
                     </select>
                   </div>
@@ -840,14 +864,38 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Estado do Aparelho</label>
                     <select 
                       value={deviceStatus}
-                      onChange={(e) => setDeviceStatus(e.target.value as DeviceStatusType)}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none"
+                      onChange={(e) => {
+                        const val = e.target.value as DeviceStatusType;
+                        setDeviceStatus(val);
+                        if (val === 'Descrever') {
+                          setIsCustomDeviceStatus(true);
+                        } else {
+                          setIsCustomDeviceStatus(false);
+                          setCustomDeviceStatusText('');
+                        }
+                      }}
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
                       id="select-device-status"
                     >
                       <option value="Novo">Novo (Sem marcas de uso)</option>
                       <option value="Usado">Usado (Marcas normais / leves)</option>
                       <option value="Danificado">Danificado / Quebrado</option>
+                      <option value="Descrever">Descrever</option>
                     </select>
+                    
+                    {(deviceStatus === 'Descrever' || isCustomDeviceStatus) && (
+                      <div className="space-y-1 pt-1 animate-in fade-in duration-200">
+                        <input 
+                          type="text"
+                          placeholder="Descreva o estado do aparelho (ex: Riscado na tampa, botão travado...)"
+                          value={customDeviceStatusText}
+                          onChange={(e) => setCustomDeviceStatusText(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-950 border border-sky-500/50 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400"
+                          id="input-custom-device-status"
+                          autoFocus
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Packaging Status */}
@@ -855,14 +903,38 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Estado da Caixa/Embalagem</label>
                     <select 
                       value={packageStatus}
-                      onChange={(e) => setPackageStatus(e.target.value as PackageStatusType)}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none"
+                      onChange={(e) => {
+                        const val = e.target.value as PackageStatusType;
+                        setPackageStatus(val);
+                        if (val === 'Descrever') {
+                          setIsCustomPackageStatus(true);
+                        } else {
+                          setIsCustomPackageStatus(false);
+                          setCustomPackageStatusText('');
+                        }
+                      }}
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
                       id="select-package-status"
                     >
                       <option value="Perfeita">Perfeita / Intacta</option>
                       <option value="Danificada">Caixa danificada / amassada</option>
                       <option value="Sem Embalagem">Sem caixa de varejo original</option>
+                      <option value="Descrever">Descrever</option>
                     </select>
+
+                    {(packageStatus === 'Descrever' || isCustomPackageStatus) && (
+                      <div className="space-y-1 pt-1 animate-in fade-in duration-200">
+                        <input 
+                          type="text"
+                          placeholder="Descreva o estado da caixa (ex: Caixa parda rasgada, sem berço...)"
+                          value={customPackageStatusText}
+                          onChange={(e) => setCustomPackageStatusText(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-950 border border-sky-500/50 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400"
+                          id="input-custom-package-status"
+                          autoFocus
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1050,22 +1122,77 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                     onClick={() => setActiveUploadCategory('product')}
                     className={`py-2 rounded-lg font-bold cursor-pointer transition-all ${activeUploadCategory === 'product' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/10' : 'hover:bg-slate-850 hover:text-white text-slate-405'}`}
                   >
-                    Produto
+                    Produto ({photosProduct.length})
                   </button>
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('box')}
                     className={`py-2 rounded-lg font-bold cursor-pointer transition-all ${activeUploadCategory === 'box' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/10' : 'hover:bg-slate-850 hover:text-white text-slate-405'}`}
                   >
-                    Caixa
+                    Caixa ({photosBox.length})
                   </button>
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('accessories')}
                     className={`py-2 rounded-lg font-bold cursor-pointer transition-all ${activeUploadCategory === 'accessories' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/10' : 'hover:bg-slate-850 hover:text-white text-slate-405'}`}
                   >
-                    Acessórios
+                    Acessórios ({photosAccessories.length})
                   </button>
+                </div>
+
+                {/* Inserir Foto por Link (URL) com Sanitização */}
+                <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-300 font-medium flex items-center gap-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Inserir foto de {activeUploadCategory === 'product' ? 'Produto' : activeUploadCategory === 'box' ? 'Caixa' : 'Acessórios'} via Link (URL):</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      Sanitização Ativa
+                    </span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={urlPhotoInput}
+                      onChange={(e) => { setUrlPhotoInput(e.target.value); setUrlPhotoError(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddPhotoByUrl(activeUploadCategory);
+                        }
+                      }}
+                      placeholder="https://exemplo.com/foto-produto.jpg"
+                      className="flex-1 px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:text-slate-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddPhotoByUrl(activeUploadCategory)}
+                      disabled={isSanitizingUrl || !urlPhotoInput.trim()}
+                      className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+                    >
+                      {isSanitizingUrl ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Sanitizando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Adicionar Link</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {urlPhotoError && (
+                    <div className="flex items-center gap-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1.5 rounded-lg">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{urlPhotoError}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Category 1: Photos of Product */}
@@ -1106,7 +1233,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                       type="file" 
                       id="file-upload-product" 
                       multiple 
-                      accept="image/*" 
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" 
                       onChange={(e) => handlePhotoUpload(e.target.files, 'product')} 
                       className="hidden" 
                     />
@@ -1169,7 +1296,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                       type="file" 
                       id="file-upload-box" 
                       multiple 
-                      accept="image/*" 
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" 
                       onChange={(e) => handlePhotoUpload(e.target.files, 'box')} 
                       className="hidden" 
                     />
@@ -1232,7 +1359,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                       type="file" 
                       id="file-upload-accessories" 
                       multiple 
-                      accept="image/*" 
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" 
                       onChange={(e) => handlePhotoUpload(e.target.files, 'accessories')} 
                       className="hidden" 
                     />

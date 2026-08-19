@@ -103,6 +103,30 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if isAdmin();
     }
+
+    // Coleção /_system_backups: Snapshots Online em Nuvem (Plano B Independente com suporte a Chunking).
+    // Permite criação de novos snapshots e fragmentos pelo sistema/usuários autenticados.
+    // BLINDAGEM DE SEGURANÇA: Proíbe estritamente alteração (update) e exclusão (delete) para garantir imutabilidade contra ataques!
+    match /_system_backups/{backupId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if false;
+      allow delete: if false;
+
+      // Subcoleção /chunks para fragmentos de backups grandes (> 1MB)
+      match /chunks/{chunkId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
+    // Coleção /_system_config: Configurações globais do sistema e agendamento de backups.
+    match /_system_config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
   }
 }
 

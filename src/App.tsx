@@ -57,6 +57,7 @@ import ProductMovements from './components/ProductMovements';
 import ResetDatabaseModal from './components/ResetDatabaseModal';
 import SettingsModal from './components/SettingsModal';
 import BackupModal from './components/BackupModal';
+import { checkAndRunScheduledBackups } from './lib/backupService';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'rma' | 'catalog' | 'stock' | 'logs' | 'movement'>('dashboard');
@@ -207,6 +208,33 @@ export default function App() {
       unsubscribeDailyInflows();
     };
   }, [user]);
+
+  // Auto-backup scheduler background runner
+  useEffect(() => {
+    if (!user) return;
+
+    const checkSchedule = async () => {
+      try {
+        await checkAndRunScheduledBackups({
+          email: user.email || undefined,
+          name: userName || user.displayName || undefined,
+          role: userRole || 'operator'
+        });
+      } catch (e) {
+        console.warn('Auto backup scheduler background tick error:', e);
+      }
+    };
+
+    // Initial check after 4 seconds of session start
+    const initTimer = setTimeout(checkSchedule, 4000);
+    // Recurring check every 45 seconds
+    const interval = setInterval(checkSchedule, 45000);
+
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(interval);
+    };
+  }, [user, userName, userRole]);
 
   // Daily Inflow actions
   const handleSaveDailyInflow = async (record: DailyInflowRecord) => {

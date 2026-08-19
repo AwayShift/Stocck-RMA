@@ -134,10 +134,10 @@ export default function ExcelImportModal({
         const destSector = determineSector(row.categoryOrSector || (matchedProduct ? matchedProduct.category : ''), selectedDefaultSector);
         const pkgStatus = determinePackageStatus(row.packaging);
 
-        // Keep explicit STI if provided, else generate unique clean identifier
+        // Keep explicit STI if provided, else leave blank (STI is exclusively for controlled openbox items)
         const stiCode = row.sti && row.sti.trim() !== '' 
           ? row.sti.trim() 
-          : `STI-${cleanSku || 'OB'}-${Math.floor(10000 + Math.random() * 90000)}`;
+          : '';
 
         return {
           id: `row-${idx}-${Date.now()}`,

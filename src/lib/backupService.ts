@@ -6,11 +6,15 @@
 import { 
   collection, 
   getDocs, 
+  getDoc,
+  setDoc,
+  deleteDoc,
   doc, 
   writeBatch,
   query,
   orderBy,
-  limit
+  limit,
+  onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { 
@@ -20,7 +24,10 @@ import {
   CaseTracking, 
   SystemBackupPayload, 
   SystemBackupMetadata,
-  BackupValidationResult 
+  BackupValidationResult,
+  CloudBackupRecord,
+  AutoBackupScheduleConfig,
+  BackupTriggerType
 } from '../types';
 import { createAuditLog } from './dbService';
 
@@ -28,9 +35,39 @@ const BACKUP_SCHEMA_VERSION = '1.2.0';
 const APP_IDENTIFIER = 'stocckrma-pro-flow';
 
 /**
+ * Max safe size per chunk in characters/bytes (~350 KB).
+ * Well below Firestore 1 MB per document hard limit.
+ */
+export const SNAPSHOT_CHUNK_SIZE = 350 * 1024;
+
+export const DEFAULT_AUTO_BACKUP_CONFIG: AutoBackupScheduleConfig = {
+  enabled: true,
+  hourly: {
+    enabled: false,
+    intervalHours: 2, // A cada 2 horas
+  },
+  endOfDay: {
+    enabled: true,
+    time: '18:00', // Final do expediente padrão
+  },
+  weekly: {
+    enabled: true,
+    dayOfWeek: 5, // Sexta-feira
+    time: '18:30',
+  },
+  monthly: {
+    enabled: true,
+    dayOfMonth: 1, // Todo dia 1
+    time: '19:00',
+  },
+  lastRun: {},
+  lastBackupStatus: 'Pronto para execuções programadas'
+};
+
+/**
  * Format date for friendly human reading in BR format
  */
-const formatBrDate = (date: Date): string => {
+export const formatBrDate = (date: Date): string => {
   const pad = (n: number) => String(n).padStart(2, '0');
   const day = pad(date.getDate());
   const month = pad(date.getMonth() + 1);
@@ -66,15 +103,38 @@ function chunkArray<T>(array: T[], size: number): T[][] {
 }
 
 /**
- * Export full Firestore database state to a secure JSON file downloaded on client PC
+ * Calculate SHA-256 cryptographic checksum for payload validation
  */
-export const generateAndDownloadBackup = async (userInfo?: {
+async function calculateSha256(text: string): Promise<string> {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (e) {
+    console.warn('Crypto subtle fallback:', e);
+  }
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return 'chk_' + Math.abs(hash).toString(16);
+}
+
+/**
+ * Extract live database payload
+ */
+async function fetchCurrentDatabasePayload(userInfo?: {
   email?: string;
   name?: string;
   role?: string;
 }): Promise<{
-  success: boolean;
-  filename: string;
+  payload: SystemBackupPayload;
   counts: {
     products: number;
     triageUnits: number;
@@ -82,11 +142,12 @@ export const generateAndDownloadBackup = async (userInfo?: {
     cases: number;
     logs: number;
   };
+  jsonContent: string;
   fileSizeFormatted: string;
-}> => {
+  sizeBytes: number;
+}> {
   const now = new Date();
 
-  // 1. Fetch live data from Firestore collections
   const [productsSnap, unitsSnap, inflowsSnap, casesSnap, logsSnap] = await Promise.all([
     getDocs(collection(db, 'products')),
     getDocs(collection(db, 'triage_units')),
@@ -109,10 +170,8 @@ export const generateAndDownloadBackup = async (userInfo?: {
     logs: logs.length
   };
 
-  // 2. Read local client preferences
   const enableSpreadsheetImport = localStorage.getItem('rmaflow_enable_spreadsheet_import') !== 'false';
 
-  // 3. Build structured backup payload
   const metadata: SystemBackupMetadata = {
     version: BACKUP_SCHEMA_VERSION,
     appName: 'StocckRMA Triagem & Estoque Pro',
@@ -127,7 +186,7 @@ export const generateAndDownloadBackup = async (userInfo?: {
     collectionsCount: counts
   };
 
-  const backupPayload: SystemBackupPayload = {
+  const payload: SystemBackupPayload = {
     metadata,
     data: {
       products,
@@ -141,18 +200,46 @@ export const generateAndDownloadBackup = async (userInfo?: {
     }
   };
 
-  // 4. Generate JSON string and Blob
-  const jsonContent = JSON.stringify(backupPayload, null, 2);
+  const jsonContent = JSON.stringify(payload, null, 2);
   const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
-  
-  // Calculate size in KB/MB
   const sizeBytes = blob.size;
   const fileSizeFormatted = sizeBytes > 1024 * 1024 
     ? `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`
     : `${(sizeBytes / 1024).toFixed(1)} KB`;
 
-  // 5. Trigger browser download
+  return {
+    payload,
+    counts,
+    jsonContent,
+    fileSizeFormatted,
+    sizeBytes
+  };
+}
+
+/**
+ * Trigger browser download for a local backup JSON file
+ */
+export const generateAndDownloadBackup = async (userInfo?: {
+  email?: string;
+  name?: string;
+  role?: string;
+}): Promise<{
+  success: boolean;
+  filename: string;
+  counts: {
+    products: number;
+    triageUnits: number;
+    dailyInflows: number;
+    cases: number;
+    logs: number;
+  };
+  fileSizeFormatted: string;
+}> => {
+  const now = new Date();
+  const { counts, jsonContent, fileSizeFormatted } = await fetchCurrentDatabasePayload(userInfo);
+
   const filename = `Backup_StocckRMA_${formatFilenameTimestamp(now)}.json`;
+  const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -162,16 +249,14 @@ export const generateAndDownloadBackup = async (userInfo?: {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 
-  // 6. Save last backup info to localStorage for instant UI display
   localStorage.setItem('stocckrma_last_backup_date', now.toISOString());
   localStorage.setItem('stocckrma_last_backup_filename', filename);
   localStorage.setItem('stocckrma_last_backup_stats', JSON.stringify(counts));
 
-  // 7. Record Corporate Audit Log
   try {
     await createAuditLog(
       'BACKUP_EXPORTED',
-      `Exportou cópia de segurança local (${filename}) com ${products.length} produtos, ${triageUnits.length} unidades em estoque e ${dailyInflows.length} registros de fluxo diário. Tamanho: ${fileSizeFormatted}.`
+      `Exportou cópia de segurança local (${filename}) com ${counts.products} produtos, ${counts.triageUnits} unidades em estoque e ${counts.dailyInflows} registros de fluxo diário. Tamanho: ${fileSizeFormatted}.`
     );
   } catch (logErr) {
     console.warn('Audit log recording error on backup export:', logErr);
@@ -183,6 +268,263 @@ export const generateAndDownloadBackup = async (userInfo?: {
     counts,
     fileSizeFormatted
   };
+};
+
+/**
+ * Fetch and reconstitute the full JSON payload for a CloudBackupRecord.
+ * Seamlessly supports single-document legacy backups and chunked subcollection payloads.
+ */
+export const fetchCloudSnapshotPayloadJson = async (snapshot: CloudBackupRecord): Promise<string> => {
+  // If payloadJson exists, is non-empty, and not marked as chunked
+  if (snapshot.payloadJson && snapshot.payloadJson.length > 20 && !snapshot.chunked) {
+    return snapshot.payloadJson;
+  }
+
+  // Otherwise, load ordered chunks from subcollection
+  try {
+    const chunksColRef = collection(db, '_system_backups', snapshot.id, 'chunks');
+    const q = query(chunksColRef, orderBy('index', 'asc'));
+    const snap = await getDocs(q);
+
+    if (!snap.empty) {
+      const parts: string[] = [];
+      snap.docs.forEach(d => {
+        const cData = d.data();
+        if (typeof cData.data === 'string') {
+          parts.push(cData.data);
+        }
+      });
+      const fullJson = parts.join('');
+      if (fullJson.length > 0) {
+        return fullJson;
+      }
+    }
+  } catch (err) {
+    console.error(`Error loading chunks for cloud snapshot ${snapshot.id}:`, err);
+    throw new Error(`Falha ao carregar os fragmentos do snapshot na nuvem: ${(err as any).message || err}`);
+  }
+
+  // Fallback to payloadJson if present
+  if (snapshot.payloadJson && snapshot.payloadJson.trim() !== '' && snapshot.payloadJson !== '{}') {
+    return snapshot.payloadJson;
+  }
+
+  throw new Error('O snapshot selecionado não contém conteúdo de dados válido ou seus fragmentos estão inacessíveis.');
+};
+
+/**
+ * Create a secure online cloud snapshot ("Plano B") stored in Firestore `_system_backups` collection
+ * Automatically chunks large payloads across subdocuments to strictly respect Firestore limits.
+ */
+export const createCloudSnapshot = async (
+  triggerType: BackupTriggerType = 'manual',
+  customTitle?: string,
+  userInfo?: {
+    email?: string;
+    name?: string;
+    role?: string;
+  }
+): Promise<{
+  success: boolean;
+  snapshot: CloudBackupRecord;
+}> => {
+  const now = new Date();
+  const { counts, jsonContent, fileSizeFormatted, sizeBytes } = await fetchCurrentDatabasePayload(userInfo);
+  const hash = await calculateSha256(jsonContent);
+
+  const triggerLabels: Record<BackupTriggerType, string> = {
+    manual: 'Manual (Sob Demanda)',
+    hourly: 'Agendado (Por Hora)',
+    end_of_day: 'Final do Expediente',
+    weekly: 'Agendado (Semanal)',
+    monthly: 'Agendado (Mensal)'
+  };
+
+  const defaultTitle = customTitle || (
+    triggerType === 'manual' 
+      ? `Snapshot Manual - ${formatFilenameTimestamp(now)}`
+      : `Backup Automático (${triggerLabels[triggerType]})`
+  );
+
+  const snapshotId = `bk_${now.getTime()}_${Math.random().toString(36).substring(2, 7)}`;
+  const snapshotDocRef = doc(db, '_system_backups', snapshotId);
+
+  // Determine if payload requires chunking (> 350 KB)
+  const isChunked = jsonContent.length > SNAPSHOT_CHUNK_SIZE;
+  const chunks: string[] = [];
+
+  if (isChunked) {
+    for (let i = 0; i < jsonContent.length; i += SNAPSHOT_CHUNK_SIZE) {
+      chunks.push(jsonContent.substring(i, i + SNAPSHOT_CHUNK_SIZE));
+    }
+  }
+
+  const snapshotRecord: CloudBackupRecord = {
+    id: snapshotId,
+    title: defaultTitle,
+    triggerType,
+    triggerLabel: triggerLabels[triggerType],
+    createdAt: now.toISOString(),
+    createdAtFormatted: formatBrDate(now),
+    createdBy: {
+      uid: auth.currentUser?.uid,
+      email: userInfo?.email || auth.currentUser?.email || 'sistema@stocckrma.local',
+      name: userInfo?.name || auth.currentUser?.displayName || (triggerType === 'manual' ? 'Operador' : 'Robô Automático')
+    },
+    collectionsCount: counts,
+    fileSizeBytes: sizeBytes,
+    fileSizeFormatted,
+    integrityHash: hash,
+    payloadJson: isChunked ? '' : jsonContent, // Keep main doc lightweight if chunked
+    chunked: isChunked,
+    totalChunks: isChunked ? chunks.length : 1,
+    status: 'active'
+  };
+
+  // 1. Save main metadata doc
+  await setDoc(snapshotDocRef, snapshotRecord);
+
+  // 2. If chunked, write fragments to subcollection
+  if (isChunked && chunks.length > 0) {
+    const chunkObjects = chunks.map((data, index) => ({ index, data, size: data.length }));
+    for (const chunkBatch of chunkArray(chunkObjects, 350)) {
+      const batch = writeBatch(db);
+      chunkBatch.forEach(c => {
+        const chunkDocRef = doc(db, '_system_backups', snapshotId, 'chunks', `chunk_${String(c.index).padStart(4, '0')}`);
+        batch.set(chunkDocRef, c);
+      });
+      await batch.commit();
+    }
+  }
+
+  // Save last backup markers locally
+  localStorage.setItem('stocckrma_last_cloud_backup_date', now.toISOString());
+  localStorage.setItem('stocckrma_last_cloud_backup_id', snapshotId);
+  localStorage.setItem('stocckrma_last_cloud_backup_stats', JSON.stringify(counts));
+
+  // Update schedule lastRun if applicable
+  if (triggerType !== 'manual') {
+    try {
+      const config = await loadAutoBackupConfig();
+      if (!config.lastRun) config.lastRun = {};
+      config.lastRun[triggerType] = now.toISOString();
+      config.lastBackupStatus = `Último backup em nuvem (${triggerLabels[triggerType]}) realizado com sucesso em ${formatBrDate(now)}`;
+      await saveAutoBackupConfig(config);
+    } catch (cfgErr) {
+      console.warn('Could not update auto backup config lastRun:', cfgErr);
+    }
+  }
+
+  try {
+    await createAuditLog(
+      'CLOUD_BACKUP_CREATED',
+      `Criou Snapshot Online de contingência (${defaultTitle}) [${triggerLabels[triggerType]}]. Total: ${counts.products} produtos base, ${counts.triageUnits} unidades físicas. Fragmentos: ${snapshotRecord.totalChunks || 1}. Hash SHA-256: ${hash.substring(0, 12)}...`
+    );
+  } catch (logErr) {
+    console.warn('Audit log error on cloud backup create:', logErr);
+  }
+
+  return {
+    success: true,
+    snapshot: snapshotRecord
+  };
+};
+
+/**
+ * Real-time subscription to cloud backups list
+ */
+export const subscribeToCloudBackups = (
+  callback: (backups: CloudBackupRecord[]) => void
+) => {
+  const backupsColRef = collection(db, '_system_backups');
+  const q = query(backupsColRef, orderBy('createdAt', 'desc'), limit(60));
+
+  return onSnapshot(q, (snapshot) => {
+    const list: CloudBackupRecord[] = snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        title: data.title || 'Ponto de Restauração Online',
+        triggerType: data.triggerType || 'manual',
+        triggerLabel: data.triggerLabel || 'Manual',
+        createdAt: data.createdAt || '',
+        createdAtFormatted: data.createdAtFormatted || '',
+        createdBy: data.createdBy || { name: 'Sistema' },
+        collectionsCount: data.collectionsCount || { products: 0, triageUnits: 0, dailyInflows: 0, cases: 0, logs: 0 },
+        fileSizeBytes: data.fileSizeBytes || 0,
+        fileSizeFormatted: data.fileSizeFormatted || '0 KB',
+        integrityHash: data.integrityHash || '',
+        payloadJson: data.payloadJson || '',
+        chunked: Boolean(data.chunked),
+        totalChunks: data.totalChunks || 1,
+        status: data.status || 'active'
+      };
+    });
+    callback(list);
+  }, (err) => {
+    console.error('Error subscribing to _system_backups collection:', err);
+  });
+};
+
+/**
+ * Load Auto-Backup schedule settings from Firestore/LocalStorage
+ */
+export const loadAutoBackupConfig = async (): Promise<AutoBackupScheduleConfig> => {
+  try {
+    const configDocRef = doc(db, '_system_config', 'backup_schedule');
+    const snap = await getDoc(configDocRef);
+    if (snap.exists()) {
+      const remoteConfig = snap.data() as AutoBackupScheduleConfig;
+      localStorage.setItem('stocckrma_auto_backup_config', JSON.stringify(remoteConfig));
+      return { ...DEFAULT_AUTO_BACKUP_CONFIG, ...remoteConfig };
+    }
+  } catch (e) {
+    console.warn('Could not read remote backup config from Firestore:', e);
+  }
+
+  const localSaved = localStorage.getItem('stocckrma_auto_backup_config');
+  if (localSaved) {
+    try {
+      return { ...DEFAULT_AUTO_BACKUP_CONFIG, ...JSON.parse(localSaved) };
+    } catch (e) {
+      console.warn('Error parsing local auto backup config:', e);
+    }
+  }
+
+  return DEFAULT_AUTO_BACKUP_CONFIG;
+};
+
+/**
+ * Save Auto-Backup schedule settings to Firestore & LocalStorage
+ */
+export const saveAutoBackupConfig = async (
+  config: AutoBackupScheduleConfig
+): Promise<void> => {
+  localStorage.setItem('stocckrma_auto_backup_config', JSON.stringify(config));
+  try {
+    const configDocRef = doc(db, '_system_config', 'backup_schedule');
+    await setDoc(configDocRef, config, { merge: true });
+  } catch (e) {
+    console.warn('Could not save auto backup config to Firestore:', e);
+  }
+};
+
+/**
+ * Download a specific CloudBackupRecord as a JSON file to local computer
+ * Loads full content even if chunked across subcollections
+ */
+export const downloadCloudSnapshotAsJson = async (snapshot: CloudBackupRecord) => {
+  const jsonContent = await fetchCloudSnapshotPayloadJson(snapshot);
+  const filename = `Backup_Nuvem_${snapshot.id}_${formatFilenameTimestamp(new Date(snapshot.createdAt))}.json`;
+  const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 
 /**
@@ -209,13 +551,11 @@ export const validateBackupFile = (
     };
   }
 
-  // Check if it's a standard SystemBackupPayload
   let payload: SystemBackupPayload;
 
   if (parsed.metadata && parsed.data) {
     payload = parsed as SystemBackupPayload;
   } else if (Array.isArray(parsed.products) || Array.isArray(parsed.triageUnits)) {
-    // Graceful backward compatibility with direct data exports
     payload = {
       metadata: {
         version: '1.0.0 (legado)',
@@ -422,4 +762,118 @@ export const restoreDatabaseFromBackup = async (
       cases: cases.length
     }
   };
+};
+
+/**
+ * Restore from a specific CloudBackupRecord
+ */
+export const restoreFromCloudSnapshot = async (
+  snapshot: CloudBackupRecord,
+  mode: 'replace' | 'merge' = 'replace',
+  onProgress?: (stage: string, percent: number) => void
+) => {
+  onProgress?.('Carregando e integrando fragmentos do backup da nuvem...', 5);
+  const jsonContent = await fetchCloudSnapshotPayloadJson(snapshot);
+  const parsedPayload = JSON.parse(jsonContent) as SystemBackupPayload;
+  return await restoreDatabaseFromBackup(parsedPayload, mode, onProgress);
+};
+
+/**
+ * Intelligent background schedule engine
+ * Evaluates if hourly, end of day, weekly, or monthly triggers are due.
+ */
+export const checkAndRunScheduledBackups = async (userInfo?: {
+  email?: string;
+  name?: string;
+  role?: string;
+}): Promise<{
+  triggered: boolean;
+  type?: BackupTriggerType;
+  snapshotId?: string;
+}> => {
+  const config = await loadAutoBackupConfig();
+  if (!config.enabled) {
+    return { triggered: false };
+  }
+
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const currentDayOfWeek = now.getDay(); // 0-6
+  const currentDayOfMonth = now.getDate(); // 1-31
+  const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const lastRun = config.lastRun || {};
+
+  // Concurrency Guard: Mutex in localStorage to avoid multiple tabs running simultaneously
+  const mutexKey = 'stocckrma_backup_exec_mutex';
+  const mutexVal = localStorage.getItem(mutexKey);
+  if (mutexVal && Date.now() - parseInt(mutexVal, 10) < 60000) {
+    return { triggered: false };
+  }
+
+  // 1. Check Hourly Trigger
+  if (config.hourly.enabled && config.hourly.intervalHours > 0) {
+    const lastHourly = lastRun.hourly ? new Date(lastRun.hourly) : null;
+    const hoursDiff = lastHourly ? (now.getTime() - lastHourly.getTime()) / (1000 * 60 * 60) : Infinity;
+    
+    if (hoursDiff >= config.hourly.intervalHours) {
+      localStorage.setItem(mutexKey, String(Date.now()));
+      const res = await createCloudSnapshot('hourly', undefined, userInfo);
+      return { triggered: true, type: 'hourly', snapshotId: res.snapshot.id };
+    }
+  }
+
+  // 2. Check End of Day Trigger (e.g. 18:00)
+  if (config.endOfDay.enabled && config.endOfDay.time) {
+    const [eodHourStr, eodMinStr] = config.endOfDay.time.split(':');
+    const eodHour = parseInt(eodHourStr || '18', 10);
+    const eodMin = parseInt(eodMinStr || '0', 10);
+
+    const isAfterTarget = currentHour > eodHour || (currentHour === eodHour && currentMinute >= eodMin);
+    const lastEodDate = lastRun.endOfDay ? lastRun.endOfDay.split('T')[0] : null;
+
+    if (isAfterTarget && lastEodDate !== todayYmd) {
+      localStorage.setItem(mutexKey, String(Date.now()));
+      const res = await createCloudSnapshot('end_of_day', undefined, userInfo);
+      return { triggered: true, type: 'end_of_day', snapshotId: res.snapshot.id };
+    }
+  }
+
+  // 3. Check Weekly Trigger (e.g. Friday 18:30)
+  if (config.weekly.enabled) {
+    const [wkHourStr, wkMinStr] = config.weekly.time.split(':');
+    const wkHour = parseInt(wkHourStr || '18', 10);
+    const wkMin = parseInt(wkMinStr || '30', 10);
+
+    const isTargetDay = currentDayOfWeek === config.weekly.dayOfWeek;
+    const isAfterTime = currentHour > wkHour || (currentHour === wkHour && currentMinute >= wkMin);
+    const lastWkDate = lastRun.weekly ? lastRun.weekly.split('T')[0] : null;
+
+    if (isTargetDay && isAfterTime && lastWkDate !== todayYmd) {
+      localStorage.setItem(mutexKey, String(Date.now()));
+      const res = await createCloudSnapshot('weekly', undefined, userInfo);
+      return { triggered: true, type: 'weekly', snapshotId: res.snapshot.id };
+    }
+  }
+
+  // 4. Check Monthly Trigger (e.g. Day 1 19:00)
+  if (config.monthly.enabled) {
+    const [moHourStr, moMinStr] = config.monthly.time.split(':');
+    const moHour = parseInt(moHourStr || '19', 10);
+    const moMin = parseInt(moMinStr || '0', 10);
+
+    const isTargetDay = currentDayOfMonth === config.monthly.dayOfMonth;
+    const isAfterTime = currentHour > moHour || (currentHour === moHour && currentMinute >= moMin);
+    const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const lastMoMonth = lastRun.monthly ? lastRun.monthly.substring(0, 7) : null;
+
+    if (isTargetDay && isAfterTime && lastMoMonth !== currentMonthPrefix) {
+      localStorage.setItem(mutexKey, String(Date.now()));
+      const res = await createCloudSnapshot('monthly', undefined, userInfo);
+      return { triggered: true, type: 'monthly', snapshotId: res.snapshot.id };
+    }
+  }
+
+  return { triggered: false };
 };

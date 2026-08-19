@@ -19,10 +19,10 @@ export interface BaseProduct {
   category?: string;
 }
 
-export type PlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Kabum';
-export type CasePlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon';
-export type DeviceStatusType = 'Novo' | 'Usado' | 'Danificado';
-export type PackageStatusType = 'Perfeita' | 'Danificada' | 'Sem Embalagem';
+export type PlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Amazon Ta Novo' | 'Kabum';
+export type CasePlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Amazon Ta Novo';
+export type DeviceStatusType = 'Novo' | 'Usado' | 'Danificado' | string;
+export type PackageStatusType = 'Perfeita' | 'Danificada' | 'Sem Embalagem' | string;
 export type DestinationSectorType = 'Principal' | 'Openbox' | 'RMA';
 
 export interface CaseTracking {
@@ -168,6 +168,66 @@ export interface SystemBackupMetadata {
   };
 }
 
+export type BackupTriggerType = 'manual' | 'hourly' | 'end_of_day' | 'weekly' | 'monthly';
+
+export interface CloudBackupRecord {
+  id: string;
+  title: string;
+  triggerType: BackupTriggerType;
+  triggerLabel: string;
+  createdAt: string; // ISO
+  createdAtFormatted: string;
+  createdBy: {
+    uid?: string;
+    email?: string;
+    name?: string;
+  };
+  collectionsCount: {
+    products: number;
+    triageUnits: number;
+    dailyInflows: number;
+    cases: number;
+    logs: number;
+  };
+  fileSizeBytes: number;
+  fileSizeFormatted: string;
+  integrityHash: string;
+  payloadJson?: string; // Serialized JSON string of SystemBackupPayload (for single doc backups or legacy)
+  chunked?: boolean; // Whether payload is stored in subcollection /chunks
+  totalChunks?: number; // Total number of chunk parts
+  status?: 'active' | 'archived';
+}
+
+export interface AutoBackupScheduleConfig {
+  enabled: boolean;
+  hourly: {
+    enabled: boolean;
+    intervalHours: number; // 1, 2, 4, 6, 8, 12
+  };
+  endOfDay: {
+    enabled: boolean;
+    time: string; // "18:00"
+  };
+  weekly: {
+    enabled: boolean;
+    dayOfWeek: number; // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+    time: string; // "18:30"
+  };
+  monthly: {
+    enabled: boolean;
+    dayOfMonth: number; // 1 to 31
+    time: string; // "19:00"
+  };
+  lastRun?: {
+    hourly?: string;
+    endOfDay?: string;
+    weekly?: string;
+    monthly?: string;
+    manual?: string;
+  };
+  lastBackupStatus?: string;
+}
+
 export interface SystemBackupPayload {
   metadata: SystemBackupMetadata;
   data: {
@@ -179,6 +239,7 @@ export interface SystemBackupPayload {
   };
   settings?: {
     enableSpreadsheetImport?: boolean;
+    autoBackupSchedule?: AutoBackupScheduleConfig;
     [key: string]: any;
   };
 }

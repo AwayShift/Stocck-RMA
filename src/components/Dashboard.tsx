@@ -9,7 +9,6 @@ import {
   Package, 
   Sparkles, 
   AlertTriangle, 
-  RefreshCw, 
   ArrowRight, 
   Calendar, 
   ShoppingCart, 
@@ -23,10 +22,10 @@ interface DashboardProps {
   products?: BaseProduct[];
   onViewUnit: (unit: TriageUnit) => void;
   onNavigateToStock: () => void;
-  onResetData: () => void;
+  onResetData?: () => void;
 }
 
-export default function Dashboard({ units, products = [], onViewUnit, onNavigateToStock, onResetData }: DashboardProps) {
+export default function Dashboard({ units, products = [], onViewUnit, onNavigateToStock }: DashboardProps) {
   // Filter for today's units (based on local timezone, excluding migration imports)
   const todayUnits = units.filter(u => {
     try {
@@ -76,7 +75,7 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
     return acc;
   }, {} as Record<PlatformType, number>);
 
-  const platforms: PlatformType[] = ['Mercado Livre', 'Shopee', 'Amazon', 'Kabum'];
+  const platforms: PlatformType[] = ['Mercado Livre', 'Shopee', 'Amazon', 'Amazon Ta Novo', 'Kabum'];
 
   // Platform colors & logos styling
   const getPlatformStyle = (p: PlatformType) => {
@@ -84,6 +83,14 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
       case 'Mercado Livre': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/30', barBg: 'bg-yellow-400', dotBg: 'bg-yellow-400' };
       case 'Shopee': return { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30', barBg: 'bg-orange-400', dotBg: 'bg-orange-400' };
       case 'Amazon': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30', barBg: 'bg-blue-400', dotBg: 'bg-blue-400' };
+      case 'Amazon Ta Novo': return { 
+        bg: 'bg-[#05621a]/20', 
+        text: 'text-emerald-300', 
+        border: 'border-[#05621a]/80', 
+        barBg: 'bg-[#05621a]', 
+        dotBg: 'bg-[#05621a]',
+        customColor: 'rgba(5, 98, 26, 0.8)'
+      };
       case 'Kabum': return { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/30', barBg: 'bg-indigo-400', dotBg: 'bg-indigo-400' };
       default: return { bg: 'bg-zinc-500/10', text: 'text-zinc-400', border: 'border-zinc-500/30', barBg: 'bg-zinc-400', dotBg: 'bg-zinc-400' };
     }
@@ -103,16 +110,7 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button 
-            onClick={onResetData} 
-            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-lg text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-            title="Restaura banco de dados para os dados padrão simulados"
-            id="btn-reset-db"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
-            Resetar Banco de Dados
-          </button>
-          <div className="flex items-center gap-2 px-3 py-2 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300">
+          <div className="flex items-center gap-2 px-3.5 py-2 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 shadow-inner">
             <Calendar className="w-4 h-4 text-sky-400" />
             <span>{getFormattedLocalDate()}</span>
           </div>
@@ -234,10 +232,11 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
                     <div 
                       key={unit.id}
                       onClick={() => onViewUnit(unit)}
+                      title={`Produto: ${unit.baseProductName}\nSKU: ${unit.baseProductSku}${unit.customerReason ? `\nMotivo: ${unit.customerReason}` : ''}`}
                       className="group flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-4 bg-slate-950 border border-slate-800/80 rounded-xl hover:border-slate-700 hover:bg-slate-900/50 transition-all cursor-pointer"
                       id={`activity-item-${unit.id}`}
                     >
-                      <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <div className="flex items-center gap-3.5 flex-1 min-w-0 w-full sm:w-auto">
                         {/* Thumbnail of product photo or placeholder */}
                         <div className="w-12 h-12 rounded-lg bg-slate-900 border border-slate-800 flex-shrink-0 overflow-hidden flex items-center justify-center">
                           {mainPhoto ? (
@@ -246,30 +245,38 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
                             <Package className="w-6 h-6 text-slate-500" />
                           )}
                         </div>
-                        <div className="min-w-0">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded">
                               {unit.baseProductSku}
                             </span>
-                            <span className="font-mono text-xs text-slate-400">
-                              #{unit.trackingCode}
-                            </span>
+                            {unit.trackingCode && unit.trackingCode.trim() !== '' && (
+                              <span className="font-mono text-xs text-slate-400">
+                                #{unit.trackingCode.replace(/^#/, '')}
+                              </span>
+                            )}
                             {unit.serialNumber && (
                               <span className="font-mono text-xs text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">
                                 S/N: {unit.serialNumber}
                               </span>
                             )}
                           </div>
-                          <h4 className="text-sm font-semibold text-white mt-1 truncate max-w-[200px] sm:max-w-[280px]">
+                          <h4 
+                            title={unit.baseProductName} 
+                            className="text-sm font-semibold text-white mt-1 truncate w-full group-hover:text-sky-300 transition-colors"
+                          >
                             {unit.baseProductName}
                           </h4>
-                          <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-[280px] mt-0.5">
+                          <p 
+                            title={unit.customerReason} 
+                            className="text-xs text-slate-400 truncate w-full mt-0.5"
+                          >
                             Motivo: {unit.customerReason}
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end shrink-0 sm:pl-3 flex-wrap">
                         {unit.destinationSector !== 'Openbox' && (
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle.bg} ${pStyle.text} ${pStyle.border}`}>
                             {unit.platform}

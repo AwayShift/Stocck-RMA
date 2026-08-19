@@ -24,12 +24,17 @@ import {
   Download,
   ChevronDown,
   LayoutGrid,
-  List
+  List,
+  Link as LinkIcon,
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 import { BaseProduct } from '../types';
 import { uploadFileToStorage, saveBatchBaseProducts } from '../lib/dbService';
+import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { RichTextEditor } from './RichTextEditor';
 import ExcelBaseCatalogImportModal from './ExcelBaseCatalogImportModal';
+import { ImageZoomModal } from './ImageZoomModal';
 import { exportBaseCatalogToExcel } from '../utils/excelHelpers';
 
 interface BaseCatalogProps {
@@ -114,6 +119,11 @@ export default function BaseCatalog({
   const [isUploading, setIsUploading] = useState(false);
   const [isPasteFocused, setIsPasteFocused] = useState(false);
 
+  // URL Image Import State
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [isAddingUrl, setIsAddingUrl] = useState(false);
+  const [urlInputError, setUrlInputError] = useState<string | null>(null);
+
   // Image upload handler
   const handleImagesUpload = async (files: FileList | File[] | null) => {
     if (!files) return;
@@ -132,13 +142,44 @@ export default function BaseCatalog({
         setImagesAccessories(prev => [...prev, ...urls]);
       }
       setImages(prev => [...prev, ...urls]);
-      setSuccessMessage('Fotos enviadas com sucesso!');
-      setTimeout(() => setSuccessMessage(''), 2000);
-    } catch (err) {
-      setErrorMessage('Erro ao realizar upload das fotos.');
+      setSuccessMessage('Fotos enviadas e sanitizadas com sucesso!');
+      setTimeout(() => setSuccessMessage(''), 2500);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao realizar upload das fotos.');
       console.error(err);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  // Handle Add Image by URL (with Magic Bytes, Scheme and Canvas Sanitization)
+  const handleAddImageByUrl = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!imageUrlInput.trim()) return;
+
+    setIsAddingUrl(true);
+    setUrlInputError(null);
+    setErrorMessage('');
+
+    try {
+      const sanitizedUrlOrBase64 = await processSafeImageUrl(imageUrlInput.trim(), 1200, 1000, 0.75);
+      const currentCategory = activeUploadCategoryRef.current;
+      
+      if (currentCategory === 'product') {
+        setImagesProduct(prev => [...prev, sanitizedUrlOrBase64]);
+      } else if (currentCategory === 'box') {
+        setImagesBox(prev => [...prev, sanitizedUrlOrBase64]);
+      } else if (currentCategory === 'accessories') {
+        setImagesAccessories(prev => [...prev, sanitizedUrlOrBase64]);
+      }
+      setImages(prev => [...prev, sanitizedUrlOrBase64]);
+      setImageUrlInput('');
+      setSuccessMessage('Imagem por link importada e desinfectada com sucesso!');
+      setTimeout(() => setSuccessMessage(''), 2500);
+    } catch (err: any) {
+      setUrlInputError(err?.message || 'Erro ao validar ou carregar imagem do link.');
+    } finally {
+      setIsAddingUrl(false);
     }
   };
 
@@ -222,6 +263,8 @@ export default function BaseCatalog({
     setImagesBox([]);
     setImagesAccessories([]);
     setActiveUploadCategory('product');
+    setImageUrlInput('');
+    setUrlInputError(null);
     setAccessories('');
     setErrorMessage('');
     setSuccessMessage('');
@@ -245,6 +288,8 @@ export default function BaseCatalog({
     setImagesBox(p.imagesBox || []);
     setImagesAccessories(p.imagesAccessories || []);
     setActiveUploadCategory('product');
+    setImageUrlInput('');
+    setUrlInputError(null);
     
     setAccessories(p.accessories || '');
     setErrorMessage('');
@@ -1175,13 +1220,29 @@ export default function BaseCatalog({
 
               {/* Anexos e Imagens Section */}
               <div className="space-y-3 pt-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-300">Anexos e Imagens por Setor</span>
+                <div className="flex flex-wrap justify-between items-center gap-2">
+                  <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <span>Anexos e Imagens por Setor</span>
+                    <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      <ShieldCheck className="w-3 h-3" />
+                      Sanitização Ativa
+                    </span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('catalog-images-picker')?.click()}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Upload do PC</span>
+                  </button>
+
                   <input 
                     type="file"
                     id="catalog-images-picker"
                     multiple
-                    accept="image/*"
+                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                     onChange={(e) => handleImagesUpload(e.target.files)}
                     className="hidden"
                   />
@@ -1212,6 +1273,59 @@ export default function BaseCatalog({
                   </button>
                 </div>
 
+                {/* Link/URL Input for Active Category */}
+                <div className="p-3 bg-[#0a111c] border border-slate-800 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400 font-medium flex items-center gap-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Inserir foto de {activeUploadCategory === 'product' ? 'Produto' : activeUploadCategory === 'box' ? 'Embalagem' : 'Acessórios'} via Link (URL):</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500">JPG, PNG, WEBP (HTTPS)</span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={imageUrlInput}
+                      onChange={(e) => { setImageUrlInput(e.target.value); setUrlInputError(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddImageByUrl();
+                        }
+                      }}
+                      placeholder="https://exemplo.com/imagem-produto.jpg"
+                      className="flex-1 px-3.5 py-2 bg-[#0b1321] border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:text-slate-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddImageByUrl()}
+                      disabled={isAddingUrl || !imageUrlInput.trim()}
+                      className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+                    >
+                      {isAddingUrl ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Sanitizando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Adicionar Link</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {urlInputError && (
+                    <div className="flex items-center gap-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1.5 rounded-lg">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{urlInputError}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Dropzone & Paste Area */}
                 <div 
                   tabIndex={0}
                   className={`border border-dashed rounded-xl p-4 bg-[#0a111c] transition-all flex flex-col items-center justify-center min-h-[100px] outline-none cursor-pointer select-none ${
@@ -1534,126 +1648,20 @@ export default function BaseCatalog({
       )}
 
       {/* Interactive Image Zoom Lightbox Overlay */}
-      {zoomedImage && (
-        <div 
-          className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-md flex flex-col items-center justify-between p-4 select-none animate-in fade-in duration-200"
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setZoomedImage(null);
-          }}
-          tabIndex={0}
-          id="image-zoom-lightbox"
-        >
-          {/* Top Bar with Title and Close button */}
-          <div className="w-full flex justify-between items-center px-4 py-2 z-10 bg-gradient-to-b from-black/65 to-transparent">
-            <span className="text-slate-400 text-xs font-mono">Zoom Interativo &bull; Use os botões, clique e arraste ou role o mouse</span>
-            <button 
-              onClick={() => setZoomedImage(null)}
-              className="p-2 bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white rounded-full border border-slate-800 transition-all cursor-pointer"
-              title="Fechar Zoom"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Interactive Zoom Stage */}
-          <div 
-            className="w-full flex-1 flex items-center justify-center overflow-hidden relative cursor-grab active:cursor-grabbing"
-            onWheel={(e) => {
-              const zoomFactor = 0.15;
-              const newScale = e.deltaY < 0 
-                ? Math.min(zoomScale + zoomFactor, 6) 
-                : Math.max(zoomScale - zoomFactor, 1);
-              setZoomScale(newScale);
-              if (newScale === 1) {
-                setZoomPosition({ x: 0, y: 0 });
-              }
-            }}
-            onMouseDown={(e) => {
-              if (zoomScale <= 1) return;
-              e.preventDefault();
-              setIsZoomDragging(true);
-              setZoomDragStart({ x: e.clientX - zoomPosition.x, y: e.clientY - zoomPosition.y });
-            }}
-            onMouseMove={(e) => {
-              if (!isZoomDragging) return;
-              e.preventDefault();
-              setZoomPosition({
-                x: e.clientX - zoomDragStart.x,
-                y: e.clientY - zoomDragStart.y
-              });
-            }}
-            onMouseUp={() => setIsZoomDragging(false)}
-            onMouseLeave={() => setIsZoomDragging(false)}
-            onDoubleClick={() => {
-              if (zoomScale > 1) {
-                setZoomScale(1);
-                setZoomPosition({ x: 0, y: 0 });
-              } else {
-                setZoomScale(2);
-              }
-            }}
-          >
-            <div 
-              style={{
-                transform: `translate(${zoomPosition.x}px, ${zoomPosition.y}px) scale(${zoomScale})`,
-                transition: isZoomDragging ? 'none' : 'transform 0.15s ease-out'
-              }}
-              className="max-w-[90vw] max-h-[75vh] flex items-center justify-center pointer-events-none"
-            >
-              <img 
-                src={zoomedImage} 
-                alt="Zoomed Product" 
-                className="max-w-full max-h-[75vh] object-contain rounded shadow-2xl"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          </div>
-
-          {/* Bottom Floating Controls */}
-          <div className="flex items-center gap-3 bg-slate-900/90 border border-slate-800 px-5 py-3 rounded-full shadow-2xl backdrop-blur-md mb-4 z-10">
-            <button 
-              onClick={() => {
-                setZoomScale(prev => Math.max(prev - 0.5, 1));
-                if (zoomScale <= 1.5) {
-                  setZoomPosition({ x: 0, y: 0 });
-                }
-              }}
-              disabled={zoomScale <= 1}
-              className={`p-2 rounded-full transition-all border border-slate-800 text-slate-400 hover:text-white ${zoomScale <= 1 ? 'opacity-40 cursor-not-allowed bg-slate-950/20' : 'bg-slate-950 hover:bg-slate-850 cursor-pointer'}`}
-              title="Afastar (-)"
-            >
-              <ZoomOut className="w-5 h-5" />
-            </button>
-            
-            <div className="text-white font-mono text-xs font-bold w-16 text-center">
-              {zoomScale.toFixed(1)}x
-            </div>
-
-            <button 
-              onClick={() => setZoomScale(prev => Math.min(prev + 0.5, 6))}
-              disabled={zoomScale >= 6}
-              className={`p-2 rounded-full transition-all border border-slate-800 text-slate-400 hover:text-white ${zoomScale >= 6 ? 'opacity-40 cursor-not-allowed bg-slate-950/20' : 'bg-slate-950 hover:bg-slate-850 cursor-pointer'}`}
-              title="Aproximar (+)"
-            >
-              <ZoomIn className="w-5 h-5" />
-            </button>
-
-            <div className="w-px h-5 bg-slate-800 mx-1"></div>
-
-            <button 
-              onClick={() => {
-                setZoomScale(1);
-                setZoomPosition({ x: 0, y: 0 });
-              }}
-              disabled={zoomScale === 1 && zoomPosition.x === 0 && zoomPosition.y === 0}
-              className={`p-2 rounded-full transition-all border border-slate-800 text-slate-400 hover:text-white ${zoomScale === 1 && zoomPosition.x === 0 && zoomPosition.y === 0 ? 'opacity-40 cursor-not-allowed bg-slate-950/20' : 'bg-slate-950 hover:bg-slate-850 cursor-pointer'}`}
-              title="Resetar Zoom"
-            >
-              <RotateCcw className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      )}
+      <ImageZoomModal 
+        isOpen={!!zoomedImage}
+        onClose={() => setZoomedImage(null)}
+        imageUrl={zoomedImage}
+        imageTitle={viewingProduct ? `${viewingProduct.name} (${viewingProduct.sku})` : 'Foto do Catálogo'}
+        imagesList={viewingProduct?.images && viewingProduct.images.length > 0 ? viewingProduct.images : (zoomedImage ? [zoomedImage] : [])}
+        currentIndex={viewingProduct?.images && zoomedImage ? viewingProduct.images.indexOf(zoomedImage) : 0}
+        onNavigate={(newIdx) => {
+          if (viewingProduct?.images && viewingProduct.images[newIdx]) {
+            setZoomedImage(viewingProduct.images[newIdx]);
+            setActiveViewImageIndex(newIdx);
+          }
+        }}
+      />
 
       {/* Excel Import Modal for Base Catalog */}
       <ExcelBaseCatalogImportModal

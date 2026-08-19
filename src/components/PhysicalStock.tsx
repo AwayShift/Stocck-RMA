@@ -39,53 +39,19 @@ import {
   ClipboardPaste,
   Sliders,
   Zap,
-  Tag
+  Tag,
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
 import ExcelImportModal from './ExcelImportModal';
+import { ImageZoomModal } from './ImageZoomModal';
 import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct } from '../utils/productImages';
+import { processSafeImageUpload, processSafeImageUrl } from '../lib/imageSecurityService';
 
-// Helper to compress image to base64
-const compressImageToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
-        const MAX_HEIGHT = 600;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        } else {
-          resolve(e.target?.result as string);
-        }
-      };
-      img.onerror = () => reject(new Error('Falha ao processar imagem.'));
-      img.src = e.target?.result as string;
-    };
-    reader.onerror = () => reject(new Error('Falha ao ler arquivo.'));
-    reader.readAsDataURL(file);
-  });
+// Helper to compress and sanitize image to safe base64
+const compressImageToBase64 = async (file: File): Promise<string> => {
+  return await processSafeImageUpload(file, 1200, 1000, 0.75);
 };
 
 interface PhysicalStockProps {
@@ -164,6 +130,26 @@ export default function PhysicalStock({
   // Quick edit/action states
   const [editingSector, setEditingSector] = useState<DestinationSectorType | ''>('');
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [fullscreenImageList, setFullscreenImageList] = useState<string[]>([]);
+  const [fullscreenImageIndex, setFullscreenImageIndex] = useState<number>(0);
+  const [fullscreenImageTitle, setFullscreenImageTitle] = useState<string>('');
+
+  const openImageZoom = (img: string, title?: string, list?: string[], index?: number) => {
+    const activeList = list && list.length > 0 ? list : [img];
+    const idx = index !== undefined ? index : activeList.indexOf(img);
+    setFullscreenImage(img);
+    setFullscreenImageTitle(title || '');
+    setFullscreenImageList(activeList);
+    setFullscreenImageIndex(idx >= 0 ? idx : 0);
+  };
+
+  const handleNavigateZoomImage = (newIdx: number) => {
+    if (fullscreenImageList && fullscreenImageList[newIdx]) {
+      setFullscreenImageIndex(newIdx);
+      setFullscreenImage(fullscreenImageList[newIdx]);
+    }
+  };
+
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -194,6 +180,7 @@ export default function PhysicalStock({
   } | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState('');
+  const [isSanitizingUrl, setIsSanitizingUrl] = useState(false);
   const [urlInputCategory, setUrlInputCategory] = useState<'photosProduct' | 'photosBox' | 'photosAccessories'>('photosProduct');
 
   // If initialSelectedUnit changed from parent, keep local state in sync
@@ -392,14 +379,29 @@ export default function PhysicalStock({
     };
   }, [isEditingUnit, urlInputCategory, editForm]);
 
-  const handleAddPhotoUrl = (category: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
+  const handleAddPhotoUrl = async (category: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
     if (!editForm || !imageUrlInput.trim()) return;
-    const existing = editForm[category] || [];
-    setEditForm({
-      ...editForm,
-      [category]: [...existing, imageUrlInput.trim()]
-    });
-    setImageUrlInput('');
+    const url = imageUrlInput.trim();
+    setIsSanitizingUrl(true);
+    setActionError(null);
+
+    try {
+      const sanitizedUrlOrBase64 = await processSafeImageUrl(url, 1200, 1000, 0.75);
+      const existing = editForm[category] || [];
+      setEditForm({
+        ...editForm,
+        [category]: [...existing, sanitizedUrlOrBase64]
+      });
+      setImageUrlInput('');
+      const catLabel = category === 'photosProduct' ? 'Aparelho' : category === 'photosBox' ? 'Embalagem' : 'Acessórios';
+      setActionSuccess(`Foto via link desinfectada e adicionada para Fotos do ${catLabel}!`);
+      setTimeout(() => setActionSuccess(null), 3000);
+    } catch (err: any) {
+      setActionError(err?.message || 'Erro ao validar imagem por link.');
+      setTimeout(() => setActionError(null), 4000);
+    } finally {
+      setIsSanitizingUrl(false);
+    }
   };
 
   const handleRemovePhoto = (category: 'photosProduct' | 'photosBox' | 'photosAccessories', index: number) => {
@@ -875,6 +877,7 @@ export default function PhysicalStock({
       case 'Mercado Livre': return 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20';
       case 'Shopee': return 'bg-orange-500/10 text-orange-400 border border-orange-500/20';
       case 'Amazon': return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
+      case 'Amazon Ta Novo': return 'bg-[#05621a]/20 text-emerald-300 border border-[#05621a]/80';
       case 'Kabum': return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
       default: return 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20';
     }
@@ -1394,11 +1397,13 @@ export default function PhysicalStock({
                           </span>
                         )}
                       </div>
-                      <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                        hasDupSti ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-500'
-                      }`}>
-                        #{unit.trackingCode}
-                      </span>
+                      {unit.trackingCode && unit.trackingCode.trim() !== '' && (
+                        <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                          hasDupSti ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-500'
+                        }`}>
+                          #{unit.trackingCode.replace(/^#/, '')}
+                        </span>
+                      )}
                     </div>
 
                     {/* Image / Thumbnail if exists */}
@@ -1569,11 +1574,13 @@ export default function PhysicalStock({
                         <span className="font-mono text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded shrink-0">
                           {unit.baseProductSku}
                         </span>
-                        <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                          hasDupSti ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-500'
-                        }`}>
-                          #{unit.trackingCode}
-                        </span>
+                        {unit.trackingCode && unit.trackingCode.trim() !== '' && (
+                          <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                            hasDupSti ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-500'
+                          }`}>
+                            #{unit.trackingCode.replace(/^#/, '')}
+                          </span>
+                        )}
                         {unit.serialNumber && (
                           <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${
                             hasDupSerial ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold' : 'text-slate-400 bg-slate-950 border-slate-800'
@@ -2214,7 +2221,7 @@ export default function PhysicalStock({
                         <input 
                           type="file" 
                           multiple
-                          accept="image/*" 
+                          accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" 
                           onChange={(e) => handleAddPhotoFile(urlInputCategory, e)} 
                           className="hidden" 
                         />
@@ -2235,7 +2242,7 @@ export default function PhysicalStock({
                       {/* URL input */}
                       <div className="flex-1 min-w-[240px] flex items-center gap-2">
                         <input 
-                          type="text" 
+                          type="url" 
                           value={imageUrlInput} 
                           onChange={(e) => setImageUrlInput(e.target.value)} 
                           onKeyDown={(e) => {
@@ -2244,15 +2251,25 @@ export default function PhysicalStock({
                               handleAddPhotoUrl(urlInputCategory);
                             }
                           }}
-                          placeholder="Cole o link da imagem (URL https://...)" 
-                          className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500" 
+                          placeholder="Cole o link da imagem (https://...)" 
+                          className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 placeholder:text-slate-600" 
                         />
                         <button 
                           type="button" 
                           onClick={() => handleAddPhotoUrl(urlInputCategory)}
-                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer"
+                          disabled={isSanitizingUrl || !imageUrlInput.trim()}
+                          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-200 font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1.5"
                         >
-                          Adicionar URL
+                          {isSanitizingUrl ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
+                              <span>Sanitizando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Adicionar URL</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -2264,8 +2281,9 @@ export default function PhysicalStock({
                           {urlInputCategory === 'photosProduct' ? 'Fotos do Aparelho' : urlInputCategory === 'photosBox' ? 'Fotos da Embalagem' : 'Fotos dos Acessórios'}
                         </strong>
                       </span>
-                      <span className="text-[10px] text-slate-500">
-                        Você também pode arrastar e soltar arquivos de imagem diretamente nas caixas abaixo.
+                      <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3" />
+                        Sanitização e desinfecção de fotos ativada
                       </span>
                     </div>
                   </div>
@@ -2306,7 +2324,7 @@ export default function PhysicalStock({
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setFullscreenImage(p);
+                                  openImageZoom(p, `Fotos do Aparelho - ${editForm.baseProductName}`, editForm.photosProduct, i);
                                 }}
                                 alt={`Aparelho ${i + 1}`}
                               />
@@ -2373,7 +2391,7 @@ export default function PhysicalStock({
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setFullscreenImage(p);
+                                  openImageZoom(p, `Fotos da Embalagem - ${editForm.baseProductName}`, editForm.photosBox, i);
                                 }}
                                 alt={`Caixa ${i + 1}`}
                               />
@@ -2440,7 +2458,7 @@ export default function PhysicalStock({
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setFullscreenImage(p);
+                                  openImageZoom(p, `Fotos dos Acessórios - ${editForm.baseProductName}`, editForm.photosAccessories, i);
                                 }}
                                 alt={`Acessório ${i + 1}`}
                               />
@@ -2731,7 +2749,7 @@ export default function PhysicalStock({
                               {resolved.photosProduct.map((p, i) => (
                                 <div 
                                   key={i} 
-                                  onClick={() => setFullscreenImage(p)}
+                                  onClick={() => openImageZoom(p, `Fotos do Aparelho - ${currentUnit.baseProductName}`, resolved.photosProduct, i)}
                                   className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-500 cursor-pointer relative group transition-colors"
                                 >
                                   <img src={p} className="w-full h-full object-cover" />
@@ -2756,7 +2774,7 @@ export default function PhysicalStock({
                               {resolved.photosBox.map((p, i) => (
                                 <div 
                                   key={i} 
-                                  onClick={() => setFullscreenImage(p)}
+                                  onClick={() => openImageZoom(p, `Fotos da Embalagem - ${currentUnit.baseProductName}`, resolved.photosBox, i)}
                                   className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-500 cursor-pointer relative group transition-colors"
                                 >
                                   <img src={p} className="w-full h-full object-cover" />
@@ -2781,7 +2799,7 @@ export default function PhysicalStock({
                               {resolved.photosAccessories.map((p, i) => (
                                 <div 
                                   key={i} 
-                                  onClick={() => setFullscreenImage(p)}
+                                  onClick={() => openImageZoom(p, `Fotos dos Acessórios - ${currentUnit.baseProductName}`, resolved.photosAccessories, i)}
                                   className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-500 cursor-pointer relative group transition-colors"
                                 >
                                   <img src={p} className="w-full h-full object-cover" />
@@ -2903,18 +2921,16 @@ export default function PhysicalStock({
         </div>
       )}
 
-      {/* Fullscreen Photo Lightbox wrapper */}
-      {fullscreenImage && (
-        <div 
-          onClick={() => setFullscreenImage(null)}
-          className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
-        >
-          <button className="absolute top-4 right-4 p-2 bg-slate-900 rounded-full text-white hover:bg-slate-800 cursor-pointer">
-            <X className="w-6 h-6" />
-          </button>
-          <img src={fullscreenImage} className="max-w-full max-h-[90vh] rounded-xl border border-slate-800 object-contain shadow-2xl" />
-        </div>
-      )}
+      {/* Interactive Image Zoom Lightbox Modal with Loupe Magnifier */}
+      <ImageZoomModal 
+        isOpen={!!fullscreenImage}
+        onClose={() => setFullscreenImage(null)}
+        imageUrl={fullscreenImage}
+        imageTitle={fullscreenImageTitle || (currentUnit ? `${currentUnit.baseProductName} (${currentUnit.baseProductSku})` : 'Foto da Triagem')}
+        imagesList={fullscreenImageList}
+        currentIndex={fullscreenImageIndex}
+        onNavigate={handleNavigateZoomImage}
+      />
 
       {/* Sector Transfer with Photo Choice Modal (When moving to Estoque Principal) */}
       {transferModalData && (
