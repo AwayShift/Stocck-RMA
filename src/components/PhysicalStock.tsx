@@ -885,14 +885,25 @@ export default function PhysicalStock({
 
   const handleImportBatchUnits = async (importedUnits: TriageUnit[]) => {
     try {
-      for (const unit of importedUnits) {
+      // Safety filter: ensure no unit with duplicate STI or Serial is re-added
+      const nonDuplicateUnits = importedUnits.filter(unit => {
+        const normSti = (unit.trackingCode || '').trim().toUpperCase();
+        const normSerial = (unit.serialNumber || '').trim().toUpperCase();
+
+        const stiExists = normSti !== '' && units.some(u => (u.trackingCode || '').trim().toUpperCase() === normSti);
+        const serialExists = normSerial !== '' && units.some(u => (u.serialNumber || '').trim().toUpperCase() === normSerial);
+
+        return !stiExists && !serialExists;
+      });
+
+      for (const unit of nonDuplicateUnits) {
         if (onSaveTriage) {
           await onSaveTriage(unit);
         } else {
           await onUpdateUnit(unit);
         }
       }
-      setActionSuccess(`${importedUnits.length} produtos importados do Excel e direcionados aos setores!`);
+      setActionSuccess(`${nonDuplicateUnits.length} novos produtos adicionados ao estoque físico com sucesso!`);
       setTimeout(() => setActionSuccess(null), 5000);
     } catch (err: any) {
       setActionError(`Erro ao salvar lote de inventário: ${err?.message || err}`);
@@ -3125,6 +3136,7 @@ export default function PhysicalStock({
         isOpen={isExcelModalOpen}
         onClose={() => setIsExcelModalOpen(false)}
         products={products}
+        existingUnits={units}
         onImportUnits={handleImportBatchUnits}
         defaultSector={activeTab === 'Openbox' ? 'Openbox' : activeTab === 'RMA' ? 'RMA' : activeTab === 'Principal' ? 'Principal' : 'Openbox'}
       />
