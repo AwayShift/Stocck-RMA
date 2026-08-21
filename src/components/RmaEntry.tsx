@@ -85,9 +85,44 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
   
   // Fields of Entrance
   const [trackingCode, setTrackingCode] = useState('');
-  const [serialNumber, setSerialNumber] = useState('');
+  const [serials, setSerials] = useState<string[]>(['']);
   const [platform, setPlatform] = useState<PlatformType>('Mercado Livre');
   const [customerReason, setCustomerReason] = useState('');
+
+  // Helpers to manage multiple serial lines for the same SKU
+  const handleAddSerialLine = () => {
+    setSerials(prev => [...prev, '']);
+  };
+
+  const handleUpdateSerial = (index: number, value: string) => {
+    // If multiple lines pasted (e.g. from spreadsheet or barcode list)
+    if (value.includes('\n') || value.includes('\r')) {
+      const lines = value.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+      if (lines.length > 1) {
+        setSerials(prev => {
+          const next = [...prev];
+          next[index] = lines[0];
+          next.splice(index + 1, 0, ...lines.slice(1));
+          return next;
+        });
+        return;
+      }
+    }
+
+    setSerials(prev => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const handleRemoveSerialLine = (index: number) => {
+    if (serials.length <= 1) {
+      setSerials(['']);
+    } else {
+      setSerials(prev => prev.filter((_, i) => i !== index));
+    }
+  };
 
   // Fields of Analysis
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatusType>('Usado');
@@ -372,6 +407,13 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
     // Keep tracking code as entered by user, or blank if not provided (STI is exclusively for controlled openbox items)
     const finalTrackingCode = trackingCode.trim();
 
+    // Mandatory STI check for Openbox products
+    if (destinationSector === 'Openbox' && !finalTrackingCode) {
+      setErrorMessage('O Código STI é obrigatório para cadastrar produtos no setor OpenBox.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     // Determine final device status and package status (presets vs manual description)
     const finalDeviceStatus = (isCustomDeviceStatus ? customDeviceStatusText.trim() : deviceStatus) || 'Usado';
     const finalPackageStatus = (isCustomPackageStatus ? customPackageStatusText.trim() : packageStatus) || 'Danificada';
@@ -384,6 +426,20 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       setErrorMessage('Produto de referência inválido.');
       return;
     }
+
+    // Process serials list
+    const cleanSerials = serials.map(s => s.trim());
+    // Check if there are non-empty duplicate serials in the form itself
+    const filledSerials = cleanSerials.filter(s => s !== '');
+    const duplicateInForm = filledSerials.filter((s, idx) => filledSerials.indexOf(s) !== idx);
+    if (duplicateInForm.length > 0) {
+      setErrorMessage(`O número de série "${duplicateInForm[0]}" foi inserido mais de uma vez. Cada unidade cadastrada deve possuir um serial exclusivo.`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    // Target list of units to create (if only 1 line and empty, creates 1 unit with empty serial)
+    const targetSerials = cleanSerials.length > 0 ? cleanSerials : [''];
 
     setIsSubmitting(true);
 
@@ -405,31 +461,40 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       }
     }
 
-    const newTriage: TriageUnit = {
-      id: 'tr-' + Date.now(),
-      trackingCode: finalTrackingCode,
-      serialNumber: serialNumber.trim(),
-      baseProductId: refProduct.id,
-      baseProductName: refProduct.name,
-      baseProductSku: refProduct.sku,
-      baseProductVoltage: refProduct.voltage,
-      platform,
-      customerReason: customerReason.trim(),
-      deviceStatus: finalDeviceStatus,
-      packageStatus: finalPackageStatus,
-      accessoriesInclusion: accessoriesInclusion.trim(),
-      destinationSector,
-      notes: notes, // HTML rich-text
-      photosProduct: finalPhotosProduct,
-      photosBox: finalPhotosBox,
-      photosAccessories: finalPhotosAccessories,
-      createdAt: new Date().toISOString(),
-      status: 'Estoque'
-    };
-
     try {
-      await onSaveTriage(newTriage);
-      setSuccessMessage('Triagem de Devolução gravada com sucesso no banco de dados!');
+      const baseTimestamp = Date.now();
+      for (let i = 0; i < targetSerials.length; i++) {
+        const currentSerial = targetSerials[i];
+        const newTriage: TriageUnit = {
+          id: `tr-${baseTimestamp}-${i}-${Math.random().toString(36).substring(2, 7)}`,
+          trackingCode: finalTrackingCode,
+          serialNumber: currentSerial,
+          baseProductId: refProduct.id,
+          baseProductName: refProduct.name,
+          baseProductSku: refProduct.sku,
+          baseProductVoltage: refProduct.voltage,
+          platform,
+          customerReason: customerReason.trim(),
+          deviceStatus: finalDeviceStatus,
+          packageStatus: finalPackageStatus,
+          accessoriesInclusion: accessoriesInclusion.trim(),
+          destinationSector,
+          notes: notes, // HTML rich-text
+          photosProduct: finalPhotosProduct,
+          photosBox: finalPhotosBox,
+          photosAccessories: finalPhotosAccessories,
+          createdAt: new Date(baseTimestamp + i * 150).toISOString(),
+          status: 'Estoque'
+        };
+
+        await onSaveTriage(newTriage);
+      }
+
+      if (targetSerials.length === 1) {
+        setSuccessMessage(`1 unidade do produto [${refProduct.sku}] cadastrada com sucesso no estoque físico!`);
+      } else {
+        setSuccessMessage(`${targetSerials.length} unidades do produto [${refProduct.sku}] adicionadas ao estoque com sucesso! Cada uma com seu serial exclusivo.`);
+      }
       
       // Reset form fields
       setSelectedProductId('');
@@ -441,9 +506,9 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       setPhotosAccessories([]);
       setNotes('');
       
-      // Reset tracking code & serial number
+      // Reset tracking code & serial numbers list
       setTrackingCode('');
-      setSerialNumber('');
+      setSerials(['']);
 
       // Scroll to top
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -462,24 +527,6 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
     }
   };
 
-  // Helper to pre-populate inputs for quick test
-  const handleQuickPreFill = () => {
-    if (products.length === 0) return;
-    const randomProduct = products[Math.floor(Math.random() * products.length)];
-    setSelectedProductId(randomProduct.id);
-    setProductSearchTerm(`[${randomProduct.sku}] ${randomProduct.name}`);
-    setPlatform('Mercado Livre');
-    setTrackingCode('STI-40912');
-    setSerialNumber('SN-9876543210-BR');
-    setCustomerReason('O produto funcionou na primeira semana, mas parou de esquentar na segunda semana. Quero devolução.');
-    setDeviceStatus('Usado');
-    setPackageStatus('Danificada');
-    setAccessoriesInclusion('Acompanha cabo, gaveta de fritar e divisória de silicone.');
-    setDestinationSector('RMA');
-    const technicalReport = `<h3>Relatório de Entrada de RMA:</h3><p>Equipamento recebido com marcas leves de gordura no cesto.</p><p><strong>Diagnóstico:</strong> Resistência aberta. Fusível térmico de proteção em curto-circuito devido a superaquecimento.</p><p><strong>Solução:</strong> Necessita troca de kit de aquecimento na oficina técnica.</p>`;
-    setNotes(technicalReport);
-  };
-
   return (
     <div className="space-y-6" id="rma-entry-container">
       {/* Header banner */}
@@ -493,17 +540,6 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
             Recebimento de pacotes devolvidos, laudo de análise técnica e destinação de estoque.
           </p>
         </div>
-        <button 
-          type="button"
-          onClick={handleQuickPreFill}
-          disabled={products.length === 0}
-          className="flex items-center gap-2 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 rounded-lg text-xs font-semibold border border-rose-500/20 disabled:opacity-50 transition-all cursor-pointer"
-          title="Preenche o formulário com dados de exemplo realistas"
-          id="btn-prefill-rma"
-        >
-          <Zap className="w-3.5 h-3.5 text-rose-400" />
-          Preenchimento Rápido (Simulação)
-        </button>
       </div>
 
       {products.length === 0 ? (
@@ -766,7 +802,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   )}
                 </div>
 
-                <div className={`grid grid-cols-1 ${destinationSector === 'Openbox' ? 'md:grid-cols-2' : 'md:grid-cols-2'} gap-4`}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Platform Selection */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Plataforma Origem</label>
@@ -784,58 +820,128 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                     </select>
                   </div>
 
-                  {/* Tracking / Case Code (Código STI) - Enabled ONLY for Openbox */}
-                  {destinationSector === 'Openbox' ? (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center justify-between">
-                        <span>Código STI</span>
-                        <span className="text-[11px] font-normal text-slate-400">Identificador Openbox</span>
-                      </label>
-                      <input 
-                        type="text"
-                        placeholder="Digite o Código STI (Ex: STI-40912)"
-                        value={trackingCode}
-                        onChange={(e) => setTrackingCode(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-slate-950 border border-amber-500/40 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
-                        id="input-tracking-code"
-                      />
-                    </div>
-                  ) : (
-                    /* Serial Number / S/N when not openbox */
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                        <span>Nº de Série / Serial</span>
-                        <span className="text-slate-500 font-normal">(S/N)</span>
-                      </label>
-                      <input 
-                        type="text"
-                        placeholder="Ex: SN-123456789-BR (Bipar barras)"
-                        value={serialNumber}
-                        onChange={(e) => setSerialNumber(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
-                        id="input-serial-number"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Serial Number when Openbox is active */}
-                {destinationSector === 'Openbox' && (
+                  {/* Tracking / Case Code (Código STI) */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                      <span>Nº de Série / Serial</span>
-                      <span className="text-slate-500 font-normal">(S/N)</span>
+                    <label className={`text-xs font-bold uppercase tracking-wider flex items-center justify-between ${
+                      destinationSector === 'Openbox' ? 'text-amber-400' : 'text-slate-400'
+                    }`}>
+                      <span className="flex items-center gap-1">
+                        <span>Código STI</span>
+                        {destinationSector === 'Openbox' ? (
+                          <span className="text-rose-400 font-bold text-sm">*</span>
+                        ) : (
+                          <span className="text-slate-500 font-normal lowercase">(opcional)</span>
+                        )}
+                      </span>
+                      {destinationSector === 'Openbox' ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded border border-amber-500/30">
+                          Obrigatório para Openbox
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-normal text-slate-500">Rastreio</span>
+                      )}
                     </label>
                     <input 
                       type="text"
-                      placeholder="Ex: SN-123456789-BR (Bipar barras)"
-                      value={serialNumber}
-                      onChange={(e) => setSerialNumber(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
-                      id="input-serial-number-openbox"
+                      placeholder={destinationSector === 'Openbox' ? "Obrigatório: Ex: STI-40912 ou 13509873" : "Opcional: Ex: STI-40912"}
+                      value={trackingCode}
+                      onChange={(e) => setTrackingCode(e.target.value)}
+                      className={`w-full px-4 py-2.5 bg-slate-950 rounded-xl text-sm font-mono transition-all ${
+                        destinationSector === 'Openbox'
+                          ? 'border border-amber-500/50 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30'
+                          : 'border border-slate-800 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500'
+                      }`}
+                      id="input-tracking-code"
+                      required={destinationSector === 'Openbox'}
                     />
                   </div>
-                )}
+                </div>
+
+                {/* Multiple Serial Numbers Management (Same SKU, multiple physical units) */}
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 space-y-3" id="rma-multi-serial-container">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/60 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-sky-400" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                        Números de Série (S/N) — Entrada por Unidade
+                      </span>
+                      <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                        {serials.length} {serials.length === 1 ? 'unidade' : 'unidades'} deste SKU
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleAddSerialLine}
+                      className="px-3 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 hover:text-sky-200 border border-sky-500/30 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      id="btn-add-serial-line"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Adicionar outro Serial / Unidade</span>
+                    </button>
+                  </div>
+
+                  {/* Serials inputs list */}
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {serials.map((serialVal, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="w-7 h-8 bg-slate-900 border border-slate-800 text-slate-400 font-mono text-xs font-bold rounded-lg flex items-center justify-center shrink-0">
+                          #{idx + 1}
+                        </span>
+
+                        <input 
+                          type="text"
+                          placeholder={`Serial (S/N) da unidade #${idx + 1} (Bipar leitor ou colar)`}
+                          value={serialVal}
+                          onChange={(e) => handleUpdateSerial(idx, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (idx === serials.length - 1) {
+                                handleAddSerialLine();
+                              }
+                            }
+                          }}
+                          className="flex-1 px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                          id={`input-serial-${idx}`}
+                        />
+
+                        {serials.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSerialLine(idx)}
+                            className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0"
+                            title="Remover este serial"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSerialLine(idx)}
+                            className="p-2 text-slate-600 hover:text-slate-400 rounded-lg transition-colors cursor-pointer shrink-0"
+                            title="Limpar serial"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {serials.length > 1 && (
+                    <div className="p-2.5 bg-sky-950/40 border border-sky-800/40 rounded-lg text-[11px] text-sky-300 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-sky-400 shrink-0" />
+                      <span>
+                        Serão geradas <strong>{serials.length} unidades independentes</strong> no estoque físico, com todas as informações e fotos duplicadas e contagem individual para cada serial único.
+                      </span>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-500">
+                    💡 Dica: Pressione <strong>Enter</strong> ou bipe com leitor de código de barras para criar automaticamente a próxima linha. Você também pode colar múltiplos seriais de uma vez.
+                  </p>
+                </div>
 
                 {/* Customer Reason text */}
                 <div className="space-y-1.5">

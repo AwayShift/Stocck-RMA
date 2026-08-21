@@ -227,6 +227,14 @@ export default function PhysicalStock({
         }
       }
 
+      // Mandatory STI check for Openbox products
+      if (updatedForm.destinationSector === 'Openbox' && (!updatedForm.trackingCode || !updatedForm.trackingCode.trim())) {
+        setActionError('O Código STI é obrigatório para produtos no setor OpenBox.');
+        setIsSavingEdit(false);
+        setTimeout(() => setActionError(null), 4000);
+        return;
+      }
+
       await onUpdateUnit(updatedForm);
       setIsSavingEdit(false);
       setIsEditingUnit(false);
@@ -1884,15 +1892,24 @@ export default function PhysicalStock({
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        Código STI / Rastreio
+                      <label className={`block text-[11px] font-bold mb-1 ${
+                        editForm.destinationSector === 'Openbox' ? 'text-amber-400' : 'text-slate-300'
+                      }`}>
+                        <span>Código STI / Rastreio</span>
+                        {editForm.destinationSector === 'Openbox' && (
+                          <span className="text-rose-400 font-bold ml-1">* (Obrigatório)</span>
+                        )}
                       </label>
                       <input 
                         type="text" 
                         value={editForm.trackingCode} 
                         onChange={(e) => setEditForm({ ...editForm, trackingCode: e.target.value })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
-                        placeholder="Ex: 13509873"
+                        className={`w-full bg-slate-900 rounded-lg p-2.5 text-xs font-bold font-mono focus:outline-none ${
+                          editForm.destinationSector === 'Openbox'
+                            ? 'border border-amber-500/50 text-amber-200 placeholder-amber-500/40 focus:border-amber-400'
+                            : 'border border-slate-700 text-slate-200 focus:border-sky-500'
+                        }`}
+                        placeholder={editForm.destinationSector === 'Openbox' ? "Obrigatório para Openbox (Ex: 13509873)" : "Ex: 13509873"}
                       />
                     </div>
 
