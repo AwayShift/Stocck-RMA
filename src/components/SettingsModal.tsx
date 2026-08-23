@@ -29,6 +29,7 @@ interface SettingsModalProps {
   enableSpreadsheetImport: boolean;
   onToggleSpreadsheetImport: (enabled: boolean) => void;
   onOpenBackupModal?: (tab?: 'export' | 'restore') => void;
+  onOpenDbSwitcherModal?: () => void;
   userRole?: 'admin' | 'operator' | null;
   userEmail?: string;
 }
@@ -39,6 +40,7 @@ export default function SettingsModal({
   enableSpreadsheetImport,
   onToggleSpreadsheetImport,
   onOpenBackupModal,
+  onOpenDbSwitcherModal,
   userRole,
   userEmail
 }: SettingsModalProps) {
@@ -181,6 +183,52 @@ export default function SettingsModal({
                     <span className="truncate">Fluxo Entradas</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Supabase PostgreSQL Database Status */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-emerald-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Banco de Dados Supabase (PostgreSQL)
+              </h3>
+            </div>
+
+            <div className="p-4 bg-slate-950/70 rounded-xl border border-emerald-500/20 space-y-3.5">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mt-0.5">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white">
+                      Status do Banco de Dados & Uso em Tempo Real
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      Supabase Ativo
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Monitore o volume de dados por tabela, contagem total de registros em tempo real, latência de conexão e integridade dos serviços do Supabase.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenDbSwitcherModal?.();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                  id="btn-settings-open-db-switcher"
+                >
+                  <Database className="w-4 h-4" />
+                  <span>Ver Métricas de Uso do Supabase</span>
+                </button>
               </div>
             </div>
           </div>

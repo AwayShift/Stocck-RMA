@@ -39,8 +39,11 @@ import { exportBaseCatalogToExcel } from '../utils/excelHelpers';
 
 interface BaseCatalogProps {
   products: BaseProduct[];
+  hasMoreFromDb?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMoreFromDb?: () => Promise<void>;
   onSaveProduct: (product: BaseProduct) => Promise<void>;
-  onSaveBatchProducts?: (products: BaseProduct[]) => Promise<{ added: number; updated: number }>;
+  onSaveBatchProducts?: (products: BaseProduct[]) => Promise<{ added: number; updated: number; savedProducts?: BaseProduct[] }>;
   onDeleteProduct: (id: string) => Promise<void>;
   userRole?: 'admin' | 'operator' | null;
   enableSpreadsheetImport?: boolean;
@@ -48,6 +51,9 @@ interface BaseCatalogProps {
 
 export default function BaseCatalog({ 
   products, 
+  hasMoreFromDb = false,
+  isLoadingMore = false,
+  onLoadMoreFromDb,
   onSaveProduct, 
   onSaveBatchProducts, 
   onDeleteProduct, 
@@ -377,10 +383,11 @@ export default function BaseCatalog({
       onConfirm: async () => {
         try {
           await onDeleteProduct(id);
-        } catch (err) {
+          setSuccessMessage(`Produto "${productName}" excluído com sucesso do catálogo.`);
+          setTimeout(() => setSuccessMessage(''), 3500);
+        } catch (err: any) {
           console.error(err);
-          // show inline error instead of window alert
-          setErrorMessage('Erro ao excluir produto. Verifique seus privilégios RBAC.');
+          setErrorMessage(err?.message || 'Erro ao excluir produto. Verifique sua conexão e tente novamente.');
           setTimeout(() => setErrorMessage(''), 4000);
         }
       }
@@ -446,7 +453,7 @@ export default function BaseCatalog({
           </button>
 
           {/* Import Excel Spreadsheet Button (Matches user requirement) */}
-          {userRole === 'admin' && enableSpreadsheetImport && (
+          {enableSpreadsheetImport && (
             <button
               type="button"
               onClick={() => setIsExcelImportOpen(true)}
@@ -460,16 +467,14 @@ export default function BaseCatalog({
           )}
 
           {/* Manual Add Master Product */}
-          {userRole === 'admin' && (
-            <button 
-              onClick={handleAddClick}
-              className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30 transition-all cursor-pointer"
-              id="btn-add-product"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Cadastrar Manual</span>
-            </button>
-          )}
+          <button 
+            onClick={handleAddClick}
+            className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30 transition-all cursor-pointer"
+            id="btn-add-product"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Cadastrar Manual</span>
+          </button>
         </div>
       </div>
 
@@ -665,26 +670,22 @@ export default function BaseCatalog({
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
-                            {userRole === 'admin' && (
-                              <>
-                                <button 
-                                  onClick={() => handleEditClick(product)}
-                                  className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-850 transition-colors cursor-pointer"
-                                  title="Editar produto"
-                                  id={`btn-edit-${product.id}`}
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteClick(product.id, product.name)}
-                                  className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-850 hover:border-rose-500/30 transition-colors cursor-pointer"
-                                  title="Excluir produto"
-                                  id={`btn-delete-${product.id}`}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            )}
+                            <button 
+                              onClick={() => handleEditClick(product)}
+                              className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-850 transition-colors cursor-pointer"
+                              title="Editar produto"
+                              id={`btn-edit-${product.id}`}
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteClick(product.id, product.name)}
+                              className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-850 hover:border-rose-500/30 transition-colors cursor-pointer"
+                              title="Excluir produto"
+                              id={`btn-delete-${product.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -815,28 +816,26 @@ export default function BaseCatalog({
                               <span>Detalhes</span>
                             </button>
 
-                            {userRole === 'admin' && (
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleEditClick(product)}
-                                  className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800 transition-colors cursor-pointer"
-                                  title="Editar produto"
-                                  id={`btn-edit-grid-${product.id}`}
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteClick(product.id, product.name)}
-                                  className="p-2 bg-slate-900 hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 hover:border-rose-800/50 transition-colors cursor-pointer"
-                                  title="Excluir produto"
-                                  id={`btn-delete-grid-${product.id}`}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleEditClick(product)}
+                                className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800 transition-colors cursor-pointer"
+                                title="Editar produto"
+                                id={`btn-edit-grid-${product.id}`}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteClick(product.id, product.name)}
+                                className="p-2 bg-slate-900 hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 hover:border-rose-800/50 transition-colors cursor-pointer"
+                                title="Excluir produto"
+                                id={`btn-delete-grid-${product.id}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -846,26 +845,55 @@ export default function BaseCatalog({
               </div>
             )}
 
-            {/* Pagination / Mostrar Mais button */}
-            <div className="p-5 bg-slate-950/80 border-t border-slate-800/80 flex flex-col items-center justify-center gap-2.5 text-center" id="catalog-pagination-footer">
-              {hasMore ? (
-                <button
-                  type="button"
-                  onClick={() => setVisibleCount(prev => prev + 20)}
-                  className="px-6 py-2.5 bg-slate-800 hover:bg-slate-750 hover:border-sky-500/50 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm group"
-                  id="btn-load-more-catalog"
-                >
-                  <span>Mostrar Mais</span>
-                  <ChevronDown className="w-4 h-4 text-sky-400 group-hover:translate-y-0.5 transition-transform" />
-                </button>
-              ) : (
-                <span className="text-xs text-slate-500 font-medium">
-                  Todos os {filteredProducts.length} produtos foram carregados
+            {/* Pagination / Carregar Mais do Firestore & Exibição */}
+            <div className="p-5 bg-slate-950/80 border-t border-slate-800/80 flex flex-col items-center justify-center gap-3 text-center" id="catalog-pagination-footer">
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
+                {/* Local visible pagination (if more items in local state) */}
+                {hasMore && (
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount(prev => prev + 20)}
+                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 hover:border-slate-600 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm group"
+                    id="btn-show-more-local"
+                  >
+                    <span>Exibir Mais em Tela</span>
+                    <ChevronDown className="w-4 h-4 text-slate-400 group-hover:translate-y-0.5 transition-transform" />
+                  </button>
+                )}
+
+                {/* Firestore Paginated Fetch Button: loads next 10 items via startAfter() */}
+                {hasMoreFromDb && onLoadMoreFromDb && (
+                  <button
+                    type="button"
+                    onClick={onLoadMoreFromDb}
+                    disabled={isLoadingMore}
+                    className="px-6 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:bg-sky-950/60 disabled:text-sky-400/50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-sky-600/20 hover:shadow-sky-600/30 group"
+                    id="btn-load-more-firestore"
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                        <span>Carregando +10 Produtos...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Database className="w-4 h-4 text-sky-200 group-hover:scale-110 transition-transform" />
+                        <span>Carregar Mais 10 Produtos</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {!hasMore && !hasMoreFromDb && (
+                <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                  Todos os {products.length} produtos foram carregados do banco de dados
                 </span>
               )}
 
               <span className="text-xs text-slate-400 font-medium">
-                Exibindo <strong className="text-sky-400 font-bold">{displayedProducts.length}</strong> de <strong className="text-white font-bold">{filteredProducts.length}</strong> {filteredProducts.length === 1 ? 'produto' : 'produtos'}
+                Exibindo <strong className="text-sky-400 font-bold">{displayedProducts.length}</strong> de <strong className="text-white font-bold">{filteredProducts.length}</strong> {filteredProducts.length === 1 ? 'produto' : 'produtos'} carregados na sessão
               </span>
             </div>
           </>

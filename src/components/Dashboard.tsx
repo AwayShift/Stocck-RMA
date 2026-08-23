@@ -12,7 +12,8 @@ import {
   ArrowRight, 
   Calendar, 
   ShoppingCart, 
-  Layers 
+  Layers,
+  Clock
 } from 'lucide-react';
 import { TriageUnit, PlatformType, DestinationSectorType, isMigrationUnit, BaseProduct } from '../types';
 import { getUnitResolvedPhotos } from '../utils/productImages';
@@ -20,12 +21,20 @@ import { getUnitResolvedPhotos } from '../utils/productImages';
 interface DashboardProps {
   units: TriageUnit[];
   products?: BaseProduct[];
+  pendingItemsCount?: number;
   onViewUnit: (unit: TriageUnit) => void;
   onNavigateToStock: () => void;
-  onResetData?: () => void;
+  onNavigateToPending?: () => void;
 }
 
-export default function Dashboard({ units, products = [], onViewUnit, onNavigateToStock }: DashboardProps) {
+export default function Dashboard({ 
+  units, 
+  products = [], 
+  pendingItemsCount = 0,
+  onViewUnit, 
+  onNavigateToStock,
+  onNavigateToPending
+}: DashboardProps) {
   // Filter for today's units (based on local timezone, excluding migration imports)
   const todayUnits = units.filter(u => {
     try {
@@ -109,7 +118,19 @@ export default function Dashboard({ units, products = [], onViewUnit, onNavigate
             Controle de devoluções, análise técnica de RMA e direcionamento inteligente de estoque.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          {pendingItemsCount > 0 && onNavigateToPending && (
+            <button
+              onClick={onNavigateToPending}
+              className="flex items-center gap-2 px-3.5 py-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 hover:text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
+              title="Visualizar produtos aguardando liberação na aba Pendências"
+              id="dashboard-pending-alert-badge"
+            >
+              <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
+              <span>{pendingItemsCount} {pendingItemsCount === 1 ? 'item pendente' : 'itens pendentes'}</span>
+              <ArrowRight className="w-3 h-3 text-amber-400" />
+            </button>
+          )}
           <div className="flex items-center gap-2 px-3.5 py-2 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 shadow-inner">
             <Calendar className="w-4 h-4 text-sky-400" />
             <span>{getFormattedLocalDate()}</span>

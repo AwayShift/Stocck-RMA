@@ -636,10 +636,35 @@ export default function PhysicalStock({
           setActionSuccess(`Baixa efetuada com sucesso para ${selectedUnitIds.length} item(ns)!`);
           setTimeout(() => setActionSuccess(null), 3000);
           setSelectedUnitIds([]);
-        } catch (err) {
+        } catch (err: any) {
           console.error(err);
-          setActionError('Erro ao executar baixa em lote.');
+          setActionError(err?.message || 'Erro ao executar baixa em lote.');
           setTimeout(() => setActionError(null), 3000);
+        }
+      }
+    });
+  };
+
+  // Batch delete execution
+  const handleBatchDelete = () => {
+    if (selectedUnitIds.length === 0) return;
+    setConfirmConfig({
+      title: 'Excluir Itens em Lote',
+      message: `Tem certeza absoluta de que deseja EXCLUIR PERMANENTEMENTE os ${selectedUnitIds.length} item(ns) selecionado(s) do estoque? Esta ação não pode ser desfeita.`,
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          const idsToDelete = [...selectedUnitIds];
+          for (const id of idsToDelete) {
+            await onDeleteUnit(id);
+          }
+          setActionSuccess(`${idsToDelete.length} item(ns) excluído(s) com sucesso do estoque!`);
+          setTimeout(() => setActionSuccess(null), 3500);
+          setSelectedUnitIds([]);
+        } catch (err: any) {
+          console.error(err);
+          setActionError(err?.message || 'Erro ao executar exclusão em lote.');
+          setTimeout(() => setActionError(null), 3500);
         }
       }
     });
@@ -860,12 +885,13 @@ export default function PhysicalStock({
       onConfirm: async () => {
         try {
           await onDeleteUnit(id);
+          setSelectedUnitIds(prev => prev.filter(uId => uId !== id));
           setActionSuccess('Ficha de triagem excluída com sucesso.');
           setTimeout(() => setActionSuccess(null), 3000);
           handleCloseDetails();
-        } catch (err) {
+        } catch (err: any) {
           console.error(err);
-          setActionError('Erro ao excluir registro.');
+          setActionError(err?.message || 'Erro ao excluir registro.');
           setTimeout(() => setActionError(null), 3000);
         }
       }
@@ -1099,9 +1125,20 @@ export default function PhysicalStock({
                     onClick={handleBatchCheckout}
                     className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2 cursor-pointer animate-in fade-in"
                     id="btn-batch-checkout"
+                    title="Dar baixa do estoque para todas as unidades selecionadas"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Baixa em Lote ({selectedUnitIds.length})</span>
+                  </button>
+
+                  <button
+                    onClick={handleBatchDelete}
+                    className="px-3.5 py-2 bg-slate-800 hover:bg-rose-950 text-rose-300 hover:text-rose-200 border border-rose-800/40 hover:border-rose-600 font-bold rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer animate-in fade-in"
+                    id="btn-batch-delete"
+                    title="Excluir permanentemente do estoque todas as unidades selecionadas"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                    <span>Excluir ({selectedUnitIds.length})</span>
                   </button>
                 </>
               )}

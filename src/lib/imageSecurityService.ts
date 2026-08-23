@@ -35,10 +35,10 @@ export interface SanitizationResult {
   };
 }
 
-const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const DEFAULT_MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 MB hard limit
 const DEFAULT_MAX_WIDTH = 1600;
 const DEFAULT_MAX_HEIGHT = 1600;
-const DEFAULT_QUALITY = 0.8;
+const DEFAULT_QUALITY = 0.82;
 const MAX_SAFE_IMAGE_PIXELS = 8192 * 8192; // 67 MegaPixels limit to prevent decompression bombs
 
 const DANGEROUS_EXTENSIONS = [

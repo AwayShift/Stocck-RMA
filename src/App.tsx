@@ -21,18 +21,18 @@ import {
   Download,
   Users,
   Settings,
-  HardDriveDownload
+  HardDriveDownload,
+  Clock,
+  Zap
 } from 'lucide-react';
 
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from './lib/firebase';
-
-import { BaseProduct, TriageUnit, DailyInflowRecord } from './types';
+import { BaseProduct, TriageUnit, DailyInflowRecord, PendingItem, PendingStatusType, DestinationSectorType } from './types';
 import { 
-  subscribeBaseProducts,
-  subscribeTriageUnits,
-  subscribeDailyInflows,
+  getInitialBaseProducts,
+  getMoreBaseProducts,
+  getInitialTriageUnits,
+  getInitialPendingItems,
+  getInitialDailyInflows,
   saveBaseProduct,
   saveBatchBaseProducts,
   deleteBaseProduct,
@@ -42,6 +42,10 @@ import {
   saveDailyInflow,
   saveBatchDailyInflows,
   deleteDailyInflow,
+  savePendingItem,
+  deletePendingItem,
+  updatePendingItemStatus,
+  transferPendingItemToStock,
   resetDatabaseToDefaults,
   createAuditLog,
   ensureUserProfileExists
@@ -51,16 +55,20 @@ import Dashboard from './components/Dashboard';
 import BaseCatalog from './components/BaseCatalog';
 import RmaEntry from './components/RmaEntry';
 import PhysicalStock from './components/PhysicalStock';
+import PendingItems from './components/PendingItems';
 import LogsAudit from './components/LogsAudit';
 import Login from './components/Login';
 import ProductMovements from './components/ProductMovements';
-import ResetDatabaseModal from './components/ResetDatabaseModal';
 import SettingsModal from './components/SettingsModal';
 import BackupModal from './components/BackupModal';
+import DatabaseSwitcherModal from './components/DatabaseSwitcherModal';
 import { checkAndRunScheduledBackups } from './lib/backupService';
+import { getActiveDatabaseProfile, DatabaseProfile } from './lib/firebaseConfigManager';
+import { getActiveDbProvider, getSupabaseClient, DatabaseProvider } from './lib/supabase';
+import { subscribeToSupabaseAuth, signOutSupabase } from './lib/supabaseAuth';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rma' | 'catalog' | 'stock' | 'logs' | 'movement'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement' | 'logs'>('dashboard');
   
   // Auth state
   const [user, setUser] = useState<any>(null);
@@ -72,14 +80,33 @@ export default function App() {
   const [products, setProducts] = useState<BaseProduct[]>([]);
   const [triageUnits, setTriageUnits] = useState<TriageUnit[]>([]);
   const [dailyInflows, setDailyInflows] = useState<DailyInflowRecord[]>([]);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   // Cross-component communication & modals
   const [selectedTriageUnit, setSelectedTriageUnit] = useState<TriageUnit | null>(null);
-  const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
+  const [isDbSwitcherModalOpen, setIsDbSwitcherModalOpen] = useState<boolean>(false);
+
+  // Active Database Profile and Provider tracking
+  const [activeDbProfile, setActiveDbProfile] = useState<DatabaseProfile>(() => getActiveDatabaseProfile());
+  const [activeDbProvider, setActiveDbProviderState] = useState<DatabaseProvider>(() => getActiveDbProvider());
+
+  useEffect(() => {
+    const handleDbSync = () => {
+      setActiveDbProfile(getActiveDatabaseProfile());
+      setActiveDbProviderState(getActiveDbProvider());
+    };
+
+    window.addEventListener('db-profiles-updated', handleDbSync);
+    window.addEventListener('db-provider-changed', handleDbSync);
+    return () => {
+      window.removeEventListener('db-profiles-updated', handleDbSync);
+      window.removeEventListener('db-provider-changed', handleDbSync);
+    };
+  }, []);
 
   // System Settings: Spreadsheet Import Visibility Toggle
   const [enableSpreadsheetImport, setEnableSpreadsheetImport] = useState<boolean>(() => {
@@ -92,58 +119,23 @@ export default function App() {
     localStorage.setItem('rmaflow_enable_spreadsheet_import', String(enabled));
   };
 
-  // Listen for Authentication state
+  // Listen for Authentication state with Supabase Auth
   useEffect(() => {
-    let unsubscribeUserDoc: (() => void) | null = null;
+    setIsAuthLoading(true);
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-      setIsAuthLoading(true);
-
-      if (unsubscribeUserDoc) {
-        unsubscribeUserDoc();
-        unsubscribeUserDoc = null;
-      }
-
+    const unsubscribeAuth = subscribeToSupabaseAuth(async (currentUser, profile) => {
       if (currentUser) {
         setUser(currentUser);
 
-        // Auto-heal / Ensure Firestore user document exists
-        await ensureUserProfileExists(currentUser);
-
-        // Listen to custom user profile from Firestore users collection in real-time
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        unsubscribeUserDoc = onSnapshot(userDocRef, async (userSnap) => {
-          if (userSnap.exists()) {
-            const userData = userSnap.data();
-            let role = userData.role || 'operator';
-            
-            // Bootstrapped Admin: Include User email from runtime as an admin
-            if (currentUser.email === 'alessandro.away6@gmail.com' && userData.role !== 'admin') {
-              role = 'admin';
-              try {
-                await updateDoc(userDocRef, { role: 'admin' });
-              } catch (e) {
-                console.error('Failed to auto-upgrade to admin:', e);
-              }
-            }
-            
-            setUserRole(role);
-            setUserName(userData.name || currentUser.displayName || 'Operador Corporativo');
-          } else {
-            // Fallback create profile in Firestore
-            const fallbackProfile = await ensureUserProfileExists(currentUser);
-            if (fallbackProfile) {
-              setUserRole(fallbackProfile.role);
-              setUserName(fallbackProfile.name);
-            }
-          }
-          setIsAuthLoading(false);
-        }, (err) => {
-          console.error('Error in user profile subscription:', err);
-          setUserRole(currentUser.email === 'alessandro.away6@gmail.com' ? 'admin' : 'operator'); // safe fallback
-          setUserName(currentUser.displayName || 'Operador Corporativo');
-          setIsAuthLoading(false);
-        });
+        if (profile) {
+          setUserRole(profile.role);
+          setUserName(profile.name);
+        } else {
+          const isMasterAdmin = currentUser.email === 'alessandro.away6@gmail.com';
+          setUserRole(isMasterAdmin ? 'admin' : 'operator');
+          setUserName(currentUser.user_metadata?.name || currentUser.email?.split('@')[0] || 'Operador Corporativo');
+        }
+        setIsAuthLoading(false);
       } else {
         setUser(null);
         setUserRole(null);
@@ -154,60 +146,73 @@ export default function App() {
 
     return () => {
       unsubscribeAuth();
-      if (unsubscribeUserDoc) {
-        unsubscribeUserDoc();
-      }
     };
   }, []);
 
-  // Listen for real-time Firestore database collections when authenticated
+  // Database pagination & loading states
+  const [productsLastDoc, setProductsLastDoc] = useState<any | null>(null);
+  const [hasMoreProducts, setHasMoreProducts] = useState<boolean>(false);
+  const [isLoadingMoreProducts, setIsLoadingMoreProducts] = useState<boolean>(false);
+  const lastLoadedUserIdRef = React.useRef<string | null>(null);
+
+  // Initial Data Fetching from Database
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+      setSyncError(null);
+      const [prodRes, triageRes, pendingList, inflowList] = await Promise.all([
+        getInitialBaseProducts(2500),
+        getInitialTriageUnits(2500),
+        getInitialPendingItems(1000),
+        getInitialDailyInflows(1000)
+      ]);
+
+      setProducts(prodRes.data);
+      setProductsLastDoc(prodRes.lastDoc);
+      setHasMoreProducts(prodRes.hasMore);
+
+      setTriageUnits(triageRes.data);
+      setPendingItems(pendingList);
+      setDailyInflows(inflowList);
+    } catch (err: any) {
+      console.error('Error loading initial database data:', err);
+      setSyncError(err?.message || String(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      lastLoadedUserIdRef.current = null;
+      return;
+    }
+    // Only load initial data when user first logs in or user ID actually changes, not on window focus/tab switch
+    if (lastLoadedUserIdRef.current !== user.id) {
+      lastLoadedUserIdRef.current = user.id;
+      loadInitialData();
+    }
+  }, [user?.id]);
 
-    setIsLoading(true);
-    setSyncError(null);
-    
-    // Fail-safe timeout so UI never hangs in loading state if network or Firestore is slow
-    const loadingTimeout = setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
-
-    // Subscribe to products in real-time
-    const unsubscribeProducts = subscribeBaseProducts((fetchedProducts) => {
-      setProducts(fetchedProducts);
-      setIsLoading(false);
-    }, (err) => {
-      console.error('Error syncing products:', err);
-      setSyncError(err?.message || String(err));
-      setIsLoading(false);
-    });
-
-    // Subscribe to triage units in real-time
-    const unsubscribeTriage = subscribeTriageUnits((fetchedUnits) => {
-      setTriageUnits(fetchedUnits);
-      setIsLoading(false);
-    }, (err) => {
-      console.error('Error syncing triage units:', err);
-      setSyncError(err?.message || String(err));
-      setIsLoading(false);
-    });
-
-    // Subscribe to daily inflows in real-time
-    const unsubscribeDailyInflows = subscribeDailyInflows((fetchedInflows) => {
-      setDailyInflows(fetchedInflows);
-      setIsLoading(false);
-    }, (err) => {
-      console.error('Error syncing daily inflows:', err);
-      setIsLoading(false);
-    });
-
-    return () => {
-      clearTimeout(loadingTimeout);
-      unsubscribeProducts();
-      unsubscribeTriage();
-      unsubscribeDailyInflows();
-    };
-  }, [user]);
+  // Load More Base Products via startAfter() pagination
+  const handleLoadMoreProducts = async () => {
+    if (!productsLastDoc || isLoadingMoreProducts || !hasMoreProducts) return;
+    setIsLoadingMoreProducts(true);
+    try {
+      const res = await getMoreBaseProducts(productsLastDoc, 2500);
+      setProducts(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const newItems = res.data.filter(p => !existingIds.has(p.id));
+        return [...prev, ...newItems];
+      });
+      setProductsLastDoc(res.lastDoc);
+      setHasMoreProducts(res.hasMore);
+    } catch (err) {
+      console.error('Error loading more products:', err);
+    } finally {
+      setIsLoadingMoreProducts(false);
+    }
+  };
 
   // Auto-backup scheduler background runner
   useEffect(() => {
@@ -234,67 +239,160 @@ export default function App() {
       clearTimeout(initTimer);
       clearInterval(interval);
     };
-  }, [user, userName, userRole]);
+  }, [user?.id, userName, userRole]);
+
+  // Pending Items actions (Optimized local state updates)
+  const handleSavePendingItem = async (item: PendingItem) => {
+    const saved = await savePendingItem(item);
+    setPendingItems(prev => {
+      const index = prev.findIndex(p => p.id === saved.id);
+      if (index >= 0) {
+        const next = [...prev];
+        next[index] = saved;
+        return next;
+      }
+      return [saved, ...prev];
+    });
+  };
+
+  const handleDeletePendingItem = async (id: string) => {
+    const cleanId = (id || '').trim();
+    if (!cleanId) return;
+    const target = pendingItems.find(p => p.id === cleanId);
+    await deletePendingItem(cleanId, target?.sku, target?.productName);
+    setPendingItems(prev => prev.filter(p => p.id !== cleanId));
+  };
+
+  const handleUpdatePendingStatus = async (id: string, status: PendingStatusType) => {
+    await updatePendingItemStatus(id, status);
+    const now = new Date().toISOString();
+    setPendingItems(prev => prev.map(p => p.id === id ? { 
+      ...p, 
+      status, 
+      updatedAt: now,
+      ...(status === 'Resolvido' ? { resolvedAt: now } : {})
+    } : p));
+  };
+
+  const handleTransferPendingToStock = async (
+    item: PendingItem,
+    destination: DestinationSectorType,
+    details?: {
+      deviceStatus?: string;
+      packageStatus?: string;
+      accessoriesInclusion?: string;
+      notes?: string;
+    }
+  ) => {
+    const createdUnit = await transferPendingItemToStock(item, destination, details);
+    const now = new Date().toISOString();
+    setPendingItems(prev => prev.map(p => p.id === item.id ? { 
+      ...p, 
+      status: 'Resolvido', 
+      transferredToStock: true, 
+      transferredUnitId: createdUnit.id, 
+      resolvedAt: now 
+    } : p));
+    setTriageUnits(prev => [createdUnit, ...prev]);
+    return createdUnit;
+  };
 
   // Daily Inflow actions
   const handleSaveDailyInflow = async (record: DailyInflowRecord) => {
     await saveDailyInflow(record);
+    setDailyInflows(prev => {
+      const index = prev.findIndex(r => r.id === record.id);
+      if (index >= 0) {
+        const next = [...prev];
+        next[index] = record;
+        return next;
+      }
+      return [...prev, record].sort((a, b) => a.date.localeCompare(b.date));
+    });
   };
 
   const handleSaveBatchDailyInflows = async (records: DailyInflowRecord[]) => {
-    return await saveBatchDailyInflows(records);
+    const result = await saveBatchDailyInflows(records);
+    setDailyInflows(prev => {
+      const map = new Map<string, DailyInflowRecord>(prev.map(r => [r.id, r]));
+      records.forEach(r => map.set(r.id, r));
+      return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+    });
+    return result;
   };
 
   const handleDeleteDailyInflow = async (id: string) => {
-    if (userRole !== 'admin') {
-      alert('Acesso negado: Apenas administradores podem apagar lançamentos do fluxo de entradas.');
-      return;
-    }
-    await deleteDailyInflow(id);
+    const cleanId = (id || '').trim();
+    if (!cleanId) return;
+    await deleteDailyInflow(cleanId);
+    setDailyInflows(prev => prev.filter(r => r.id !== cleanId));
   };
 
-  // Catálogo de Base actions
+  // Catálogo de Base actions (Zero-Read Post-Write Optimization)
   const handleSaveProduct = async (product: BaseProduct) => {
-    await saveBaseProduct(product);
+    const saved = await saveBaseProduct(product);
+    setProducts(prev => {
+      const index = prev.findIndex(p => p.id === saved.id);
+      if (index >= 0) {
+        const next = [...prev];
+        next[index] = saved;
+        return next;
+      }
+      return [saved, ...prev];
+    });
   };
 
   const handleSaveBatchProducts = async (productsToSave: BaseProduct[]) => {
-    return await saveBatchBaseProducts(productsToSave, products);
+    const res = await saveBatchBaseProducts(productsToSave, products);
+    if (res.savedProducts && res.savedProducts.length > 0) {
+      setProducts(prev => {
+        const map = new Map<string, BaseProduct>(prev.map(p => [p.id, p]));
+        res.savedProducts.forEach(sp => map.set(sp.id, sp));
+        return Array.from(map.values());
+      });
+    }
+    return { added: res.added, updated: res.updated };
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (userRole !== 'admin') {
-      alert('Apenas administradores possuem privilégios para excluir produtos do catálogo.');
-      return;
-    }
-    await deleteBaseProduct(id);
+    const cleanId = (id || '').trim();
+    if (!cleanId) return;
+    const target = products.find(p => p.id === cleanId);
+    await deleteBaseProduct(cleanId, target?.sku, target?.name);
+    setProducts(prev => prev.filter(p => p.id !== cleanId));
   };
 
   // Triage actions
   const handleSaveTriage = async (unit: TriageUnit) => {
-    await saveTriageUnit(unit);
+    const saved = await saveTriageUnit(unit);
+    setTriageUnits(prev => {
+      const index = prev.findIndex(u => u.id === saved.id);
+      if (index >= 0) {
+        const next = [...prev];
+        next[index] = saved;
+        return next;
+      }
+      return [saved, ...prev];
+    });
   };
 
   const handleDeleteTriage = async (id: string) => {
-    if (userRole !== 'admin') {
-      alert('Acesso negado: Apenas administradores podem apagar permanentemente registros de triagem.');
-      return;
-    }
-    await deleteTriageUnit(id);
+    const cleanId = (id || '').trim();
+    if (!cleanId) return;
+    const target = triageUnits.find(u => u.id === cleanId);
+    await deleteTriageUnit(cleanId, target?.trackingCode, target?.baseProductName);
+    setTriageUnits(prev => prev.filter(u => u.id !== cleanId));
   };
 
   const handleCheckoutTriage = async (id: string) => {
-    await checkoutTriageUnit(id);
-  };
-
-  // Reset database back to default seed via secure password confirmation modal
-  const handleResetData = () => {
-    setIsResetModalOpen(true);
+    const target = triageUnits.find(u => u.id === id);
+    await checkoutTriageUnit(id, target?.trackingCode, target?.destinationSector);
+    setTriageUnits(prev => prev.map(u => u.id === id ? { ...u, status: 'Baixado', checkoutDate: new Date().toISOString() } : u));
   };
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await signOutSupabase();
       setUser(null);
       setUserRole(null);
       setUserName('');
@@ -331,20 +429,20 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans" id="app-root">
       
       {/* Top Main Navigation Bar */}
-      <header className="bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md sticky top-0 z-40 shadow-md" id="main-header">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-16 gap-4">
+      <header className="bg-slate-900/95 border-b border-slate-800 backdrop-blur-md sticky top-0 z-40 shadow-lg w-full" id="main-header">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6">
+          <div className="flex items-center justify-between h-16 gap-2 lg:gap-3 xl:gap-4">
             
             {/* Logo and title (Clickable to access Dashboard) */}
             <button
               onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
-              className="flex items-center gap-2.5 text-left focus:outline-none cursor-pointer group hover:opacity-90 transition-opacity shrink-0"
+              className="flex items-center gap-2.5 text-left focus:outline-none cursor-pointer group hover:opacity-90 transition-opacity shrink-0 py-1"
               title="Ir para o Dashboard"
             >
-              <div className="w-9 h-9 bg-gradient-to-br from-sky-500 to-sky-600 rounded-lg shadow-md shadow-sky-500/20 text-white flex items-center justify-center group-hover:scale-105 transition-all duration-200">
+              <div className="w-9 h-9 bg-gradient-to-br from-sky-500 to-sky-600 rounded-xl shadow-md shadow-sky-500/20 text-white flex items-center justify-center group-hover:scale-105 transition-all duration-200">
                 <Boxes className="w-5 h-5 text-white" />
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <h1 className="text-base font-extrabold tracking-tight text-white flex items-center gap-1 leading-none">
                   Stocck <span className="text-sky-400 font-bold group-hover:text-sky-300 transition-colors">RMA</span>
                 </h1>
@@ -353,105 +451,136 @@ export default function App() {
             </button>
 
             {/* Desktop Navigation Tabs (Sleek Segmented Pill) */}
-            <nav className="hidden lg:flex items-center gap-1 bg-slate-950/80 p-1.5 rounded-2xl border border-slate-800 shadow-inner shrink-0" id="desktop-navigation">
+            <nav className="hidden xl:flex items-center gap-1 bg-slate-950/80 p-1 rounded-2xl border border-slate-800 shadow-inner" id="desktop-navigation">
               <button
                 onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs xl:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'dashboard' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
                 id="nav-dashboard"
               >
-                <TrendingUp className="w-4 h-4 text-sky-400 shrink-0" />
+                <TrendingUp className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                 <span>Dashboard</span>
               </button>
 
               <button
                 onClick={() => { setActiveTab('rma'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs xl:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'rma' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-500/10' : 'border border-transparent text-slate-400 hover:text-rose-300 hover:bg-slate-800/60'
                 }`}
                 id="nav-rma"
               >
-                <FolderMinus className={`w-4 h-4 shrink-0 ${activeTab === 'rma' ? 'text-rose-400' : 'text-slate-400'}`} />
+                <FolderMinus className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'rma' ? 'text-rose-400' : 'text-slate-400'}`} />
                 <span>Entrada de RMA</span>
               </button>
 
               <button
                 onClick={() => { setActiveTab('catalog'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs xl:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'catalog' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
                 id="nav-catalog"
               >
-                <Database className="w-4 h-4 text-sky-400 shrink-0" />
+                <Database className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                 <span>Catálogo de Base</span>
               </button>
 
               <button
                 onClick={() => { setActiveTab('stock'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs xl:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'stock' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
                 id="nav-stock"
               >
-                <Package className="w-4 h-4 text-sky-400 shrink-0" />
+                <Package className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                 <span>Estoque Físico</span>
               </button>
 
               <button
+                onClick={() => { setActiveTab('pending'); setSelectedTriageUnit(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  activeTab === 'pending' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+                id="nav-pending"
+              >
+                <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span>Pendências</span>
+                {pendingItems.filter(p => p.status !== 'Resolvido').length > 0 && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold ml-0.5">
+                    {pendingItems.filter(p => p.status !== 'Resolvido').length}
+                  </span>
+                )}
+              </button>
+
+              <button
                 onClick={() => { setActiveTab('movement'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs xl:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'movement' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
                 id="nav-movement"
               >
-                <Boxes className="w-4 h-4 text-sky-400 shrink-0" />
+                <Boxes className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                 <span>Fluxo de Entradas</span>
               </button>
 
               <button
                 onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs xl:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'logs' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
                 id="nav-logs"
               >
-                <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                 <span>Auditoria & Logs</span>
               </button>
             </nav>
 
             {/* Authenticated user profile, actions, and logout */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Supabase Database Status Monitor Button */}
+              <button
+                type="button"
+                onClick={() => setIsDbSwitcherModalOpen(true)}
+                className="h-9 flex items-center gap-2 px-2.5 sm:px-3 rounded-xl border bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 border-emerald-500/40 hover:border-emerald-500/70 transition-all cursor-pointer text-xs font-bold shadow-sm whitespace-nowrap"
+                title="Banco de Dados: Supabase (PostgreSQL) - Clique para ver métricas e status"
+                id="btn-open-db-switcher-header"
+              >
+                <span className="w-2 h-2 rounded-full shrink-0 bg-emerald-400 animate-pulse" />
+                <Database className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                <span className="hidden md:inline font-bold">
+                  Supabase DB
+                </span>
+              </button>
+
               {/* Backup & Restore Action Button */}
               <button
                 type="button"
                 onClick={() => setIsBackupModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 hover:text-white rounded-xl border border-indigo-500/30 hover:border-indigo-500/50 transition-all cursor-pointer text-xs font-bold shadow-sm whitespace-nowrap"
+                className="h-9 flex items-center gap-1.5 px-2.5 sm:px-3 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 hover:text-white rounded-xl border border-indigo-500/30 hover:border-indigo-500/50 transition-all cursor-pointer text-xs font-bold shadow-sm whitespace-nowrap"
                 title="Backup & Restauração de Dados"
                 id="btn-open-backup-header"
               >
-                <HardDriveDownload className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span className="hidden xl:inline">Backup</span>
+                <HardDriveDownload className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="hidden md:inline">Backup</span>
               </button>
 
               {/* Settings Button */}
               <button
                 type="button"
                 onClick={() => setIsSettingsModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer text-xs font-bold shadow-sm group whitespace-nowrap"
+                className="h-9 flex items-center gap-1.5 px-2.5 sm:px-3 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer text-xs font-bold shadow-sm group whitespace-nowrap"
                 title="Configurações do Sistema"
                 id="btn-open-settings"
               >
-                <Settings className="w-4 h-4 text-sky-400 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
-                <span className="hidden xl:inline">Configurações</span>
+                <Settings className="w-3.5 h-3.5 text-sky-400 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
+                <span className="hidden md:inline">Configurações</span>
               </button>
 
               {/* PRD Download for QA & Testing */}
               <a
                 href="./PRD_RMA_FLOW.md"
                 download="PRD_RMA_FLOW.md"
-                className="hidden xl:flex items-center gap-1.5 px-2.5 py-2 bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 rounded-xl text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                className="h-9 hidden lg:flex items-center gap-1.5 px-2.5 sm:px-3 bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 rounded-xl text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer shadow-sm whitespace-nowrap"
                 title="Baixar o arquivo PRD completo (.MD) para testes"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -461,11 +590,11 @@ export default function App() {
               {/* Secure logout */}
               <button 
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-950 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 hover:border-rose-500/30 transition-all cursor-pointer text-xs font-bold shadow-sm whitespace-nowrap"
+                className="h-9 flex items-center gap-1.5 px-2.5 sm:px-3 bg-slate-950 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 hover:border-rose-500/30 transition-all cursor-pointer text-xs font-bold shadow-sm whitespace-nowrap"
                 title="Sair da conta atual"
                 id="btn-logout"
               >
-                <LogOut className="w-4 h-4 shrink-0" />
+                <LogOut className="w-3.5 h-3.5 shrink-0" />
                 <span className="hidden sm:inline">Sair</span>
               </button>
             </div>
@@ -473,93 +602,130 @@ export default function App() {
         </div>
       </header>
 
-      {/* Mobile Navigation Tabs (Secondary top bar) */}
-      <div className="lg:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2.5 px-4 flex gap-1.5 shadow-inner items-center" id="mobile-navigation">
+      {/* Secondary Navigation Tabs (for screens under XL) */}
+      <div className="xl:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-3 sm:px-4 flex gap-1.5 shadow-inner items-center" id="mobile-navigation">
+        <button
+          onClick={() => setIsDbSwitcherModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+          title="Status do Supabase DB"
+          id="mobile-btn-db-switcher"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <Database className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Supabase DB</span>
+        </button>
+
         <button
           onClick={() => setIsBackupModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shrink-0 hover:text-white"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shrink-0 hover:text-white"
           title="Backup e Restauração"
           id="mobile-btn-backup"
         >
-          <HardDriveDownload className="w-4 h-4 text-indigo-400" />
+          <HardDriveDownload className="w-3.5 h-3.5 text-indigo-400" />
           <span>Backup</span>
         </button>
+
         <button
           onClick={() => setIsSettingsModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 shrink-0 hover:text-white"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 shrink-0 hover:text-white"
           title="Configurações"
           id="mobile-btn-settings"
         >
-          <Settings className="w-4 h-4 text-sky-400" />
+          <Settings className="w-3.5 h-3.5 text-sky-400" />
           <span>Configurações</span>
         </button>
+
         <a
           href="./PRD_RMA_FLOW.md"
           download="PRD_RMA_FLOW.md"
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0"
         >
-          <Download className="w-4 h-4" />
+          <Download className="w-3.5 h-3.5" />
           <span>PRD</span>
         </a>
+
+        <div className="w-px h-5 bg-slate-800 mx-1 shrink-0" />
+
         <button
           onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'dashboard' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
-          <TrendingUp className="w-4 h-4" />
+          <TrendingUp className="w-3.5 h-3.5 text-sky-400" />
           <span>Dashboard</span>
         </button>
+
         <button
           onClick={() => { setActiveTab('rma'); setSelectedTriageUnit(null); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'rma' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
-          <FolderMinus className={`w-4 h-4 ${activeTab === 'rma' ? 'text-rose-400' : 'text-slate-400'}`} />
+          <FolderMinus className={`w-3.5 h-3.5 ${activeTab === 'rma' ? 'text-rose-400' : 'text-slate-400'}`} />
           <span>Entrada RMA</span>
         </button>
+
         <button
           onClick={() => { setActiveTab('catalog'); setSelectedTriageUnit(null); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'catalog' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
-          <Database className="w-4 h-4" />
+          <Database className="w-3.5 h-3.5 text-sky-400" />
           <span>Catálogo Base</span>
         </button>
+
         <button
           onClick={() => { setActiveTab('stock'); setSelectedTriageUnit(null); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'stock' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
-          <Package className="w-4 h-4" />
+          <Package className="w-3.5 h-3.5 text-sky-400" />
           <span>Estoque Físico</span>
         </button>
+
+        <button
+          onClick={() => { setActiveTab('pending'); setSelectedTriageUnit(null); }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+            activeTab === 'pending' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          <Clock className={`w-3.5 h-3.5 ${activeTab === 'pending' ? 'text-sky-400' : 'text-slate-400'}`} />
+          <span>Pendências</span>
+          {pendingItems.filter(p => p.status !== 'Resolvido').length > 0 && (
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold ml-0.5">
+              {pendingItems.filter(p => p.status !== 'Resolvido').length}
+            </span>
+          )}
+        </button>
+
         <button
           onClick={() => { setActiveTab('movement'); setSelectedTriageUnit(null); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'movement' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
-          <Boxes className="w-4 h-4" />
+          <Boxes className="w-3.5 h-3.5 text-sky-400" />
           <span>Fluxo Entradas</span>
         </button>
+
         <button
           onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'logs' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
         >
-          <ShieldAlert className="w-4 h-4" />
+          <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
           <span>Auditoria</span>
         </button>
+
         <button
           onClick={handleLogout}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0 hover:bg-rose-500/20"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0 hover:bg-rose-500/20"
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut className="w-3.5 h-3.5" />
           <span>Sair</span>
         </button>
       </div>
@@ -571,31 +737,33 @@ export default function App() {
             <div className="p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/20">
               <ShieldAlert className="w-8 h-8 animate-bounce" />
             </div>
-            <h3 className="text-lg font-bold text-white">Falha na Sincronização em Tempo Real</h3>
+            <h3 className="text-lg font-bold text-white">
+              {syncError.toLowerCase().includes('quota') || syncError.toLowerCase().includes('resource')
+                ? 'Limite de Cota do Firebase Atingido'
+                : 'Falha na Sincronização em Tempo Real'}
+            </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Ocorreu um erro de permissão ou conexão ao se comunicar com o banco de dados Firestore remoto.
+              {syncError.toLowerCase().includes('quota') || syncError.toLowerCase().includes('resource')
+                ? 'A base atual atingiu o limite de leituras diárias do plano gratuito do Google Cloud Firestore. Alterne para o Banco Reserva para restaurar o acesso instantaneamente.'
+                : 'Ocorreu um erro de permissão ou conexão ao se comunicar com o banco de dados Firestore remoto.'}
             </p>
             <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-mono text-rose-400 max-w-full overflow-x-auto w-full break-all">
               {syncError}
             </div>
-            <p className="text-[11px] text-slate-500">
-              Isso pode ocorrer se as regras do Firestore não estiverem prontas ou se houver um atraso na propagação das políticas.
-            </p>
-            <div className="flex gap-2.5 w-full">
+            <div className="flex flex-col sm:flex-row gap-2.5 w-full">
+              <button
+                onClick={() => setIsDbSwitcherModalOpen(true)}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Zap className="w-4 h-4" />
+                <span>Mudar para Banco Reserva</span>
+              </button>
               <button
                 onClick={() => window.location.reload()}
-                className="flex-1 py-2.5 bg-sky-500 hover:bg-sky-400 text-white font-bold rounded-lg text-xs transition-all cursor-pointer"
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition-all cursor-pointer"
               >
                 Recarregar Página
               </button>
-              {userRole === 'admin' && (
-                <button
-                  onClick={handleResetData}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold rounded-lg text-xs transition-all cursor-pointer"
-                >
-                  Forçar Reset / Seed
-                </button>
-              )}
             </div>
           </div>
         ) : isLoading ? (
@@ -612,15 +780,19 @@ export default function App() {
               <Dashboard 
                 units={triageUnits}
                 products={products}
+                pendingItemsCount={pendingItems.filter(p => p.status !== 'Resolvido').length}
                 onViewUnit={handleViewUnitDetails}
                 onNavigateToStock={() => setActiveTab('stock')}
-                onResetData={handleResetData}
+                onNavigateToPending={() => setActiveTab('pending')}
               />
             )}
 
             {activeTab === 'catalog' && (
               <BaseCatalog 
                 products={products}
+                hasMoreFromDb={hasMoreProducts}
+                isLoadingMore={isLoadingMoreProducts}
+                onLoadMoreFromDb={handleLoadMoreProducts}
                 onSaveProduct={handleSaveProduct}
                 onSaveBatchProducts={handleSaveBatchProducts}
                 onDeleteProduct={handleDeleteProduct}
@@ -652,10 +824,23 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'pending' && (
+              <PendingItems
+                items={pendingItems}
+                products={products}
+                onSavePending={handleSavePendingItem}
+                onDeletePending={handleDeletePendingItem}
+                onUpdateStatus={handleUpdatePendingStatus}
+                onTransferToStock={handleTransferPendingToStock}
+                userRole={userRole}
+                onNavigateToStock={() => setActiveTab('stock')}
+              />
+            )}
+
             {activeTab === 'logs' && (
               <LogsAudit 
                 userRole={userRole} 
-                onResetData={handleResetData}
+                userEmail={user?.email || ''}
                 productsCount={products.length}
                 triageUnitsCount={triageUnits.length}
                 dailyInflowsCount={dailyInflows.length}
@@ -682,11 +867,11 @@ export default function App() {
       {/* Footer copyright */}
       <footer className="bg-slate-900/50 border-t border-slate-800 py-6 mt-16 text-center text-sm text-slate-400" id="main-footer">
         <div className="max-w-[1600px] mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-3">
-          <span>RMA Flow v2.0.0 (Web) • Sistema de Triagem Logística & Rastreabilidade</span>
+          <span>Stocck RMA v2.0.0 (Web) • Sistema de Triagem Logística & Rastreabilidade</span>
           <div className="flex gap-4">
             <span className="flex items-center gap-1 font-semibold text-emerald-400">
               <Info className="w-3.5 h-3.5" />
-              Sincronizado com Firebase Cloud DB (Firestore)
+              Sincronizado com Supabase Cloud DB & Auth
             </span>
           </div>
         </div>
@@ -701,8 +886,17 @@ export default function App() {
         onOpenBackupModal={(tab) => {
           setIsBackupModalOpen(true);
         }}
+        onOpenDbSwitcherModal={() => {
+          setIsDbSwitcherModalOpen(true);
+        }}
         userRole={userRole}
         userEmail={user?.email || ''}
+      />
+
+      {/* Database Quick Switcher & Quota Management Modal */}
+      <DatabaseSwitcherModal
+        isOpen={isDbSwitcherModalOpen}
+        onClose={() => setIsDbSwitcherModalOpen(false)}
       />
 
       {/* Local System Backup & Restoration Modal */}
@@ -715,20 +909,22 @@ export default function App() {
         currentCounts={{
           products: products.length,
           triageUnits: triageUnits.length,
-          dailyInflows: dailyInflows.length
+          dailyInflows: dailyInflows.length,
+          pendingItems: pendingItems.length
         }}
-        onRestoreSuccess={() => {
-          setActiveTab('dashboard');
-        }}
-      />
-
-      {/* Database Reset Password Confirmation Modal */}
-      <ResetDatabaseModal
-        isOpen={isResetModalOpen}
-        onClose={() => setIsResetModalOpen(false)}
-        userEmail={user?.email || ''}
-        userRole={userRole}
-        onSuccess={() => {
+        onRestoreSuccess={(restoredPayload) => {
+          if (restoredPayload?.data) {
+            if (Array.isArray(restoredPayload.data.products) && restoredPayload.data.products.length > 0) {
+              setProducts(restoredPayload.data.products);
+            }
+            if (Array.isArray(restoredPayload.data.triageUnits) && restoredPayload.data.triageUnits.length > 0) {
+              setTriageUnits(restoredPayload.data.triageUnits);
+            }
+            if (Array.isArray(restoredPayload.data.dailyInflows) && restoredPayload.data.dailyInflows.length > 0) {
+              setDailyInflows(restoredPayload.data.dailyInflows);
+            }
+          }
+          loadInitialData();
           setActiveTab('dashboard');
         }}
       />

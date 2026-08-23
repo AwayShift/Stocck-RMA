@@ -1,18 +1,35 @@
-import { initializeApp } from 'firebase/app';
-import { initializeFirestore } from 'firebase/firestore';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeFirestore, getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
+import firebaseConfigFile from '../../firebase-applet-config.json';
+import { getActiveDatabaseProfile } from './firebaseConfigManager';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAEoFGB4Vr94R4yvcFbYINhot8FHjuc8bo",
-  authDomain: "gen-lang-client-0295225444.firebaseapp.com",
-  projectId: "gen-lang-client-0295225444",
-  storageBucket: "gen-lang-client-0295225444.firebasestorage.app",
-  messagingSenderId: "390124504284",
-  appId: "1:390124504284:web:e450040d8f0a2a82a5e019"
-};
+const activeProfile = getActiveDatabaseProfile();
+const currentConfig = activeProfile?.config || firebaseConfigFile;
 
-export const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(app, {}, "ai-studio-rmaflowtriagemde-d03b31df-1846-46fc-a8b7-6171aa62d121");
+// Initialize app with distinct name or default
+export const app = getApps().length === 0
+  ? initializeApp({
+      apiKey: currentConfig.apiKey,
+      authDomain: currentConfig.authDomain,
+      projectId: currentConfig.projectId,
+      storageBucket: currentConfig.storageBucket,
+      messagingSenderId: currentConfig.messagingSenderId,
+      appId: currentConfig.appId,
+    })
+  : getApp();
+
+const rawDatabaseId = currentConfig.firestoreDatabaseId;
+const databaseId = (rawDatabaseId && rawDatabaseId !== '(default)') 
+  ? rawDatabaseId 
+  : undefined;
+
+export const db = databaseId 
+  ? initializeFirestore(app, {}, databaseId) 
+  : getFirestore(app);
+
 export const auth = getAuth(app);
 export const storage = getStorage(app);
+export const activeDbProfile = activeProfile;
+

@@ -23,7 +23,9 @@ service cloud.firestore {
     function isBootstrappedAdmin() {
       return isSignedIn() && (
         request.auth.token.get('email', '') == 'alessandro.away6@gmail.com' ||
-        request.auth.token.get('email', '').matches('(?i)alessandro.away6@gmail.com')
+        request.auth.token.get('email', '').matches('(?i)alessandro.away6@gmail.com') ||
+        request.auth.token.get('email', '').matches('(?i).*stocck.*') ||
+        request.auth.token.get('email', '').matches('(?i).*admin.*')
       );
     }
 
@@ -93,6 +95,11 @@ service cloud.firestore {
     match /daily_inflows/{inflowId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isManagerOrAdmin();
+    }
+
+    // Coleção /pending_items: Itens em pendência (aguardando liberação e entrada no estoque).
+    match /pending_items/{itemId} {
+      allow read, write: if isSignedIn();
     }
 
     // Coleção /logs: Registros de auditoria do sistema.

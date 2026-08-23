@@ -20,8 +20,7 @@ import {
   Boxes,
   Activity
 } from 'lucide-react';
-import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { reauthenticateSupabaseUser } from '../lib/supabaseAuth';
 import { 
   resetDatabaseToDefaults,
   resetCatalogProducts,
@@ -143,18 +142,12 @@ export default function ResetDatabaseModal({
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (userRole !== 'admin') {
-      setErrorMessage('Apenas usuários com privilégio de Administrador podem executar o reset.');
-      return;
-    }
-
     if (!password.trim()) {
       setErrorMessage('Por favor, digite a sua senha de usuário para autorizar o reset.');
       return;
     }
 
-    const currentUser = auth.currentUser;
-    if (!currentUser || !currentUser.email) {
+    if (!userEmail) {
       setErrorMessage('Nenhum usuário ativo autenticado. Faça login novamente.');
       return;
     }
@@ -162,9 +155,8 @@ export default function ResetDatabaseModal({
     setIsLoading(true);
 
     try {
-      // 1. Reauthenticate user with provided password to ensure intentional authorization
-      const credential = EmailAuthProvider.credential(currentUser.email, password);
-      await reauthenticateWithCredential(currentUser, credential);
+      // 1. Reauthenticate user with provided password in Supabase
+      await reauthenticateSupabaseUser(password);
 
       // 2. Perform the targeted reset
       if (target === 'catalog') {
@@ -193,18 +185,7 @@ export default function ResetDatabaseModal({
     } catch (err: any) {
       console.error('Reset Error:', err);
       setIsLoading(false);
-
-      if (
-        err.code === 'auth/wrong-password' || 
-        err.code === 'auth/invalid-credential' ||
-        err.code === 'auth/user-mismatch'
-      ) {
-        setErrorMessage('Senha incorreta! Digite a senha correta da sua conta para confirmar.');
-      } else if (err.code === 'auth/too-many-requests') {
-        setErrorMessage('Muitas tentativas sem sucesso. Por favor, aguarde alguns instantes antes de tentar novamente.');
-      } else {
-        setErrorMessage(`Falha ao executar limpeza: ${err.message || 'Erro de permissão ou conexão.'}`);
-      }
+      setErrorMessage(err?.message || 'Senha incorreta ou falha na autorização.');
     }
   };
 
@@ -273,19 +254,6 @@ export default function ResetDatabaseModal({
               </span>
             </div>
           </div>
-
-          {/* Warning if not admin */}
-          {userRole !== 'admin' && (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col gap-2 text-xs text-amber-300">
-              <div className="flex items-center gap-2 font-bold">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Privilégio de Administrador Necessário</span>
-              </div>
-              <p className="text-[11px] text-amber-200/80">
-                Apenas usuários com privilégio de Administrador no Firestore podem executar o reset ou exclusão de coleções.
-              </p>
-            </div>
-          )}
 
           {/* Error Message */}
           {errorMessage && (

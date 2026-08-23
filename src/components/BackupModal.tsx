@@ -34,7 +34,8 @@ import {
   Sliders,
   CheckCheck,
   Search,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from 'lucide-react';
 import { 
   generateAndDownloadBackup, 
@@ -46,6 +47,7 @@ import {
   saveAutoBackupConfig,
   restoreFromCloudSnapshot,
   downloadCloudSnapshotAsJson,
+  deleteCloudSnapshot,
   formatBrDate,
   DEFAULT_AUTO_BACKUP_CONFIG
 } from '../lib/backupService';
@@ -56,6 +58,7 @@ import {
   AutoBackupScheduleConfig,
   BackupTriggerType 
 } from '../types';
+import { getActiveDbProvider, DatabaseProvider, SUPABASE_SQL_SCHEMA } from '../lib/supabase';
 
 interface BackupModalProps {
   isOpen: boolean;
@@ -67,8 +70,9 @@ interface BackupModalProps {
     products: number;
     triageUnits: number;
     dailyInflows: number;
+    pendingItems?: number;
   };
-  onRestoreSuccess?: () => void;
+  onRestoreSuccess?: (payload?: any) => void;
 }
 
 export default function BackupModal({
@@ -81,6 +85,7 @@ export default function BackupModal({
   onRestoreSuccess
 }: BackupModalProps) {
   const [activeTab, setActiveTab] = useState<'cloud' | 'schedule' | 'local'>('cloud');
+  const [activeProvider, setActiveProvider] = useState<DatabaseProvider>(() => getActiveDbProvider());
 
   // Cloud Snapshots State
   const [cloudBackups, setCloudBackups] = useState<CloudBackupRecord[]>([]);
@@ -88,6 +93,9 @@ export default function BackupModal({
   const [downloadingSnapId, setDownloadingSnapId] = useState<string | null>(null);
   const [cloudSnapshotSearch, setCloudSnapshotSearch] = useState('');
   const [selectedSnapshotForRestore, setSelectedSnapshotForRestore] = useState<CloudBackupRecord | null>(null);
+  const [snapshotToDelete, setSnapshotToDelete] = useState<CloudBackupRecord | null>(null);
+  const [isDeletingSnapshot, setIsDeletingSnapshot] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Auto-Backup Scheduling State
   const [scheduleConfig, setScheduleConfig] = useState<AutoBackupScheduleConfig>(DEFAULT_AUTO_BACKUP_CONFIG);
@@ -137,6 +145,7 @@ export default function BackupModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    setActiveProvider(getActiveDbProvider());
     // Load Local storage markers
     setLastLocalBackupDate(localStorage.getItem('stocckrma_last_backup_date'));
     setLastLocalBackupFilename(localStorage.getItem('stocckrma_last_backup_filename'));
@@ -173,6 +182,8 @@ export default function BackupModal({
         role: userRole || 'operator'
       });
       setSuccessMessage(`Ponto de Restauração em Nuvem criado com sucesso! (${res.snapshot.collectionsCount.products} produtos, ${res.snapshot.collectionsCount.triageUnits} unidades em estoque salvas).`);
+      // Instantly add to state so UI updates without any subscription latency
+      setCloudBackups(prev => [res.snapshot, ...prev.filter(b => b.id !== res.snapshot.id)]);
     } catch (err: any) {
       console.error('Error creating cloud snapshot:', err);
       setErrorMessage(err.message || 'Falha ao gerar snapshot online.');
@@ -221,12 +232,30 @@ export default function BackupModal({
       });
 
       setSelectedSnapshotForRestore(null);
-      if (onRestoreSuccess) onRestoreSuccess();
+      if (onRestoreSuccess) onRestoreSuccess(selectedSnapshotForRestore);
     } catch (err: any) {
       console.error('Error restoring from cloud snapshot:', err);
       setErrorMessage(err.message || 'Erro durante a restauração do snapshot da nuvem.');
     } finally {
       setIsRestoring(false);
+    }
+  };
+
+  // Handle Cloud Snapshot Deletion
+  const handleConfirmDeleteSnapshot = async () => {
+    if (!snapshotToDelete) return;
+    setIsDeletingSnapshot(true);
+    setErrorMessage(null);
+    try {
+      await deleteCloudSnapshot(snapshotToDelete.id);
+      setSuccessMessage(`Snapshot "${snapshotToDelete.title}" removido com sucesso.`);
+      setCloudBackups(prev => prev.filter(b => b.id !== snapshotToDelete.id));
+      setSnapshotToDelete(null);
+    } catch (err: any) {
+      console.error('Error deleting cloud snapshot:', err);
+      setErrorMessage(err.message || 'Falha ao excluir snapshot da nuvem.');
+    } finally {
+      setIsDeletingSnapshot(false);
     }
   };
 
@@ -348,9 +377,10 @@ export default function BackupModal({
       });
 
       setSelectedFile(null);
+      const restoredData = validationResult.payload;
       setValidationResult(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      if (onRestoreSuccess) onRestoreSuccess();
+      if (onRestoreSuccess) onRestoreSuccess(restoredData);
     } catch (err: any) {
       console.error('Error during restoration:', err);
       setErrorMessage(err.message || 'Erro durante a restauração do banco de dados.');
@@ -420,9 +450,12 @@ export default function BackupModal({
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   Plano B Ativo
                 </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border font-mono bg-emerald-500/20 text-emerald-300 border-emerald-500/40">
+                  Banco: {activeProvider === 'supabase' ? 'Supabase PostgreSQL' : 'Supabase Cloud DB'}
+                </span>
               </div>
               <p className="text-xs text-slate-400">
-                Snapshots em nuvem imutáveis, rotinas programadas e recuperação instantânea de desastre
+                Snapshots em nuvem no Supabase, rotinas programadas e recuperação instantânea de desastre
               </p>
             </div>
           </div>
@@ -495,12 +528,50 @@ export default function BackupModal({
           
           {/* Notifications */}
           {errorMessage && (
-            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-3 animate-in fade-in">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <strong className="block font-semibold">Aviso do Sistema:</strong>
-                {errorMessage}
+            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex flex-col gap-2 animate-in fade-in">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <strong className="block font-semibold">Aviso do Sistema:</strong>
+                  {errorMessage}
+                </div>
               </div>
+              {(errorMessage.includes('table') || errorMessage.includes('relation') || errorMessage.includes('schema') || errorMessage.includes('permission') || errorMessage.includes('500') || errorMessage.includes('Supabase')) && (
+                <div className="mt-2 p-3 bg-slate-950/90 rounded-xl border border-rose-500/30 text-[11px] text-slate-300 space-y-2.5">
+                  <p className="font-semibold text-rose-200 flex items-center gap-1.5">
+                    <span>💡 Solução para o Supabase:</span>
+                  </p>
+                  <p className="leading-relaxed text-slate-300">
+                    O erro 500 ou 404 geralmente ocorre quando as tabelas <code className="text-emerald-300 font-mono">backup_snapshots</code> e <code className="text-emerald-300 font-mono">users</code> ainda não foram criadas ou possuem colunas pendentes no Supabase.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+                        setCopiedSql(true);
+                        setTimeout(() => setCopiedSql(false), 3000);
+                      }}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold cursor-pointer inline-flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20"
+                    >
+                      {copiedSql ? (
+                        <>
+                          <CheckCheck className="w-3.5 h-3.5" />
+                          <span>Script SQL Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileCode className="w-3.5 h-3.5" />
+                          <span>Copiar Script SQL do Supabase</span>
+                        </>
+                      )}
+                    </button>
+                    <span className="text-[10px] text-slate-400">
+                      Cole no menu <strong>SQL Editor</strong> do painel Supabase e clique em <strong>RUN</strong>.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -576,14 +647,39 @@ export default function BackupModal({
           {activeTab === 'cloud' && (
             <div className="space-y-6 animate-in fade-in duration-150" id="section-cloud-snapshots">
               
-              {/* Security Banner: Zero-Trust & Immutability */}
-              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
-                  <Lock className="w-4 h-4" />
+              {/* Security Banner: Immutability and Supabase Cloud Storage */}
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-start gap-3 flex-1 min-w-[280px]">
+                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0 mt-0.5">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs text-slate-300 leading-relaxed">
+                    <span className="font-bold text-white">Snapshots Seguros no Supabase:</span> Os pontos de restauração são armazenados de forma estruturada e versionada no banco de dados do Supabase. Permitem restauração instantânea com verificação de integridade (checksum) e preservação de todos os relacionamentos de estoque.
+                  </div>
                 </div>
-                <div className="text-xs text-slate-300 leading-relaxed">
-                  <span className="font-bold text-white">Blindagem contra Ataques & Imutabilidade:</span> Os snapshots em nuvem possuem regra de servidor exclusiva (<code className="px-1.5 py-0.5 rounded bg-slate-900 text-emerald-300 font-mono text-[11px]">allow delete: if false</code>). Mesmo em caso de invasão ou erro operacional, os backups antigos **nunca podem ser apagados ou corrompidos**.
-                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+                    setCopiedSql(true);
+                    setTimeout(() => setCopiedSql(false), 3000);
+                  }}
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-700 hover:border-emerald-500/40 rounded-xl text-[11px] font-bold cursor-pointer inline-flex items-center gap-1.5 transition-all self-center shrink-0"
+                  title="Copiar Script SQL do Supabase para o SQL Editor"
+                >
+                  {copiedSql ? (
+                    <>
+                      <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Script SQL Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileCode className="w-3.5 h-3.5" />
+                      <span>Copiar Script SQL (Tabelas)</span>
+                    </>
+                  )}
+                </button>
               </div>
 
               {/* Action Bar: Create Snapshot & Search */}
@@ -786,6 +882,15 @@ export default function BackupModal({
                             >
                               <RotateCcw className="w-3 h-3" />
                               <span>Restaurar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSnapshotToDelete(snap)}
+                              className="p-2 bg-slate-900 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 rounded-xl border border-slate-800 hover:border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
+                              title="Excluir snapshot"
+                              id={`btn-delete-cloud-snap-${snap.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
@@ -1238,7 +1343,7 @@ export default function BackupModal({
         <div className="px-6 py-4 border-t border-slate-800 bg-slate-900/60 flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Banco de Contingência Online Conectado</span>
+            <span>Banco de Contingência Online Supabase Conectado</span>
           </div>
 
           <button
@@ -1251,6 +1356,65 @@ export default function BackupModal({
           </button>
         </div>
       </div>
+
+      {/* Delete Cloud Snapshot Confirmation Dialog */}
+      {snapshotToDelete && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150"
+          id="delete-snapshot-dialog"
+        >
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Excluir Snapshot em Nuvem</h3>
+                <p className="text-xs text-slate-400">Esta ação não poderá ser desfeita.</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800/80 space-y-1.5 text-xs text-slate-300">
+              <p className="font-semibold text-white truncate">{snapshotToDelete.title}</p>
+              <div className="flex items-center gap-2 text-slate-400 font-mono text-[11px]">
+                <span>Criado em: {snapshotToDelete.createdAtFormatted}</span>
+                <span>&bull;</span>
+                <span>{snapshotToDelete.fileSizeFormatted}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingSnapshot}
+                onClick={() => setSnapshotToDelete(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingSnapshot}
+                onClick={handleConfirmDeleteSnapshot}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-rose-600/20 cursor-pointer flex items-center gap-1.5"
+                id="btn-confirm-delete-snapshot"
+              >
+                {isDeletingSnapshot ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Excluindo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirmar Exclusão</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

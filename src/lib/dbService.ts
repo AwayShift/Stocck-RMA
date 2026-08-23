@@ -15,12 +15,38 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
+  limit,
+  startAfter,
   serverTimestamp,
-  writeBatch
+  writeBatch,
+  DocumentSnapshot,
+  QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
-import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTracking, DailyInflowRecord, UserAccount } from '../types';
+import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTracking, DailyInflowRecord, UserAccount, PendingItem, PendingStatusType } from '../types';
+import { recordFirestoreOperation } from './quotaTracker';
+import { 
+  getActiveDbProvider, 
+  getSupabaseClient, 
+  mapProductToSupabase, 
+  mapSupabaseToProduct,
+  mapTriageUnitToSupabase,
+  mapSupabaseToTriageUnit,
+  mapDailyInflowToSupabase,
+  mapSupabaseToDailyInflow,
+  mapPendingItemToSupabase,
+  mapSupabaseToPendingItem,
+  mapUserToSupabase,
+  mapSupabaseToUser
+} from './supabase';
+import { getCurrentActiveAuthUser } from './supabaseAuth';
+
+export interface PaginatedResult<T> {
+  data: T[];
+  lastDoc: QueryDocumentSnapshot | null;
+  hasMore: boolean;
+}
 
 // Helper to check if running inside Tauri (Always false in our 100% Web application)
 export const isTauriEnvironment = (): boolean => {
@@ -103,14 +129,62 @@ const DEFAULT_TRIAGE_UNITS: TriageUnit[] = [
 ];
 
 // Corporate Audit Logging helper
-export const createAuditLog = async (action: string, details: string) => {
+export const createAuditLog = async (
+  action: string, 
+  details: string,
+  overrideEmail?: string,
+  overrideUid?: string
+) => {
   try {
-    const user = auth.currentUser;
-    if (!user) return;
-    
+    let uid = overrideUid || '';
+    let email = overrideEmail || '';
+
+    if (getActiveDbProvider() === 'supabase') {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        if (!email) {
+          const authUser = await getCurrentActiveAuthUser();
+          if (authUser) {
+            uid = authUser.uid;
+            email = authUser.email;
+          }
+        }
+
+        if (!email) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user?.email) {
+              uid = session.user.id;
+              email = session.user.email;
+            }
+          } catch (sessionErr) {
+            // ignore
+          }
+        }
+
+        await supabase.from('audit_logs').insert({
+          user_id: uid || 'anonymous',
+          user_email: email || 'operador@stocckrma.local',
+          action,
+          details,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+    }
+
+    // Firestore provider fallback
+    if (!email) {
+      const user = auth.currentUser;
+      if (user) {
+        uid = user.uid;
+        email = user.email || 'operador@stocckrma.local';
+      }
+    }
+
     await addDoc(collection(db, 'logs'), {
-      userId: user.uid,
-      userEmail: user.email || 'unknown',
+      userId: uid || 'anonymous',
+      userEmail: email || 'operador@stocckrma.local',
       action,
       details,
       timestamp: new Date().toISOString()
@@ -121,18 +195,41 @@ export const createAuditLog = async (action: string, details: string) => {
 };
 
 import { processSafeImageUpload } from './imageSecurityService';
+import { uploadImageToCloudStorage } from './storageService';
 
-// Image Upload with security validation, magic bytes verification and canvas sanitization
-export const uploadFileToStorage = async (file: File, folder?: string): Promise<string> => {
-  return await processSafeImageUpload(file, 1200, 1000, 0.75);
+// Image Upload with 3MB limit, WebP conversion, security validation and Supabase Storage bucket integration
+export const uploadFileToStorage = async (file: File, folder: string = 'media'): Promise<string> => {
+  return await uploadImageToCloudStorage(file, folder);
 };
 
-// REAL-TIME FIRESTORE EVENT LISTENERS
+// REAL-TIME EVENT LISTENERS (SUPABASE REALTIME & FIRESTORE SNAPSHOTS)
 
 export const subscribeBaseProducts = (
   callback: (products: BaseProduct[]) => void,
   errorCallback?: (err: any) => void
 ) => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('products').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
+        if (error) {
+          if (errorCallback) errorCallback(error);
+        } else if (data) {
+          callback(data.map(mapSupabaseToProduct));
+        }
+      });
+      const channel = supabase.channel('realtime_products')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async () => {
+          const { data } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+          if (data) callback(data.map(mapSupabaseToProduct));
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }
+
   return onSnapshot(collection(db, 'products'), (snapshot) => {
     const products: BaseProduct[] = [];
     snapshot.forEach((doc) => {
@@ -151,6 +248,28 @@ export const subscribeTriageUnits = (
   callback: (units: TriageUnit[]) => void,
   errorCallback?: (err: any) => void
 ) => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('triage_units').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
+        if (error) {
+          if (errorCallback) errorCallback(error);
+        } else if (data) {
+          callback(data.map(mapSupabaseToTriageUnit));
+        }
+      });
+      const channel = supabase.channel('realtime_triage_units')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'triage_units' }, async () => {
+          const { data } = await supabase.from('triage_units').select('*').order('created_at', { ascending: false });
+          if (data) callback(data.map(mapSupabaseToTriageUnit));
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }
+
   return onSnapshot(collection(db, 'triage_units'), (snapshot) => {
     const units: TriageUnit[] = [];
     snapshot.forEach((doc) => {
@@ -168,6 +287,42 @@ export const subscribeTriageUnits = (
 };
 
 export const subscribeAuditLogs = (callback: (logs: any[]) => void) => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(60).then(({ data }) => {
+        if (data) {
+          callback(data.map(r => ({
+            id: r.id,
+            userId: r.user_id,
+            userEmail: r.user_email,
+            action: r.action,
+            details: r.details,
+            timestamp: r.timestamp
+          })));
+        }
+      });
+      const channel = supabase.channel('realtime_audit_logs')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'audit_logs' }, async () => {
+          const { data } = await supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(60);
+          if (data) {
+            callback(data.map(r => ({
+              id: r.id,
+              userId: r.user_id,
+              userEmail: r.user_email,
+              action: r.action,
+              details: r.details,
+              timestamp: r.timestamp
+            })));
+          }
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }
+
   return onSnapshot(collection(db, 'logs'), (snapshot) => {
     const logs: any[] = [];
     snapshot.forEach((doc) => {
@@ -185,6 +340,50 @@ export const subscribeCaseTracking = (
   callback: (cases: CaseTracking[]) => void,
   errorCallback?: (err: any) => void
 ) => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('cases').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
+        if (error) {
+          if (errorCallback) errorCallback(error);
+        } else if (data) {
+          callback(data.map(r => ({
+            id: r.id,
+            code: r.code,
+            platform: r.platform,
+            createdAt: r.created_at,
+            reason: r.reason,
+            resolution: r.resolution,
+            status: r.status,
+            notes: r.notes,
+            value: r.value
+          })));
+        }
+      });
+      const channel = supabase.channel('realtime_cases')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cases' }, async () => {
+          const { data } = await supabase.from('cases').select('*').order('created_at', { ascending: false });
+          if (data) {
+            callback(data.map(r => ({
+              id: r.id,
+              code: r.code,
+              platform: r.platform,
+              createdAt: r.created_at,
+              reason: r.reason,
+              resolution: r.resolution,
+              status: r.status,
+              notes: r.notes,
+              value: r.value
+            })));
+          }
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }
+
   return onSnapshot(collection(db, 'cases'), (snapshot) => {
     const cases: CaseTracking[] = [];
     snapshot.forEach((doc) => {
@@ -205,6 +404,28 @@ export const subscribeDailyInflows = (
   callback: (inflows: DailyInflowRecord[]) => void,
   errorCallback?: (err: any) => void
 ) => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('daily_inflows').select('*').order('date', { ascending: true }).then(({ data, error }) => {
+        if (error) {
+          if (errorCallback) errorCallback(error);
+        } else if (data) {
+          callback(data.map(mapSupabaseToDailyInflow));
+        }
+      });
+      const channel = supabase.channel('realtime_daily_inflows')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_inflows' }, async () => {
+          const { data } = await supabase.from('daily_inflows').select('*').order('date', { ascending: true });
+          if (data) callback(data.map(mapSupabaseToDailyInflow));
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }
+
   return onSnapshot(collection(db, 'daily_inflows'), (snapshot) => {
     const inflows: DailyInflowRecord[] = [];
     snapshot.forEach((doc) => {
@@ -219,6 +440,254 @@ export const subscribeDailyInflows = (
       errorCallback(err);
     }
   });
+};
+
+export const subscribePendingItems = (
+  callback: (items: PendingItem[]) => void,
+  errorCallback?: (err: any) => void
+) => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('pending_items').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
+        if (error) {
+          if (errorCallback) errorCallback(error);
+        } else if (data) {
+          callback(data.map(mapSupabaseToPendingItem));
+        }
+      });
+      const channel = supabase.channel('realtime_pending_items')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_items' }, async () => {
+          const { data } = await supabase.from('pending_items').select('*').order('created_at', { ascending: false });
+          if (data) callback(data.map(mapSupabaseToPendingItem));
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }
+
+  return onSnapshot(collection(db, 'pending_items'), (snapshot) => {
+    const items: PendingItem[] = [];
+    snapshot.forEach((doc) => {
+      items.push({ id: doc.id, ...doc.data() } as PendingItem);
+    });
+    // Sort newest first
+    items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    callback(items);
+  }, (err) => {
+    console.error('Failed to subscribe pending items:', err);
+    if (errorCallback) {
+      errorCallback(err);
+    }
+  });
+};
+
+// PENDING ITEMS CRUD & TRANSFER ACTIONS
+
+export const savePendingItem = async (item: PendingItem): Promise<PendingItem> => {
+  let userUid = '';
+  let userEmail = '';
+  let userName = 'Operador';
+
+  if (getActiveDbProvider() === 'supabase') {
+    const authUser = await getCurrentActiveAuthUser();
+    if (authUser) {
+      userUid = authUser.uid;
+      userEmail = authUser.email;
+      userName = authUser.name;
+    }
+  }
+
+  if (!userEmail && auth.currentUser) {
+    userUid = auth.currentUser.uid;
+    userEmail = auth.currentUser.email || '';
+    userName = auth.currentUser.displayName || 'Operador';
+  }
+
+  const now = new Date().toISOString();
+
+  const payload: PendingItem = {
+    ...item,
+    sku: (item.sku || '').trim().toUpperCase(),
+    productName: (item.productName || '').trim(),
+    voltage: item.voltage || 'Bivolt',
+    serialNumber: (item.serialNumber || '').trim(),
+    trackingCode: (item.trackingCode || '').trim(),
+    platform: item.platform || 'Mercado Livre',
+    pendingReason: (item.pendingReason || '').trim(),
+    detailedNotes: (item.detailedNotes || '').trim(),
+    status: item.status || 'Pendente',
+    photos: Array.isArray(item.photos) ? item.photos : [],
+    createdAt: item.createdAt || now,
+    updatedAt: now,
+    createdBy: item.createdBy || {
+      uid: userUid,
+      email: userEmail,
+      name: userName
+    }
+  };
+
+  if (item.resolvedAt !== undefined) payload.resolvedAt = item.resolvedAt;
+  if (item.transferredToStock !== undefined) payload.transferredToStock = item.transferredToStock;
+  if (item.transferredUnitId !== undefined) payload.transferredUnitId = item.transferredUnitId;
+  if (item.destinationSectorSuggested !== undefined) payload.destinationSectorSuggested = item.destinationSectorSuggested;
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('pending_items').upsert(mapPendingItemToSupabase(payload));
+      createAuditLog(
+        'SAVE_PENDING_ITEM',
+        `Salvou item em pendência (Supabase) SKU: [${payload.sku}] ${payload.productName}. Motivo: ${payload.pendingReason}`
+      );
+      return payload;
+    }
+  }
+
+  const itemRef = doc(db, 'pending_items', item.id);
+  await setDoc(itemRef, payload, { merge: true });
+  recordFirestoreOperation('write', 1);
+
+  createAuditLog(
+    'SAVE_PENDING_ITEM',
+    `Salvou item em pendência SKU: [${payload.sku}] ${payload.productName}. Motivo: ${payload.pendingReason}`
+  );
+
+  return payload;
+};
+
+export const deletePendingItem = async (id: string, sku?: string, name?: string): Promise<void> => {
+  const cleanId = (id || '').trim();
+  if (!cleanId) return;
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { error } = await supabase.from('pending_items').delete().eq('id', cleanId);
+      if (error) {
+        console.error('Supabase delete pending_items error:', error);
+        throw new Error(`Falha ao excluir item em pendência no Supabase: ${error.message}`);
+      }
+      createAuditLog('DELETE_PENDING_ITEM', `Excluiu item em pendência SKU: ${sku || cleanId} ${name ? `- ${name}` : ''}`);
+      return;
+    }
+  }
+
+  const itemRef = doc(db, 'pending_items', cleanId);
+  await deleteDoc(itemRef);
+  recordFirestoreOperation('delete', 1);
+  createAuditLog('DELETE_PENDING_ITEM', `Excluiu item em pendência SKU: ${sku || cleanId} ${name ? `- ${name}` : ''}`);
+};
+
+export const updatePendingItemStatus = async (id: string, status: PendingStatusType): Promise<void> => {
+  const now = new Date().toISOString();
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const updateData: any = {
+        status,
+        updated_at: now
+      };
+      if (status === 'Resolvido') {
+        updateData.resolved_at = now;
+      }
+      await supabase.from('pending_items').update(updateData).eq('id', id);
+      createAuditLog('UPDATE_PENDING_STATUS', `Alterou status da pendência ID ${id} para: ${status}`);
+      return;
+    }
+  }
+
+  const itemRef = doc(db, 'pending_items', id);
+  const updateData: any = {
+    status,
+    updatedAt: now
+  };
+  if (status === 'Resolvido') {
+    updateData.resolvedAt = now;
+  }
+  await updateDoc(itemRef, updateData);
+  recordFirestoreOperation('write', 1);
+  createAuditLog('UPDATE_PENDING_STATUS', `Alterou status da pendência ID ${id} para: ${status}`);
+};
+
+export const transferPendingItemToStock = async (
+  pendingItem: PendingItem,
+  destinationSector: DestinationSectorType,
+  triageDetails?: {
+    deviceStatus?: string;
+    packageStatus?: string;
+    accessoriesInclusion?: string;
+    notes?: string;
+  }
+): Promise<TriageUnit> => {
+  const newTriageId = `tr-pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  
+  const newUnit: TriageUnit = {
+    id: newTriageId,
+    trackingCode: pendingItem.trackingCode || '',
+    serialNumber: pendingItem.serialNumber || '',
+    baseProductId: `bp-custom-${(pendingItem.sku || 'ITEM').toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+    baseProductName: pendingItem.productName || 'Produto Transferido de Pendências',
+    baseProductSku: pendingItem.sku || 'SEM-SKU',
+    baseProductVoltage: pendingItem.voltage || 'Bivolt',
+    platform: (pendingItem.platform as any) || 'Mercado Livre',
+    customerReason: `Liberado de Pendências: ${pendingItem.pendingReason}. ${pendingItem.detailedNotes || ''}`,
+    deviceStatus: triageDetails?.deviceStatus || 'Usado',
+    packageStatus: triageDetails?.packageStatus || 'Danificada',
+    accessoriesInclusion: triageDetails?.accessoriesInclusion || 'Item liberado após resolução de pendência.',
+    destinationSector: destinationSector,
+    notes: triageDetails?.notes || `<p><strong>Item Liberado da Aba de Pendências:</strong></p><p>Motivo original: ${pendingItem.pendingReason}</p><p>${pendingItem.detailedNotes || ''}</p>`,
+    photosProduct: pendingItem.photos || [],
+    photosBox: [],
+    photosAccessories: [],
+    createdAt: new Date().toISOString(),
+    status: 'Estoque'
+  };
+
+  // 1. Save unit to physical stock
+  await saveTriageUnit(newUnit);
+
+  // 2. Mark pending item as resolved and transferred
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('pending_items').update({
+        status: 'Resolvido',
+        transferred_to_stock: true,
+        transferred_unit_id: newTriageId,
+        destination_sector_suggested: destinationSector,
+        resolved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).eq('id', pendingItem.id);
+
+      await createAuditLog(
+        'TRANSFER_PENDING_TO_STOCK',
+        `Transferiu item da pendência [${pendingItem.sku}] para o estoque físico no setor [${destinationSector}] (Supabase). Triagem ID: ${newTriageId}`
+      );
+
+      return newUnit;
+    }
+  }
+
+  const itemRef = doc(db, 'pending_items', pendingItem.id);
+  await updateDoc(itemRef, {
+    status: 'Resolvido',
+    transferredToStock: true,
+    transferredUnitId: newTriageId,
+    destinationSectorSuggested: destinationSector,
+    resolvedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+
+  await createAuditLog(
+    'TRANSFER_PENDING_TO_STOCK',
+    `Transferiu item da pendência [${pendingItem.sku}] para o estoque físico no setor [${destinationSector}]. Triagem ID: ${newTriageId}`
+  );
+
+  return newUnit;
 };
 
 // SEED HELPERS
@@ -409,9 +878,6 @@ export const seedDailyInflows = async () => {
 
 export const saveDailyInflow = async (record: DailyInflowRecord): Promise<void> => {
   const docId = record.id || `inflow-${record.date}`;
-  const inflowRef = doc(db, 'daily_inflows', docId);
-  const docSnap = await getDoc(inflowRef);
-  const isUpdate = docSnap.exists();
   const total = Number(record.rma || 0) + Number(record.estoque || 0) + Number(record.openbox || 0) + Number(record.es || 0);
 
   const payload: DailyInflowRecord = {
@@ -424,11 +890,33 @@ export const saveDailyInflow = async (record: DailyInflowRecord): Promise<void> 
     totalDia: total,
     notes: record.notes || '',
     source: record.source || 'manual',
-    createdAt: isUpdate ? (docSnap.data()?.createdAt || new Date().toISOString()) : new Date().toISOString(),
+    createdAt: record.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('daily_inflows').upsert(mapDailyInflowToSupabase(payload));
+      await createAuditLog(
+        'SAVE_DAILY_INFLOW',
+        `Registrou lançamento de entradas para ${record.date} (Supabase). Total: ${total} unidades (RMA: ${record.rma}, Estoque: ${record.estoque}, Openbox: ${record.openbox}, ES: ${record.es})`
+      );
+      return;
+    }
+  }
+
+  const inflowRef = doc(db, 'daily_inflows', docId);
+  const docSnap = await getDoc(inflowRef);
+  recordFirestoreOperation('read', 1);
+  const isUpdate = docSnap.exists();
+
+  if (isUpdate) {
+    payload.createdAt = docSnap.data()?.createdAt || payload.createdAt;
+  }
+
   await setDoc(inflowRef, payload);
+  recordFirestoreOperation('write', 1);
   await createAuditLog(
     isUpdate ? 'UPDATE_DAILY_INFLOW' : 'CREATE_DAILY_INFLOW',
     `${isUpdate ? 'Atualizou' : 'Registrou'} lançamento de entradas para ${record.date}. Total: ${total} unidades (RMA: ${record.rma}, Estoque: ${record.estoque}, Openbox: ${record.openbox}, ES: ${record.es})`
@@ -436,6 +924,35 @@ export const saveDailyInflow = async (record: DailyInflowRecord): Promise<void> 
 };
 
 export const saveBatchDailyInflows = async (records: DailyInflowRecord[]): Promise<number> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const rows = records.map(record => {
+        const docId = record.id || `inflow-${record.date}`;
+        const total = Number(record.rma || 0) + Number(record.estoque || 0) + Number(record.openbox || 0) + Number(record.es || 0);
+        return mapDailyInflowToSupabase({
+          id: docId,
+          date: record.date,
+          rma: Number(record.rma || 0),
+          estoque: Number(record.estoque || 0),
+          openbox: Number(record.openbox || 0),
+          es: Number(record.es || 0),
+          totalDia: total,
+          notes: record.notes || '',
+          source: 'excel',
+          createdAt: record.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      });
+      await supabase.from('daily_inflows').upsert(rows);
+      await createAuditLog(
+        'IMPORT_EXCEL_INFLOWS',
+        `Importou ${records.length} registro(s) diários via planilha Excel no Supabase.`
+      );
+      return records.length;
+    }
+  }
+
   let count = 0;
   for (const record of records) {
     const docId = record.id || `inflow-${record.date}`;
@@ -457,6 +974,7 @@ export const saveBatchDailyInflows = async (records: DailyInflowRecord[]): Promi
     });
     count++;
   }
+  recordFirestoreOperation('write', count);
 
   await createAuditLog(
     'IMPORT_EXCEL_INFLOWS',
@@ -466,16 +984,52 @@ export const saveBatchDailyInflows = async (records: DailyInflowRecord[]): Promi
 };
 
 export const deleteDailyInflow = async (id: string): Promise<void> => {
-  const inflowRef = doc(db, 'daily_inflows', id);
+  const cleanId = (id || '').trim();
+  if (!cleanId) return;
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { error } = await supabase.from('daily_inflows').delete().eq('id', cleanId);
+      if (error) {
+        console.error('Supabase delete daily_inflows error:', error);
+        throw new Error(`Falha ao excluir fluxo diário no Supabase: ${error.message}`);
+      }
+      await createAuditLog('DELETE_DAILY_INFLOW', `Excluiu lançamento de entrada ID: ${cleanId} (Supabase)`);
+      return;
+    }
+  }
+
+  const inflowRef = doc(db, 'daily_inflows', cleanId);
   const docSnap = await getDoc(inflowRef);
+  recordFirestoreOperation('read', 1);
   if (docSnap.exists()) {
     const data = docSnap.data();
     await deleteDoc(inflowRef);
+    recordFirestoreOperation('delete', 1);
     await createAuditLog('DELETE_DAILY_INFLOW', `Excluiu lançamento de entrada do dia: ${data.date}`);
   }
 };
 
 export const saveCaseTracking = async (caseData: CaseTracking): Promise<void> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('cases').upsert({
+        id: caseData.id,
+        code: caseData.code,
+        platform: caseData.platform,
+        created_at: caseData.createdAt,
+        reason: caseData.reason,
+        resolution: caseData.resolution,
+        status: caseData.status || 'Pendente',
+        notes: caseData.notes || '',
+        value: caseData.value !== undefined ? caseData.value : null
+      });
+      return;
+    }
+  }
+
   const caseRef = doc(db, 'cases', caseData.id);
   await setDoc(caseRef, {
     code: caseData.code,
@@ -490,65 +1044,425 @@ export const saveCaseTracking = async (caseData: CaseTracking): Promise<void> =>
 };
 
 export const deleteCaseTracking = async (id: string): Promise<void> => {
-  const caseRef = doc(db, 'cases', id);
+  const cleanId = (id || '').trim();
+  if (!cleanId) return;
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { error } = await supabase.from('cases').delete().eq('id', cleanId);
+      if (error) {
+        console.error('Supabase delete cases error:', error);
+        throw new Error(`Falha ao excluir caso no Supabase: ${error.message}`);
+      }
+      return;
+    }
+  }
+
+  const caseRef = doc(db, 'cases', cleanId);
   const docSnap = await getDoc(caseRef);
   if (docSnap.exists()) {
     await deleteDoc(caseRef);
   }
 };
 
-// BASE CRUD ACTIONS
+// BASE CRUD & PAGINATED ACTIONS
+
+export const getInitialBaseProducts = async (pageSize: number = 2500): Promise<PaginatedResult<BaseProduct>> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(pageSize);
+      if (!error && data) {
+        const list = data.map(mapSupabaseToProduct);
+        return {
+          data: list,
+          lastDoc: null,
+          hasMore: data.length === pageSize
+        };
+      }
+    }
+  }
+
+  try {
+    const q = query(
+      collection(db, 'products'),
+      orderBy('createdAt', 'desc'),
+      limit(pageSize)
+    );
+    const snapshot = await getDocs(q);
+    recordFirestoreOperation('read', Math.max(1, snapshot.size));
+
+    if (snapshot.empty) {
+      const fallbackQ = query(collection(db, 'products'), limit(pageSize));
+      const fallbackSnap = await getDocs(fallbackQ);
+      recordFirestoreOperation('read', Math.max(1, fallbackSnap.size));
+      const list: BaseProduct[] = [];
+      fallbackSnap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as BaseProduct);
+      });
+      return {
+        data: list,
+        lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+        hasMore: fallbackSnap.docs.length === pageSize
+      };
+    }
+
+    const list: BaseProduct[] = [];
+    snapshot.forEach((docSnap) => {
+      list.push({ id: docSnap.id, ...docSnap.data() } as BaseProduct);
+    });
+
+    return {
+      data: list,
+      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+      hasMore: snapshot.docs.length === pageSize
+    };
+  } catch (err) {
+    console.error('Error fetching initial base products with orderBy, applying fallback:', err);
+    const fallbackQ = query(collection(db, 'products'), limit(pageSize));
+    const fallbackSnap = await getDocs(fallbackQ);
+    recordFirestoreOperation('read', Math.max(1, fallbackSnap.size));
+    const list: BaseProduct[] = [];
+    fallbackSnap.forEach((docSnap) => {
+      list.push({ id: docSnap.id, ...docSnap.data() } as BaseProduct);
+    });
+    return {
+      data: list,
+      lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+      hasMore: fallbackSnap.docs.length === pageSize
+    };
+  }
+};
+
+export const getMoreBaseProducts = async (
+  lastDoc: QueryDocumentSnapshot | null,
+  pageSize: number = 2500
+): Promise<PaginatedResult<BaseProduct>> => {
+  if (getActiveDbProvider() === 'supabase') {
+    return { data: [], lastDoc: null, hasMore: false };
+  }
+
+  if (!lastDoc) {
+    return { data: [], lastDoc: null, hasMore: false };
+  }
+
+  try {
+    const q = query(
+      collection(db, 'products'),
+      orderBy('createdAt', 'desc'),
+      startAfter(lastDoc),
+      limit(pageSize)
+    );
+    const snapshot = await getDocs(q);
+    recordFirestoreOperation('read', Math.max(1, snapshot.size));
+
+    if (snapshot.empty) {
+      const fallbackQ = query(
+        collection(db, 'products'),
+        startAfter(lastDoc),
+        limit(pageSize)
+      );
+      const fallbackSnap = await getDocs(fallbackQ);
+      recordFirestoreOperation('read', Math.max(1, fallbackSnap.size));
+      const list: BaseProduct[] = [];
+      fallbackSnap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as BaseProduct);
+      });
+      return {
+        data: list,
+        lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+        hasMore: fallbackSnap.docs.length === pageSize
+      };
+    }
+
+    const list: BaseProduct[] = [];
+    snapshot.forEach((docSnap) => {
+      list.push({ id: docSnap.id, ...docSnap.data() } as BaseProduct);
+    });
+
+    return {
+      data: list,
+      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+      hasMore: snapshot.docs.length === pageSize
+    };
+  } catch (err) {
+    console.error('Error in getMoreBaseProducts:', err);
+    return { data: [], lastDoc: null, hasMore: false };
+  }
+};
+
+export const getInitialTriageUnits = async (pageSize: number = 2500): Promise<PaginatedResult<TriageUnit>> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('triage_units')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(pageSize);
+      if (!error && data) {
+        const list = data.map(mapSupabaseToTriageUnit);
+        return {
+          data: list,
+          lastDoc: null,
+          hasMore: data.length === pageSize
+        };
+      }
+    }
+  }
+
+  try {
+    const q = query(
+      collection(db, 'triage_units'),
+      orderBy('createdAt', 'desc'),
+      limit(pageSize)
+    );
+    const snapshot = await getDocs(q);
+    recordFirestoreOperation('read', Math.max(1, snapshot.size));
+    if (snapshot.empty) {
+      const fallbackSnap = await getDocs(query(collection(db, 'triage_units'), limit(pageSize)));
+      recordFirestoreOperation('read', Math.max(1, fallbackSnap.size));
+      const list: TriageUnit[] = [];
+      fallbackSnap.forEach(d => list.push({ id: d.id, ...d.data() } as TriageUnit));
+      return {
+        data: list,
+        lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+        hasMore: fallbackSnap.docs.length === pageSize
+      };
+    }
+    const list: TriageUnit[] = [];
+    snapshot.forEach(d => list.push({ id: d.id, ...d.data() } as TriageUnit));
+    return {
+      data: list,
+      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+      hasMore: snapshot.docs.length === pageSize
+    };
+  } catch (err) {
+    console.error('Error fetching initial triage units:', err);
+    const fallbackSnap = await getDocs(query(collection(db, 'triage_units'), limit(pageSize)));
+    recordFirestoreOperation('read', Math.max(1, fallbackSnap.size));
+    const list: TriageUnit[] = [];
+    fallbackSnap.forEach(d => list.push({ id: d.id, ...d.data() } as TriageUnit));
+    return {
+      data: list,
+      lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+      hasMore: fallbackSnap.docs.length === pageSize
+    };
+  }
+};
+
+export const getMoreTriageUnits = async (
+  lastDoc: QueryDocumentSnapshot | null,
+  pageSize: number = 2500
+): Promise<PaginatedResult<TriageUnit>> => {
+  if (getActiveDbProvider() === 'supabase') {
+    return { data: [], lastDoc: null, hasMore: false };
+  }
+
+  if (!lastDoc) return { data: [], lastDoc: null, hasMore: false };
+  try {
+    const q = query(
+      collection(db, 'triage_units'),
+      orderBy('createdAt', 'desc'),
+      startAfter(lastDoc),
+      limit(pageSize)
+    );
+    const snapshot = await getDocs(q);
+    recordFirestoreOperation('read', Math.max(1, snapshot.size));
+    const list: TriageUnit[] = [];
+    snapshot.forEach(d => list.push({ id: d.id, ...d.data() } as TriageUnit));
+    return {
+      data: list,
+      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+      hasMore: snapshot.docs.length === pageSize
+    };
+  } catch (err) {
+    console.error('Error fetching more triage units:', err);
+    return { data: [], lastDoc: null, hasMore: false };
+  }
+};
+
+export const getInitialPendingItems = async (pageSize: number = 1000): Promise<PendingItem[]> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('pending_items')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(pageSize);
+      if (!error && data) {
+        return data.map(mapSupabaseToPendingItem);
+      }
+    }
+  }
+
+  try {
+    const q = query(collection(db, 'pending_items'), orderBy('createdAt', 'desc'), limit(pageSize));
+    const snapshot = await getDocs(q);
+    recordFirestoreOperation('read', Math.max(1, snapshot.size));
+    if (snapshot.empty) {
+      const fallbackSnap = await getDocs(query(collection(db, 'pending_items'), limit(pageSize)));
+      recordFirestoreOperation('read', Math.max(1, fallbackSnap.size));
+      const list: PendingItem[] = [];
+      fallbackSnap.forEach(d => list.push({ id: d.id, ...d.data() } as PendingItem));
+      return list;
+    }
+    const list: PendingItem[] = [];
+    snapshot.forEach(d => list.push({ id: d.id, ...d.data() } as PendingItem));
+    return list;
+  } catch (err) {
+    console.error('Error fetching pending items:', err);
+    const fallbackSnap = await getDocs(query(collection(db, 'pending_items'), limit(pageSize)));
+    recordFirestoreOperation('read', Math.max(1, fallbackSnap.size));
+    const list: PendingItem[] = [];
+    fallbackSnap.forEach(d => list.push({ id: d.id, ...d.data() } as PendingItem));
+    return list;
+  }
+};
+
+export const getInitialDailyInflows = async (limitCount: number = 1000): Promise<DailyInflowRecord[]> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('daily_inflows')
+        .select('*')
+        .order('date', { ascending: true })
+        .limit(limitCount);
+      if (!error && data) {
+        return data.map(mapSupabaseToDailyInflow);
+      }
+    }
+  }
+
+  try {
+    const q = query(collection(db, 'daily_inflows'), limit(limitCount));
+    const snapshot = await getDocs(q);
+    recordFirestoreOperation('read', Math.max(1, snapshot.size));
+    const list: DailyInflowRecord[] = [];
+    snapshot.forEach(d => list.push({ id: d.id, ...d.data() } as DailyInflowRecord));
+    list.sort((a, b) => a.date.localeCompare(b.date));
+    return list;
+  } catch (err) {
+    console.error('Error fetching daily inflows:', err);
+    return [];
+  }
+};
+
+export const getAuditLogs = async (limitCount: number = 50): Promise<any[]> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(limitCount);
+      if (!error && data) {
+        return data.map(r => ({
+          id: r.id,
+          userId: r.user_id,
+          userEmail: r.user_email,
+          action: r.action,
+          details: r.details,
+          timestamp: r.timestamp
+        }));
+      }
+    }
+  }
+
+  try {
+    const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'), limit(limitCount));
+    const snapshot = await getDocs(q);
+    recordFirestoreOperation('read', Math.max(1, snapshot.size));
+    const list: any[] = [];
+    snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
+    return list;
+  } catch (err) {
+    console.error('Error fetching audit logs:', err);
+    return [];
+  }
+};
 
 export const getBaseProducts = async (): Promise<BaseProduct[]> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+      if (data) return data.map(mapSupabaseToProduct);
+    }
+  }
+
   const snapshot = await getDocs(collection(db, 'products'));
   const list: BaseProduct[] = [];
-  snapshot.forEach((doc) => {
-    list.push({ id: doc.id, ...doc.data() } as BaseProduct);
+  snapshot.forEach((docSnap) => {
+    list.push({ id: docSnap.id, ...docSnap.data() } as BaseProduct);
   });
   return list;
 };
 
 export const getTriageUnits = async (): Promise<TriageUnit[]> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data } = await supabase.from('triage_units').select('*').order('created_at', { ascending: false });
+      if (data) return data.map(mapSupabaseToTriageUnit);
+    }
+  }
+
   const snapshot = await getDocs(collection(db, 'triage_units'));
   const list: TriageUnit[] = [];
-  snapshot.forEach((doc) => {
-    list.push({ id: doc.id, ...doc.data() } as TriageUnit);
+  snapshot.forEach((docSnap) => {
+    list.push({ id: docSnap.id, ...docSnap.data() } as TriageUnit);
   });
   return list;
 };
 
-export const saveBaseProduct = async (product: BaseProduct): Promise<void> => {
-  const productRef = doc(db, 'products', product.id);
-  const docSnap = await getDoc(productRef);
-  const isUpdate = docSnap.exists();
-  
-  await setDoc(productRef, {
-    name: product.name,
-    sku: product.sku,
-    voltage: product.voltage,
-    description: product.description || '',
-    imageUrl: product.imageUrl || '',
-    images: product.images || [],
+export const saveBaseProduct = async (product: BaseProduct): Promise<BaseProduct> => {
+  const now = new Date().toISOString();
+  const savedItem: BaseProduct = {
+    ...product,
+    createdAt: product.createdAt || now,
+    updatedAt: now,
+    images: product.images || (product.imageUrl ? [product.imageUrl] : []),
     imagesProduct: product.imagesProduct || [],
     imagesBox: product.imagesBox || [],
-    imagesAccessories: product.imagesAccessories || [],
-    accessories: product.accessories || '',
-    brand: product.brand || '',
-    category: product.category || ''
-  });
+    imagesAccessories: product.imagesAccessories || []
+  };
 
-  await createAuditLog(
-    isUpdate ? 'UPDATE_PRODUCT' : 'CREATE_PRODUCT',
-    `${isUpdate ? 'Atualizou' : 'Criou'} produto master SKU: ${product.sku} - ${product.name}`
-  );
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('products').upsert(mapProductToSupabase(savedItem));
+      createAuditLog('SAVE_PRODUCT', `Salvou produto master (Supabase) SKU: ${product.sku} - ${product.name}`);
+      return savedItem;
+    }
+  }
+
+  const productRef = doc(db, 'products', product.id);
+  // Zero-read write with merge
+  await setDoc(productRef, savedItem, { merge: true });
+  recordFirestoreOperation('write', 1);
+
+  createAuditLog('SAVE_PRODUCT', `Salvou produto master SKU: ${product.sku} - ${product.name}`);
+
+  return savedItem;
 };
 
 export const saveBatchBaseProducts = async (
   productsToSave: BaseProduct[],
   existingProducts: BaseProduct[]
-): Promise<{ added: number; updated: number }> => {
+): Promise<{ added: number; updated: number; savedProducts: BaseProduct[] }> => {
   let added = 0;
   let updated = 0;
+  const savedProducts: BaseProduct[] = [];
+  const now = new Date().toISOString();
 
   for (const item of productsToSave) {
     const cleanSku = item.sku.trim().toUpperCase();
@@ -557,9 +1471,9 @@ export const saveBatchBaseProducts = async (
     );
 
     const docId = existing ? existing.id : (item.id || `bp-${cleanSku.replace(/[^A-Z0-9_-]/gi, '_')}-${Date.now()}`);
-    const productRef = doc(db, 'products', docId);
 
-    const payload = {
+    const payload: BaseProduct = {
+      id: docId,
       name: item.name.trim(),
       sku: cleanSku,
       voltage: item.voltage || existing?.voltage || 'Bivolt',
@@ -571,10 +1485,12 @@ export const saveBatchBaseProducts = async (
       imagesAccessories: item.imagesAccessories || existing?.imagesAccessories || [],
       accessories: item.accessories !== undefined ? item.accessories : (existing?.accessories || ''),
       brand: item.brand !== undefined ? item.brand : (existing?.brand || ''),
-      category: item.category !== undefined ? item.category : (existing?.category || '')
+      category: item.category !== undefined ? item.category : (existing?.category || ''),
+      createdAt: existing?.createdAt || item.createdAt || now,
+      updatedAt: now
     };
 
-    await setDoc(productRef, payload, { merge: true });
+    savedProducts.push(payload);
 
     if (existing) {
       updated++;
@@ -583,82 +1499,150 @@ export const saveBatchBaseProducts = async (
     }
   }
 
-  await createAuditLog(
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const rows = savedProducts.map(mapProductToSupabase);
+      await supabase.from('products').upsert(rows);
+      createAuditLog(
+        'IMPORT_EXCEL_CATALOG',
+        `Importou planilha no Catálogo de Base (Supabase): ${added} novo(s) e ${updated} atualizado(s).`
+      );
+      return { added, updated, savedProducts };
+    }
+  }
+
+  for (const payload of savedProducts) {
+    const productRef = doc(db, 'products', payload.id);
+    await setDoc(productRef, payload, { merge: true });
+  }
+  recordFirestoreOperation('write', savedProducts.length);
+
+  createAuditLog(
     'IMPORT_EXCEL_CATALOG',
     `Importou planilha no Catálogo de Base: ${added} novo(s) produto(s) adicionados e ${updated} atualizados.`
   );
 
-  return { added, updated };
+  return { added, updated, savedProducts };
 };
 
-export const deleteBaseProduct = async (id: string): Promise<void> => {
-  const productRef = doc(db, 'products', id);
-  const docSnap = await getDoc(productRef);
-  if (docSnap.exists()) {
-    const data = docSnap.data();
-    await deleteDoc(productRef);
-    await createAuditLog('DELETE_PRODUCT', `Deletou o produto master SKU: ${data.sku} - ${data.name}`);
+export const deleteBaseProduct = async (id: string, sku?: string, name?: string): Promise<void> => {
+  const cleanId = (id || '').trim();
+  if (!cleanId) return;
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { error } = await supabase.from('products').delete().eq('id', cleanId);
+      if (error) {
+        console.error('Supabase delete products error:', error);
+        throw new Error(`Falha ao excluir produto no Supabase: ${error.message}`);
+      }
+      createAuditLog('DELETE_PRODUCT', `Deletou o produto master (Supabase) SKU: ${sku || cleanId} ${name ? `- ${name}` : ''}`);
+      return;
+    }
   }
+
+  const productRef = doc(db, 'products', cleanId);
+  await deleteDoc(productRef);
+  recordFirestoreOperation('delete', 1);
+  createAuditLog('DELETE_PRODUCT', `Deletou o produto master SKU: ${sku || cleanId} ${name ? `- ${name}` : ''}`);
 };
 
-export const saveTriageUnit = async (unit: TriageUnit): Promise<void> => {
+export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
+  const now = new Date().toISOString();
+  const savedUnit: TriageUnit = {
+    ...unit,
+    createdAt: unit.createdAt || now
+  };
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('triage_units').upsert(mapTriageUnitToSupabase(savedUnit));
+      createAuditLog(
+        'SAVE_TRIAGE',
+        `Salvou entrada de RMA (Supabase) de ${unit.platform}. Rastreamento: ${unit.trackingCode} (${unit.baseProductName})`
+      );
+      return savedUnit;
+    }
+  }
+
   const unitRef = doc(db, 'triage_units', unit.id);
-  const docSnap = await getDoc(unitRef);
-  const isUpdate = docSnap.exists();
+  // Zero-read write with setDoc
+  await setDoc(unitRef, savedUnit, { merge: true });
+  recordFirestoreOperation('write', 1);
 
-  await setDoc(unitRef, {
-    trackingCode: unit.trackingCode,
-    serialNumber: unit.serialNumber || '',
-    baseProductId: unit.baseProductId,
-    baseProductName: unit.baseProductName,
-    baseProductSku: unit.baseProductSku,
-    baseProductVoltage: unit.baseProductVoltage,
-    platform: unit.platform,
-    customerReason: unit.customerReason,
-    deviceStatus: unit.deviceStatus,
-    packageStatus: unit.packageStatus,
-    accessoriesInclusion: unit.accessoriesInclusion,
-    destinationSector: unit.destinationSector,
-    notes: unit.notes,
-    photosProduct: unit.photosProduct,
-    photosBox: unit.photosBox,
-    photosAccessories: unit.photosAccessories,
-    createdAt: unit.createdAt,
-    status: unit.status,
-    ...(unit.checkoutDate ? { checkoutDate: unit.checkoutDate } : {})
-  });
-
-  await createAuditLog(
-    isUpdate ? 'UPDATE_TRIAGE' : 'CREATE_TRIAGE',
-    `${isUpdate ? 'Atualizou' : 'Registrou'} entrada de RMA de ${unit.platform}. Rastreamento: ${unit.trackingCode}`
+  createAuditLog(
+    'SAVE_TRIAGE',
+    `Salvou entrada de RMA de ${unit.platform}. Rastreamento: ${unit.trackingCode} (${unit.baseProductName})`
   );
+
+  return savedUnit;
 };
 
-export const deleteTriageUnit = async (id: string): Promise<void> => {
-  const unitRef = doc(db, 'triage_units', id);
-  const docSnap = await getDoc(unitRef);
-  if (docSnap.exists()) {
-    const data = docSnap.data();
-    await deleteDoc(unitRef);
-    await createAuditLog('DELETE_TRIAGE', `Excluiu triagem do registro de RMA: ${data.trackingCode} (${data.baseProductName})`);
+export const deleteTriageUnit = async (id: string, trackingCode?: string, name?: string): Promise<void> => {
+  const cleanId = (id || '').trim();
+  if (!cleanId) return;
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { error } = await supabase.from('triage_units').delete().eq('id', cleanId);
+      if (error) {
+        console.error('Supabase delete triage_units error:', error);
+        throw new Error(`Falha ao excluir triagem no Supabase: ${error.message}`);
+      }
+      createAuditLog('DELETE_TRIAGE', `Excluiu triagem do registro de RMA (Supabase): ${trackingCode || cleanId} ${name ? `(${name})` : ''}`);
+      return;
+    }
   }
+
+  const unitRef = doc(db, 'triage_units', cleanId);
+  await deleteDoc(unitRef);
+  recordFirestoreOperation('delete', 1);
+  createAuditLog('DELETE_TRIAGE', `Excluiu triagem do registro de RMA: ${trackingCode || cleanId} ${name ? `(${name})` : ''}`);
 };
 
-export const checkoutTriageUnit = async (id: string): Promise<void> => {
-  const unitRef = doc(db, 'triage_units', id);
-  const docSnap = await getDoc(unitRef);
-  if (docSnap.exists()) {
-    const data = docSnap.data();
-    const checkoutDate = new Date().toISOString();
-    await updateDoc(unitRef, {
-      status: 'Baixado',
-      checkoutDate: checkoutDate
-    });
-    await createAuditLog('CHECKOUT_TRIAGE', `Baixou do estoque o RMA: ${data.trackingCode}. Destinado para: ${data.destinationSector}`);
+export const checkoutTriageUnit = async (id: string, trackingCode?: string, destination?: string): Promise<void> => {
+  const checkoutDate = new Date().toISOString();
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('triage_units').update({
+        status: 'Baixado',
+        checkout_date: checkoutDate
+      }).eq('id', id);
+      createAuditLog('CHECKOUT_TRIAGE', `Baixou do estoque o RMA (Supabase): ${trackingCode || id}. Destinado para: ${destination || 'Destino padrão'}`);
+      return;
+    }
   }
+
+  const unitRef = doc(db, 'triage_units', id);
+  await updateDoc(unitRef, {
+    status: 'Baixado',
+    checkoutDate: checkoutDate
+  });
+  recordFirestoreOperation('write', 1);
+  createAuditLog('CHECKOUT_TRIAGE', `Baixou do estoque o RMA: ${trackingCode || id}. Destinado para: ${destination || 'Destino padrão'}`);
 };
 
 export const resetCatalogProducts = async (): Promise<number> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { count } = await supabase.from('products').delete({ count: 'exact' }).neq('id', '___all___');
+      localStorage.setItem('base_products_seeded', 'true');
+      try {
+        await createAuditLog('RESET_CATALOG', `Executou limpeza total do Catálogo de Base no Supabase (${count || 0} produtos removidos).`);
+      } catch (err) {
+        console.warn('Audit log error:', err);
+      }
+      return count || 0;
+    }
+  }
+
   const productsSnap = await getDocs(collection(db, 'products'));
   const count = productsSnap.docs.length;
   for (const doc of productsSnap.docs) {
@@ -674,6 +1658,20 @@ export const resetCatalogProducts = async (): Promise<number> => {
 };
 
 export const resetPhysicalStockUnits = async (): Promise<number> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { count } = await supabase.from('triage_units').delete({ count: 'exact' }).neq('id', '___all___');
+      localStorage.setItem('triage_units_seeded', 'true');
+      try {
+        await createAuditLog('RESET_STOCK', `Executou limpeza total do Estoque Físico no Supabase (${count || 0} unidades removidas).`);
+      } catch (err) {
+        console.warn('Audit log error:', err);
+      }
+      return count || 0;
+    }
+  }
+
   const unitsSnap = await getDocs(collection(db, 'triage_units'));
   const count = unitsSnap.docs.length;
   for (const doc of unitsSnap.docs) {
@@ -689,6 +1687,20 @@ export const resetPhysicalStockUnits = async (): Promise<number> => {
 };
 
 export const resetDailyInflowsRecords = async (): Promise<number> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { count } = await supabase.from('daily_inflows').delete({ count: 'exact' }).neq('id', '___all___');
+      localStorage.setItem('daily_inflows_seeded', 'true');
+      try {
+        await createAuditLog('RESET_INFLOWS', `Executou limpeza total do Fluxo Diário no Supabase (${count || 0} registros removidos).`);
+      } catch (err) {
+        console.warn('Audit log error:', err);
+      }
+      return count || 0;
+    }
+  }
+
   const inflowsSnap = await getDocs(collection(db, 'daily_inflows'));
   const count = inflowsSnap.docs.length;
   for (const doc of inflowsSnap.docs) {
@@ -704,6 +1716,19 @@ export const resetDailyInflowsRecords = async (): Promise<number> => {
 };
 
 export const resetAuditLogsRecords = async (): Promise<number> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { count } = await supabase.from('audit_logs').delete({ count: 'exact' }).neq('id', '___all___');
+      try {
+        await createAuditLog('RESET_LOGS', `Executou limpeza do histórico de logs no Supabase (${count || 0} logs anteriores apagados).`);
+      } catch (err) {
+        console.warn('Audit log error:', err);
+      }
+      return count || 0;
+    }
+  }
+
   const logsSnap = await getDocs(collection(db, 'logs'));
   const count = logsSnap.docs.length;
   for (const doc of logsSnap.docs) {
@@ -718,6 +1743,30 @@ export const resetAuditLogsRecords = async (): Promise<number> => {
 };
 
 export const resetDatabaseToDefaults = async (): Promise<void> => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('products').delete().neq('id', '___all___');
+      await supabase.from('triage_units').delete().neq('id', '___all___');
+      await supabase.from('cases').delete().neq('id', '___all___');
+      await supabase.from('daily_inflows').delete().neq('id', '___all___');
+      await supabase.from('pending_items').delete().neq('id', '___all___');
+      await supabase.from('audit_logs').delete().neq('id', '___all___');
+
+      localStorage.setItem('base_products_seeded', 'true');
+      localStorage.setItem('triage_units_seeded', 'true');
+      localStorage.setItem('cases_seeded', 'true');
+      localStorage.setItem('daily_inflows_seeded', 'true');
+
+      try {
+        await createAuditLog('RESET_DATABASE', 'Executou limpeza total do banco de dados no Supabase. Sistema limpo com 0 registros.');
+      } catch (logErr) {
+        console.warn('Audit log warning:', logErr);
+      }
+      return;
+    }
+  }
+
   // Clear products
   const productsSnap = await getDocs(collection(db, 'products'));
   for (const doc of productsSnap.docs) {
@@ -762,13 +1811,62 @@ export const resetDatabaseToDefaults = async (): Promise<void> => {
 };
 
 // ==========================================
-// USER MANAGEMENT & RBAC FIRESTORE HELPERS
+// USER MANAGEMENT & RBAC HELPERS (SUPABASE + FIRESTORE)
 // ==========================================
 
 /**
  * Subscribe to all users in the 'users' collection (Real-time for Admin view)
  */
 export const subscribeToUsers = (callback: (users: UserAccount[]) => void) => {
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      (async () => {
+        try {
+          const { data, error } = await supabase.from('users').select('*');
+          if (error) {
+            console.warn('Supabase users table note:', error.message);
+            return;
+          }
+          if (data) {
+            const list = data.map(mapSupabaseToUser);
+            list.sort((a, b) => {
+              if (a.role === 'admin' && b.role !== 'admin') return -1;
+              if (a.role !== 'admin' && b.role === 'admin') return 1;
+              return a.name.localeCompare(b.name);
+            });
+            callback(list);
+          }
+        } catch (err) {
+          console.warn('Silent catch for Supabase users query:', err);
+        }
+      })();
+
+      const channel = supabase.channel('realtime_users')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
+          try {
+            const { data, error } = await supabase.from('users').select('*');
+            if (error) return;
+            if (data) {
+              const list = data.map(mapSupabaseToUser);
+              list.sort((a, b) => {
+                if (a.role === 'admin' && b.role !== 'admin') return -1;
+                if (a.role !== 'admin' && b.role === 'admin') return 1;
+                return a.name.localeCompare(b.name);
+              });
+              callback(list);
+            }
+          } catch (e) {
+            // Ignore background realtime errors
+          }
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }
+
   const usersRef = collection(db, 'users');
   return onSnapshot(usersRef, (snapshot) => {
     const list: UserAccount[] = snapshot.docs.map((docSnap) => {
@@ -795,54 +1893,133 @@ export const subscribeToUsers = (callback: (users: UserAccount[]) => void) => {
 };
 
 /**
- * Update any user's role (Admin / Operator) in Firestore
+ * Update any user's role (Admin / Operator) in database
  */
 export const updateUserRoleInDb = async (
   uid: string, 
   newRole: 'admin' | 'operator',
   targetEmail?: string
 ): Promise<void> => {
+  const roleLabel = newRole === 'admin' ? 'Administrador (Acesso Total)' : 'Logística / Operador';
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('users').update({
+        role: newRole,
+        updated_at: new Date().toISOString()
+      }).eq('uid', uid);
+      await createAuditLog('UPDATE_USER_ROLE', `Alterou permissões de acesso do usuário ${targetEmail || uid} para: ${roleLabel} (Supabase)`);
+      return;
+    }
+  }
+
   const userDocRef = doc(db, 'users', uid);
   await updateDoc(userDocRef, {
     role: newRole,
     updatedAt: new Date().toISOString()
   });
 
-  const roleLabel = newRole === 'admin' ? 'Administrador (Acesso Total)' : 'Logística / Operador';
   await createAuditLog('UPDATE_USER_ROLE', `Alterou permissões de acesso do usuário ${targetEmail || uid} para: ${roleLabel}`);
 };
 
 /**
- * Delete a user profile document from Firestore
+ * Delete a user profile document from database
  */
 export const deleteUserDocumentFromDb = async (uid: string, targetEmail?: string): Promise<void> => {
-  const userDocRef = doc(db, 'users', uid);
+  const cleanUid = (uid || '').trim();
+  if (!cleanUid) return;
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { error } = await supabase.from('users').delete().eq('uid', cleanUid);
+      if (error) {
+        console.error('Supabase delete users error:', error);
+        throw new Error(`Falha ao excluir usuário no Supabase: ${error.message}`);
+      }
+      try {
+        await createAuditLog('DELETE_USER', `Removeu o registro do usuário ${targetEmail || cleanUid} do Supabase`);
+      } catch (logErr) {
+        console.warn('Non-blocking audit log creation error on user delete:', logErr);
+      }
+      return;
+    }
+  }
+
+  const userDocRef = doc(db, 'users', cleanUid);
   await deleteDoc(userDocRef);
   try {
-    await createAuditLog('DELETE_USER', `Removeu o registro do usuário ${targetEmail || uid} do Firestore`);
+    await createAuditLog('DELETE_USER', `Removeu o registro do usuário ${targetEmail || cleanUid} do Firestore`);
   } catch (logErr) {
     console.warn('Non-blocking audit log creation error on user delete:', logErr);
   }
 };
 
 /**
- * Ensure user document exists in Firestore / Auto-heal missing profiles
+ * Ensure user document exists in database / Auto-heal missing profiles
  */
 export const ensureUserProfileExists = async (currentUser: any): Promise<UserAccount | null> => {
   if (!currentUser || !currentUser.uid) return null;
+  const isMasterAdmin = currentUser.email === 'alessandro.away6@gmail.com';
+  const initialProfile: UserAccount = {
+    uid: currentUser.uid,
+    email: currentUser.email || '',
+    name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Operador Corporativo',
+    role: isMasterAdmin ? 'admin' : 'operator',
+    createdAt: new Date().toISOString(),
+    lastLogin: new Date().toISOString()
+  };
+
+  if (getActiveDbProvider() === 'supabase') {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('users').select('*').eq('uid', currentUser.uid).maybeSingle();
+        if (error) {
+          console.warn('Supabase user profile fetch note:', error.message);
+          // If table doesn't exist, don't crash
+          return initialProfile;
+        }
+        if (!data) {
+          try {
+            await supabase.from('users').upsert(mapUserToSupabase(initialProfile));
+          } catch (e) {
+            // ignore if table not created
+          }
+          return initialProfile;
+        } else {
+          const role = isMasterAdmin ? 'admin' : (data.role || 'operator');
+          try {
+            if (isMasterAdmin && data.role !== 'admin') {
+              await supabase.from('users').update({ role: 'admin', last_login: new Date().toISOString() }).eq('uid', currentUser.uid);
+            } else {
+              await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('uid', currentUser.uid);
+            }
+          } catch (e) {
+            // ignore
+          }
+          return {
+            uid: data.uid,
+            email: data.email || currentUser.email || '',
+            name: data.name || currentUser.displayName || 'Operador Corporativo',
+            role: role as 'admin' | 'operator',
+            createdAt: data.created_at || '',
+            lastLogin: new Date().toISOString()
+          };
+        }
+      } catch (supaErr) {
+        console.warn('Supabase user profile fetch error:', supaErr);
+        return initialProfile;
+      }
+    }
+  }
+
   try {
     const userDocRef = doc(db, 'users', currentUser.uid);
     const snap = await getDoc(userDocRef);
     
     if (!snap.exists()) {
-      const isMasterAdmin = currentUser.email === 'alessandro.away6@gmail.com';
-      const initialProfile: UserAccount = {
-        uid: currentUser.uid,
-        email: currentUser.email || '',
-        name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Operador Corporativo',
-        role: isMasterAdmin ? 'admin' : 'operator',
-        createdAt: new Date().toISOString()
-      };
       await setDoc(userDocRef, initialProfile);
       return initialProfile;
     } else {
@@ -861,7 +2038,7 @@ export const ensureUserProfileExists = async (currentUser: any): Promise<UserAcc
     }
   } catch (err) {
     console.error('Error ensuring user profile in Firestore:', err);
-    return null;
+    return initialProfile;
   }
 };
 

@@ -17,6 +17,8 @@ export interface BaseProduct {
   accessories?: string;
   brand?: string;
   category?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type PlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Amazon Ta Novo' | 'Kabum';
@@ -35,6 +37,33 @@ export interface CaseTracking {
   status?: 'Pendente' | 'Resolvido';
   value?: number;
   notes?: string;
+}
+
+export type PendingStatusType = 'Pendente' | 'Em Análise' | 'Aguardando Peça' | 'Aguardando NF' | 'Resolvido' | 'Cancelado';
+
+export interface PendingItem {
+  id: string;
+  sku: string; // SKU do produto (livre ou vinculado ao catálogo)
+  productName: string; // Nome do produto
+  voltage?: '110V' | '220V' | 'Bivolt' | 'N/A' | string;
+  serialNumber?: string; // S/N (opcional / flexível)
+  trackingCode?: string; // Código STI / Rastreio / Nº de Caso
+  platform?: PlatformType | 'Outro' | string; // Plataforma Origem
+  pendingReason: string; // Motivo da pendência (ex: "Sem nota fiscal", "Sem identificação", "Aguardando peças", etc.)
+  detailedNotes?: string; // Observações / Laudo preliminar / Detalhes
+  status: PendingStatusType;
+  photos: string[]; // Base64 ou URLs das imagens
+  createdAt: string; // ISO String
+  updatedAt?: string;
+  createdBy?: {
+    uid?: string;
+    email?: string;
+    name?: string;
+  };
+  resolvedAt?: string | null;
+  transferredToStock?: boolean;
+  transferredUnitId?: string; // If promoted to TriageUnit
+  destinationSectorSuggested?: DestinationSectorType;
 }
 
 export interface TriageUnit {
@@ -163,6 +192,7 @@ export interface SystemBackupMetadata {
     products: number;
     triageUnits: number;
     dailyInflows: number;
+    pendingItems?: number;
     cases?: number;
     logs?: number;
   };
@@ -186,6 +216,7 @@ export interface CloudBackupRecord {
     products: number;
     triageUnits: number;
     dailyInflows: number;
+    pendingItems?: number;
     cases: number;
     logs: number;
   };
@@ -234,6 +265,7 @@ export interface SystemBackupPayload {
     products: BaseProduct[];
     triageUnits: TriageUnit[];
     dailyInflows: DailyInflowRecord[];
+    pendingItems?: PendingItem[];
     cases?: CaseTracking[];
     logs?: any[];
   };
