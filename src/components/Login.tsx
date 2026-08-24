@@ -3,16 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   signInWithSupabase, 
   signUpWithSupabase 
 } from '../lib/supabaseAuth';
-import { 
-  getSupabaseConfig, 
-  getSupabaseClient 
-} from '../lib/supabase';
-import SupabaseConfigModal from './SupabaseConfigModal';
 import { 
   Boxes, 
   Lock, 
@@ -23,9 +18,7 @@ import {
   Eye, 
   EyeOff, 
   CheckCircle2,
-  Database,
-  Settings,
-  ShieldAlert
+  Database
 } from 'lucide-react';
 
 interface LoginProps {
@@ -43,41 +36,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [isDbConfigured, setIsDbConfigured] = useState(() => {
-    const cfg = getSupabaseConfig();
-    return Boolean(cfg.url && cfg.anonKey);
-  });
-
-  const checkDbConfig = () => {
-    const cfg = getSupabaseConfig();
-    const configured = Boolean(cfg.url && cfg.anonKey);
-    setIsDbConfigured(configured);
-    return configured;
-  };
-
-  useEffect(() => {
-    checkDbConfig();
-    const handleConfigChange = () => {
-      checkDbConfig();
-    };
-    window.addEventListener('supabase-config-changed', handleConfigChange);
-    return () => {
-      window.removeEventListener('supabase-config-changed', handleConfigChange);
-    };
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
     
-    if (!checkDbConfig()) {
-      setErrorMessage('Cliente Supabase não configurado. Clique no botão abaixo para preencher a URL e a Chave do seu banco.');
-      setIsConfigModalOpen(true);
-      return;
-    }
-
     if (!email.trim() || !password.trim()) {
       setErrorMessage('Por favor, preencha todos os campos obrigatórios.');
       return;
@@ -118,9 +82,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       console.error('Supabase Authentication Error:', err);
       const msg = err?.message || 'Falha ao autenticar no Supabase. Verifique suas credenciais.';
       setErrorMessage(msg);
-      if (msg.includes('não configurado')) {
-        setIsDbConfigured(false);
-      }
     } finally {
       setIsLoading(false);
     }
@@ -149,28 +110,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             </div>
           </div>
         </div>
-
-        {/* Missing Credentials Alert Banner */}
-        {!isDbConfigured && (
-          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-xs mb-5 space-y-2.5 animate-in fade-in">
-            <div className="flex items-start gap-2.5 font-semibold">
-              <ShieldAlert className="w-4.5 h-4.5 text-amber-400 shrink-0 mt-0.5" />
-              <span>Conexão Supabase Pendente</span>
-            </div>
-            <p className="text-[11px] text-amber-300/80 leading-relaxed">
-              As credenciais do banco Supabase (URL e Chave Anon) ainda não foram configuradas neste navegador ou domínio.
-            </p>
-            <button
-              type="button"
-              onClick={() => setIsConfigModalOpen(true)}
-              className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-              id="btn-alert-configure-supabase"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>Inserir Credenciais do Supabase</span>
-            </button>
-          </div>
-        )}
 
         {/* Mode Selector Tabs */}
         <div className="grid grid-cols-2 p-1 bg-slate-950/80 border border-slate-800 rounded-xl mb-6">
@@ -220,22 +159,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
         {/* Error state */}
         {errorMessage && (
-          <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-semibold mb-5 space-y-2">
-            <div className="flex items-start gap-2.5">
-              <AlertCircle className="w-4.5 h-4.5 flex-shrink-0 mt-0.5" />
-              <span className="leading-relaxed">{errorMessage}</span>
-            </div>
-            {(!isDbConfigured || errorMessage.includes('não configurado')) && (
-              <button
-                type="button"
-                onClick={() => setIsConfigModalOpen(true)}
-                className="mt-1 w-full py-1.5 px-3 bg-rose-500 hover:bg-rose-400 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                id="btn-error-open-config"
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>Configurar Conexão Agora</span>
-              </button>
-            )}
+          <div className="flex items-start gap-2.5 p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-semibold mb-5">
+            <AlertCircle className="w-4.5 h-4.5 flex-shrink-0 mt-0.5" />
+            <span className="leading-relaxed">{errorMessage}</span>
           </div>
         )}
 
@@ -322,37 +248,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             )}
           </button>
         </form>
-
-        {/* Database Connection Config Link */}
-        <div className="mt-6 pt-4 border-t border-slate-850 flex items-center justify-between text-xs">
-          <button
-            type="button"
-            onClick={() => setIsConfigModalOpen(true)}
-            className="text-slate-400 hover:text-emerald-400 flex items-center gap-1.5 transition-colors cursor-pointer text-[11px]"
-            id="btn-login-configure-db"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            <span>Configurar Conexão do Supabase</span>
-          </button>
-
-          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${
-            isDbConfigured ? 'text-emerald-400' : 'text-amber-400'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isDbConfigured ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-            {isDbConfigured ? 'Conexão Definida' : 'Sem Conexão'}
-          </span>
-        </div>
       </div>
-
-      {/* Supabase Config Modal */}
-      <SupabaseConfigModal 
-        isOpen={isConfigModalOpen}
-        onClose={() => setIsConfigModalOpen(false)}
-        onSaved={() => {
-          checkDbConfig();
-          setErrorMessage('');
-        }}
-      />
     </div>
   );
 }
