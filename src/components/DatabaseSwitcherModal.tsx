@@ -16,7 +16,8 @@ import {
   Copy,
   Info,
   Layers,
-  Sparkles
+  Sparkles,
+  Settings
 } from 'lucide-react';
 import {
   getSupabaseClient,
@@ -25,6 +26,7 @@ import {
   SUPABASE_SQL_SCHEMA,
   SupabaseConfig
 } from '../lib/supabase';
+import SupabaseConfigModal from './SupabaseConfigModal';
 
 interface DatabaseSwitcherModalProps {
   isOpen: boolean;
@@ -94,6 +96,7 @@ export default function DatabaseSwitcherModal({
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [showSqlCode, setShowSqlCode] = useState<boolean>(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState<boolean>(false);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState<boolean>(false);
 
   // Automatically fetch real database usage metrics on open
   const fetchSupabaseUsage = async () => {
@@ -248,6 +251,17 @@ export default function DatabaseSwitcherModal({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsConfigModalOpen(true)}
+              className="px-2.5 py-1.5 bg-[#1f1f1f] hover:bg-[#282828] text-[#cccccc] rounded-lg text-xs font-medium border border-[#333333] transition-colors cursor-pointer flex items-center gap-1.5"
+              title="Configurar credenciais do Supabase"
+              id="btn-edit-supabase-credentials"
+            >
+              <Settings className="w-3.5 h-3.5 text-[#3ecf8e]" />
+              <span className="hidden sm:inline">Credenciais</span>
+            </button>
+
             <button
               type="button"
               onClick={fetchSupabaseUsage}
@@ -594,15 +608,35 @@ export default function DatabaseSwitcherModal({
             <span>Métricas sincronizadas diretamente da API do Supabase</span>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 bg-[#222222] hover:bg-[#2d2d2d] text-white rounded-lg font-semibold cursor-pointer transition-colors border border-[#333333]"
-          >
-            Fechar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsConfigModalOpen(true)}
+              className="px-3 py-2 bg-[#1f1f1f] hover:bg-[#282828] text-white rounded-lg font-semibold cursor-pointer transition-colors border border-[#333333] flex items-center gap-1.5"
+            >
+              <Settings className="w-3.5 h-3.5 text-[#3ecf8e]" />
+              <span>Alterar URL &amp; Chave</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-[#222222] hover:bg-[#2d2d2d] text-white rounded-lg font-semibold cursor-pointer transition-colors border border-[#333333]"
+            >
+              Fechar
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Supabase Config Modal */}
+      <SupabaseConfigModal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        onSaved={() => {
+          fetchSupabaseUsage();
+        }}
+      />
     </div>
   );
 }
