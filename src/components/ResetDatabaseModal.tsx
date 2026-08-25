@@ -17,19 +17,17 @@ import {
   Database,
   Package,
   FolderMinus,
-  Boxes,
-  Activity
+  Boxes
 } from 'lucide-react';
 import { reauthenticateSupabaseUser } from '../lib/supabaseAuth';
 import { 
   resetDatabaseToDefaults,
   resetCatalogProducts,
   resetPhysicalStockUnits,
-  resetDailyInflowsRecords,
-  resetAuditLogsRecords
+  resetDailyInflowsRecords
 } from '../lib/dbService';
 
-export type ResetTargetType = 'all' | 'catalog' | 'stock' | 'inflows' | 'logs';
+export type ResetTargetType = 'all' | 'catalog' | 'stock' | 'inflows';
 
 interface ResetDatabaseModalProps {
   isOpen: boolean;
@@ -96,25 +94,11 @@ export default function ResetDatabaseModal({
           badgeColor: 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20',
           whatWillHappen: [
             `Todos os ${itemCount !== undefined ? itemCount : ''} lançamentos diários de entrada consolidada por setor serão excluídos.`,
-            'O Catálogo de Base, Estoque Físico e Logs de Auditoria serão mantidos.',
+            'O Catálogo de Base e Estoque Físico serão mantidos.',
             'O gráfico e tabela do Fluxo de Entradas ficarão zerados.'
           ],
           buttonLabel: 'Confirmar Reset de Entradas',
           successText: 'Fluxo Diário de Entradas resetado com sucesso!'
-        };
-      case 'logs':
-        return {
-          title: 'Limpar Histórico de Logs',
-          subtitle: 'Exclusão de todos os registros de rastreabilidade e auditoria',
-          icon: <Activity className="w-5 h-5 text-rose-400" />,
-          badgeColor: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
-          whatWillHappen: [
-            `Todos os ${itemCount !== undefined ? itemCount : ''} logs de auditoria e ações anteriores serão apagados do Firestore.`,
-            'Os dados operacionais de Catálogo, Estoque e Entradas permanecerão inalterados.',
-            'Um novo log inicial será registrado comprovando a limpeza de auditoria.'
-          ],
-          buttonLabel: 'Confirmar Limpeza de Logs',
-          successText: 'Histórico de Logs de Auditoria limpo com sucesso!'
         };
       case 'all':
       default:
@@ -126,8 +110,7 @@ export default function ResetDatabaseModal({
           whatWillHappen: [
             'Todos os Produtos cadastrados no Catálogo Base (0 produtos restantes).',
             'Todas as Unidades Físicas do Estoque e Triagem de RMA.',
-            'Todos os lançamentos do Fluxo Diário de Entradas.',
-            'Todos os Logs de auditoria e eventos do sistema.'
+            'Todos os lançamentos do Fluxo Diário de Entradas.'
           ],
           buttonLabel: 'Confirmar Reset Geral do Banco',
           successText: 'Banco de dados 100% limpo com sucesso! 0 registros restantes.'
@@ -165,8 +148,6 @@ export default function ResetDatabaseModal({
         await resetPhysicalStockUnits();
       } else if (target === 'inflows') {
         await resetDailyInflowsRecords();
-      } else if (target === 'logs') {
-        await resetAuditLogsRecords();
       } else {
         await resetDatabaseToDefaults();
       }

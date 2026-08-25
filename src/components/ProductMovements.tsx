@@ -710,7 +710,7 @@ export default function ProductMovements({
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Monthly KPI Statistics */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="bg-[#0f172a]/70 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
+            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Entradas</span>
               <div className="mt-2 flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-emerald-400">{monthTotals.totalGeral}</span>
@@ -719,7 +719,7 @@ export default function ProductMovements({
               <span className="text-[10px] text-slate-500 mt-1">{monthTotals.activeDaysCount} dias com entrada</span>
             </div>
 
-            <div className="bg-[#0f172a]/70 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
+            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">RMA (Triagem)</span>
               <div className="mt-2 flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-rose-400">{monthTotals.totalRma}</span>
@@ -728,7 +728,7 @@ export default function ProductMovements({
               <span className="text-[10px] text-slate-500 mt-1">Garantia / Devoluções</span>
             </div>
 
-            <div className="bg-[#0f172a]/70 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
+            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estoque Geral</span>
               <div className="mt-2 flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-emerald-400">{monthTotals.totalEstoque}</span>
@@ -737,7 +737,7 @@ export default function ProductMovements({
               <span className="text-[10px] text-slate-500 mt-1">Almoxarifado</span>
             </div>
 
-            <div className="bg-[#0f172a]/70 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
+            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Openbox</span>
               <div className="mt-2 flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-amber-400">{monthTotals.totalOpenbox}</span>
@@ -746,7 +746,7 @@ export default function ProductMovements({
               <span className="text-[10px] text-slate-500 mt-1">Reembalados / Testados</span>
             </div>
 
-            <div className="bg-[#0f172a]/70 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
+            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ES (Espírito Santo)</span>
               <div className="mt-2 flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-purple-400">{monthTotals.totalEs}</span>
@@ -755,7 +755,7 @@ export default function ProductMovements({
               <span className="text-[10px] text-slate-500 mt-1">Filial Espírito Santo</span>
             </div>
 
-            <div className="bg-[#0f172a]/70 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
+            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Média Diária</span>
               <div className="mt-2 flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-sky-400">{monthTotals.avgDaily}</span>
@@ -766,7 +766,7 @@ export default function ProductMovements({
           </div>
 
           {/* Spreadsheet Table Container */}
-          <div className="bg-[#0d1527] border border-slate-800/80 rounded-2xl overflow-hidden shadow-lg">
+          <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-lg">
             {/* Table Header Controls */}
             <div className="p-4 bg-slate-950/80 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -983,7 +983,7 @@ export default function ProductMovements({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
             {/* Left Column: Weekly Distribution Card */}
-            <div className="lg:col-span-4 bg-[#0d1527] border border-slate-800/50 p-6 rounded-2xl flex flex-col justify-between space-y-4 shadow-sm">
+            <div className="lg:col-span-4 bg-slate-900/90 border border-slate-800/50 p-6 rounded-2xl flex flex-col justify-between space-y-4 shadow-sm">
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Distribuição Semanal</h3>
@@ -1064,7 +1064,7 @@ export default function ProductMovements({
             </div>
 
             {/* Right Column: Daily Distribution & Calendar Grid */}
-            <div className="lg:col-span-8 bg-[#0d1527] border border-slate-800/50 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm">
+            <div className="lg:col-span-8 bg-slate-900/90 border border-slate-800/50 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/50 pb-4 shrink-0">
                 <div>
                   <h3 className="text-sm font-black text-white">Análise Diária • {monthName}</h3>
@@ -1096,13 +1096,13 @@ export default function ProductMovements({
                   <div className="space-y-2">
                     <div className="grid grid-cols-7 gap-1.5 text-center">
                       {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((wd) => (
-                        <div key={wd} className="text-[10px] font-black text-slate-500 uppercase tracking-widest py-1">
+                        <div key={wd} className="cal-weekday-header text-[10px] font-black text-slate-400 uppercase tracking-widest py-1">
                           {wd}
                         </div>
                       ))}
                     </div>
 
-                    <div className="grid grid-cols-7 gap-1.5">
+                    <div className="grid grid-cols-7 gap-1.5" id="calendar-grid-cells">
                       {calendarDays.map((cell, index) => {
                         if (cell === null) {
                           return (
@@ -1116,27 +1116,20 @@ export default function ProductMovements({
                         const isSelected = selectedDay === cell.dayNum;
                         const hasEntries = cell.count > 0;
                         
-                        let bgClass = 'bg-slate-950/40 border-slate-900/50 text-slate-400';
-                        let hoverClass = 'hover:border-slate-800 hover:text-slate-200';
-                        let countBadgeClass = 'text-[9px] text-slate-500';
+                        let cellTierClass = 'cal-day-empty';
 
                         if (hasEntries) {
-                          hoverClass = 'hover:scale-[1.03] duration-150';
                           if (cell.count <= 10) {
-                            bgClass = 'bg-indigo-950/20 border-indigo-950/60 text-indigo-300';
-                            countBadgeClass = 'text-[10px] text-indigo-400/80 font-bold';
+                            cellTierClass = 'cal-day-tier1';
                           } else if (cell.count <= 40) {
-                            bgClass = 'bg-indigo-950/70 border-indigo-500/20 text-indigo-200';
-                            countBadgeClass = 'text-[10px] text-indigo-300 font-extrabold';
+                            cellTierClass = 'cal-day-tier2';
                           } else {
-                            bgClass = 'bg-indigo-500/20 border-indigo-500/50 text-indigo-100 font-bold shadow-md shadow-indigo-500/5';
-                            countBadgeClass = 'text-[10px] text-indigo-200 font-black';
+                            cellTierClass = 'cal-day-tier3';
                           }
                         }
 
                         if (isSelected) {
-                          bgClass = 'bg-indigo-500 text-white ring-2 ring-indigo-500 ring-offset-2 ring-offset-[#0d1527] font-black';
-                          countBadgeClass = 'text-[10px] text-indigo-100 font-bold';
+                          cellTierClass = 'cal-day-selected';
                         }
 
                         return (
@@ -1146,15 +1139,15 @@ export default function ProductMovements({
                               setSelectedDay(isSelected ? null : cell.dayNum);
                               setSelectedWeek(null);
                             }}
-                            className={`aspect-square rounded-xl border flex flex-col justify-between p-2 cursor-pointer transition-all ${bgClass} ${hoverClass}`}
+                            className={`cal-day-cell aspect-square rounded-xl border flex flex-col justify-between p-2 cursor-pointer transition-all ${cellTierClass}`}
                             title={`${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${cell.dayNum} de ${monthName}`}
                           >
-                            <span className="text-[11px] font-mono leading-none font-bold">
+                            <span className="cal-day-number text-[11px] font-mono leading-none font-bold">
                               {cell.dayNum}
                             </span>
                             
                             {hasEntries ? (
-                              <span className={`text-[10px] font-mono tracking-tighter self-end leading-none ${countBadgeClass}`}>
+                              <span className="cal-count text-[10px] font-mono tracking-tighter self-end leading-none font-bold">
                                 {cell.count} un
                               </span>
                             ) : (
@@ -1225,13 +1218,13 @@ export default function ProductMovements({
           </div>
 
           {/* UNITARY TRIAGE ITEMS LIST (Embedded directly below Calendar & Graph) */}
-          <div className="bg-[#0d1527] border border-slate-800/50 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm animate-in fade-in duration-200" id="unit-triage-movements-panel">
+          <div className="bg-slate-900/90 border border-slate-800/50 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm animate-in fade-in duration-200" id="unit-triage-movements-panel">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/50 pb-4">
               <div>
                 <div className="flex items-center gap-2">
                   <Package className="w-4 h-4 text-sky-400" />
                   <h3 className="text-sm font-black text-white">Detalhamento Unitário de RMA / Triagem</h3>
-                  <span className="text-[10px] font-mono text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/40 font-bold">
+                  <span className="unit-count-badge text-[10px] font-mono text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/40 font-bold">
                     {filteredMovements.length} {filteredMovements.length === 1 ? 'item' : 'itens'}
                   </span>
                 </div>
@@ -1265,7 +1258,7 @@ export default function ProductMovements({
                     <span>Ver todo o mês</span>
                   </button>
                 )}
-                <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800/50 font-bold">
+                <span className="unit-month-total-badge text-[10px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800/50 font-bold">
                   Total no Mês: {monthUnits.length}
                 </span>
               </div>
@@ -1279,7 +1272,7 @@ export default function ProductMovements({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Filtrar por SKU, Produto, Canal, Destino ou Rastreamento..."
-                className="w-full bg-slate-950 border border-slate-800/50 rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 transition-all"
+                className="unit-search-input w-full bg-slate-950 border border-slate-800/50 rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 transition-all"
               />
               {searchQuery && (
                 <button 
@@ -1320,7 +1313,7 @@ export default function ProductMovements({
                 </div>
               </div>
             ) : (
-              <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950">
+              <div className="custom-scroll space-y-2 max-h-[460px] overflow-y-auto pr-1">
                 {filteredMovements.map((item) => {
                   const uDate = new Date(item.createdAt);
                   const formattedTime = !isNaN(uDate.getTime()) 
@@ -1333,7 +1326,7 @@ export default function ProductMovements({
                   return (
                     <div 
                       key={item.id}
-                      className="p-3 bg-[#0a0f1d] border border-slate-800/50 hover:border-slate-700/80 rounded-xl flex items-center justify-between gap-4 transition-all text-xs"
+                      className="unit-movement-card p-3 bg-slate-950/70 border border-slate-800/50 hover:border-slate-700/80 rounded-xl flex items-center justify-between gap-4 transition-all text-xs"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`w-1.5 h-9 rounded-full ${
@@ -1346,28 +1339,32 @@ export default function ProductMovements({
 
                         <div className="min-w-0 space-y-0.5">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-mono text-[10px] font-black text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800/80">
+                            <span className="unit-sku-badge font-mono text-[10px] font-black text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800/80">
                               {item.baseProductSku}
                             </span>
                             {item.destinationSector !== 'Openbox' && (
-                              <span className="text-[10px] font-bold text-slate-400">
+                              <span className="unit-platform text-[10px] font-bold text-slate-400">
                                 • {item.platform}
                               </span>
                             )}
                           </div>
-                          <p className="font-bold text-white truncate text-xs">{item.baseProductName}</p>
-                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                            <span className="font-mono text-slate-300">{item.trackingCode}</span>
+                          <p className="unit-title font-bold text-white truncate text-xs">{item.baseProductName}</p>
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 flex-wrap">
+                            <span className="unit-tracking font-mono text-slate-300">{item.trackingCode}</span>
                             {item.serialNumber && (
                               <>
                                 <span>•</span>
-                                <span className="font-mono text-slate-400">S/N: {item.serialNumber}</span>
+                                <span className="unit-serial font-mono text-slate-400">S/N: {item.serialNumber}</span>
                               </>
                             )}
                             <span>•</span>
-                            <span className="font-extrabold uppercase text-[9px]" style={{
-                              color: item.destinationSector === 'Principal' ? '#10B981' : item.destinationSector === 'Openbox' ? '#F59E0B' : '#EF4444'
-                            }}>
+                            <span className={`unit-sector font-extrabold uppercase text-[9px] ${
+                              item.destinationSector === 'Principal' 
+                                ? 'text-emerald-400' 
+                                : item.destinationSector === 'Openbox' 
+                                  ? 'text-amber-400' 
+                                  : 'text-rose-400'
+                            }`}>
                               Setor: {item.destinationSector}
                             </span>
                           </div>
@@ -1375,10 +1372,10 @@ export default function ProductMovements({
                       </div>
 
                       <div className="text-right flex flex-col items-end gap-1 shrink-0">
-                        <span className="font-mono text-[10px] text-slate-400 flex items-center gap-1 bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800/50">
+                        <span className="unit-date-badge font-mono text-[10px] text-slate-400 flex items-center gap-1 bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800/50">
                           {formattedDate} às {formattedTime}
                         </span>
-                        <span className="text-[9px] px-1.5 py-0.5 bg-sky-950/40 text-sky-400 border border-sky-800/30 rounded font-black uppercase">
+                        <span className="unit-entry-badge text-[9px] px-1.5 py-0.5 bg-sky-950/40 text-sky-400 border border-sky-800/30 rounded font-black uppercase">
                           ENTRADA
                         </span>
                       </div>

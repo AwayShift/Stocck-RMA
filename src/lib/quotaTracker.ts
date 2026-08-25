@@ -20,14 +20,15 @@ export interface QuotaLimits {
   dailyDeletes: number;
 }
 
-// Official Firebase Spark Plan (Free Tier) Limits per 24 hours
-export const FIREBASE_SPARK_LIMITS: QuotaLimits = {
+// Standard Cloud Database Free Tier Limits per 24 hours
+export const CLOUD_DB_LIMITS: QuotaLimits = {
   dailyReads: 50000,
   dailyWrites: 20000,
   dailyDeletes: 20000,
 };
+export const FIREBASE_SPARK_LIMITS = CLOUD_DB_LIMITS; // Backward compatibility alias
 
-const STORAGE_QUOTA_PREFIX = 'rmaflow_firestore_quota_';
+const STORAGE_QUOTA_PREFIX = 'rmaflow_database_quota_';
 
 const getTodayKey = (): string => {
   const now = new Date();
@@ -47,11 +48,11 @@ export const getQuotaStats = (profileId: string, targetDate?: string): QuotaDail
   }
 
   // If this is the main production base and no local count has been recorded yet today,
-  // initialize with the real console data (74.000 reads, 632 writes)
+  // initialize with initial baseline
   const isMainProd = profileId === 'main';
-  const initialReads = isMainProd ? 74000 : 0;
-  const initialWrites = isMainProd ? 632 : 0;
-  const initialExceeded = isMainProd;
+  const initialReads = isMainProd ? 0 : 0;
+  const initialWrites = isMainProd ? 0 : 0;
+  const initialExceeded = false;
 
   const defaultStats: QuotaDailyStats = {
     date,
@@ -60,7 +61,7 @@ export const getQuotaStats = (profileId: string, targetDate?: string): QuotaDail
     writes: initialWrites,
     deletes: 0,
     isExceeded: initialExceeded,
-    exceededReason: initialExceeded ? 'Cota de 50.000 leituras diárias ultrapassada no Google Cloud / Firebase (74 mil total)' : undefined,
+    exceededReason: undefined,
     lastUpdated: new Date().toISOString(),
   };
 
@@ -106,7 +107,7 @@ export const markQuotaExceeded = (
   current.isExceeded = true;
   current.reads = customNumbers?.reads ?? Math.max(current.reads, 74000);
   if (customNumbers?.writes !== undefined) current.writes = customNumbers.writes;
-  current.exceededReason = customNumbers?.reason || 'Limite diário de 50.000 leituras atingido no Firebase Console (74 mil operações)';
+  current.exceededReason = customNumbers?.reason || 'Limite diário de 50.000 operações atingido no banco de dados remoto';
   current.lastUpdated = new Date().toISOString();
 
   try {

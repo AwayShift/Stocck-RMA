@@ -20,14 +20,20 @@ import {
   HardDriveDownload,
   HardDriveUpload,
   Download,
-  RotateCcw
+  RotateCcw,
+  Sun,
+  Moon,
+  Palette
 } from 'lucide-react';
+import { ThemeMode } from '../lib/theme';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   enableSpreadsheetImport: boolean;
   onToggleSpreadsheetImport: (enabled: boolean) => void;
+  themeMode?: ThemeMode;
+  onSelectTheme?: (theme: ThemeMode) => void;
   onOpenBackupModal?: (tab?: 'export' | 'restore') => void;
   onOpenDbSwitcherModal?: () => void;
   userRole?: 'admin' | 'operator' | null;
@@ -39,6 +45,8 @@ export default function SettingsModal({
   onClose,
   enableSpreadsheetImport,
   onToggleSpreadsheetImport,
+  themeMode = 'dark',
+  onSelectTheme,
   onOpenBackupModal,
   onOpenDbSwitcherModal,
   userRole,
@@ -69,7 +77,7 @@ export default function SettingsModal({
                 Configurações do Sistema
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Preferências de interface, ferramentas e módulos operacionais
+                Preferências de interface, temas e módulos operacionais
               </p>
             </div>
           </div>
@@ -88,6 +96,90 @@ export default function SettingsModal({
         {/* Content Body */}
         <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
           
+          {/* Section: Theme & Appearance (Modo Claro / Escuro) */}
+          <div className="space-y-3" id="section-theme-settings">
+            <div className="flex items-center gap-2">
+              <Palette className="w-4 h-4 text-sky-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Aparência & Tema da Interface
+              </h3>
+            </div>
+
+            <div className="p-4 bg-slate-950/70 rounded-xl border border-slate-800/80 space-y-3">
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Alterne entre o tema escuro corporativo e o tema claro de alto contraste preservando a mesma estrutura e disposição gráfica.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Dark Mode Option Card */}
+                <button
+                  type="button"
+                  onClick={() => onSelectTheme?.('dark')}
+                  className={`p-3.5 rounded-xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                    themeMode === 'dark'
+                      ? 'bg-sky-500/10 border-sky-500/60 ring-2 ring-sky-500/30'
+                      : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+                  }`}
+                  id="btn-theme-dark"
+                >
+                  <div className={`p-2 rounded-lg mt-0.5 border ${
+                    themeMode === 'dark'
+                      ? 'bg-sky-500/20 border-sky-500/40 text-sky-300'
+                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                  }`}>
+                    <Moon className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white">Modo Escuro</span>
+                      {themeMode === 'dark' && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-sky-400 bg-sky-500/15 px-1.5 py-0.5 rounded-md">
+                          <Check className="w-3 h-3" /> Ativo
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-normal">
+                      Fundo escuro profundo para operações prolongadas e menor fadiga visual.
+                    </p>
+                  </div>
+                </button>
+
+                {/* Light Mode Option Card */}
+                <button
+                  type="button"
+                  onClick={() => onSelectTheme?.('light')}
+                  className={`p-3.5 rounded-xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                    themeMode === 'light'
+                      ? 'bg-amber-500/10 border-amber-500/60 ring-2 ring-amber-500/30'
+                      : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+                  }`}
+                  id="btn-theme-light"
+                >
+                  <div className={`p-2 rounded-lg mt-0.5 border ${
+                    themeMode === 'light'
+                      ? 'bg-amber-500/20 border-amber-500/40 text-amber-500'
+                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                  }`}>
+                    <Sun className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white">Modo Claro</span>
+                      {themeMode === 'light' && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/15 px-1.5 py-0.5 rounded-md">
+                          <Check className="w-3 h-3" /> Ativo
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-normal">
+                      Fundo claro suave com tipografia de alto contraste para ambientes iluminados.
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Section: Feature Toggles */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">

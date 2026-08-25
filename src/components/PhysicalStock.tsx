@@ -1165,13 +1165,13 @@ export default function PhysicalStock({
               </button>
 
               {/* View switcher: Grid vs List/Linhas */}
-              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-0.5" id="stock-view-switcher">
+              <div className="view-switcher-container flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-0.5" id="stock-view-switcher">
                 <button
                   onClick={() => handleSetViewMode('grid')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`view-switcher-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     viewMode === 'grid' 
-                      ? 'bg-sky-500 text-white shadow-sm' 
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      ? 'view-switcher-active bg-sky-500 text-white shadow-sm' 
+                      : 'view-switcher-inactive text-slate-400 hover:text-white hover:bg-slate-900'
                   }`}
                   title="Visualização em Grade"
                   id="btn-view-grid"
@@ -1181,10 +1181,10 @@ export default function PhysicalStock({
                 </button>
                 <button
                   onClick={() => handleSetViewMode('list')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`view-switcher-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     viewMode === 'list' 
-                      ? 'bg-sky-500 text-white shadow-sm' 
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      ? 'view-switcher-active bg-sky-500 text-white shadow-sm' 
+                      : 'view-switcher-inactive text-slate-400 hover:text-white hover:bg-slate-900'
                   }`}
                   title="Visualização em Linhas"
                   id="btn-view-list"

@@ -530,7 +530,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
   return (
     <div className="space-y-6" id="rma-entry-container">
       {/* Header banner */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[#161F30] border border-[#26354A] rounded-2xl p-6 shadow-xl" id="rma-header">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl" id="rma-header">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <FolderMinus className="text-rose-400 w-6 h-6" />
@@ -726,7 +726,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
 
                     {/* Autocomplete Dropdown */}
                     {isProductDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-[#0a0f1d] border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin scrollbar-thumb-slate-850">
+                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-950 border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin scrollbar-thumb-slate-850">
                         <div className="p-2.5 bg-slate-900/90 text-[11px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10 backdrop-blur-sm">
                           <span className="flex items-center gap-1.5 font-bold text-slate-300">
                             <span className="w-2 h-2 rounded-full bg-sky-400"></span>
@@ -1137,7 +1137,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                                   }
                                 }
                               }}
-                              className="px-2.5 py-1.5 bg-[#0b1321] hover:bg-[#101c30] border border-slate-800 hover:border-sky-500/50 rounded-lg text-slate-300 hover:text-white font-semibold transition-all cursor-pointer text-[11px]"
+                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 rounded-lg text-slate-300 hover:text-white font-semibold transition-all cursor-pointer text-[11px]"
                             >
                               Copiar para Produto
                             </button>
@@ -1150,7 +1150,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                                   setPhotosBox([]);
                                 }
                               }}
-                              className="px-2.5 py-1.5 bg-[#0b1321] hover:bg-[#101c30] border border-slate-800 hover:border-sky-500/50 rounded-lg text-slate-300 hover:text-white font-semibold transition-all cursor-pointer text-[11px]"
+                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 rounded-lg text-slate-300 hover:text-white font-semibold transition-all cursor-pointer text-[11px]"
                             >
                               Copiar para Caixa
                             </button>
@@ -1163,7 +1163,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                                   setPhotosAccessories([]);
                                 }
                               }}
-                              className="px-2.5 py-1.5 bg-[#0b1321] hover:bg-[#101c30] border border-slate-800 hover:border-sky-500/50 rounded-lg text-slate-300 hover:text-white font-semibold transition-all cursor-pointer text-[11px]"
+                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 rounded-lg text-slate-300 hover:text-white font-semibold transition-all cursor-pointer text-[11px]"
                             >
                               Copiar para Acessórios
                             </button>

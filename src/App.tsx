@@ -48,6 +48,7 @@ import {
   transferPendingItemToStock,
   resetDatabaseToDefaults,
   createAuditLog,
+  purgeExistingAuditLogs,
   ensureUserProfileExists
 } from './lib/dbService';
 
@@ -56,7 +57,6 @@ import BaseCatalog from './components/BaseCatalog';
 import RmaEntry from './components/RmaEntry';
 import PhysicalStock from './components/PhysicalStock';
 import PendingItems from './components/PendingItems';
-import LogsAudit from './components/LogsAudit';
 import Login from './components/Login';
 import ProductMovements from './components/ProductMovements';
 import SettingsModal from './components/SettingsModal';
@@ -66,9 +66,22 @@ import { checkAndRunScheduledBackups } from './lib/backupService';
 import { getActiveDatabaseProfile, DatabaseProfile } from './lib/firebaseConfigManager';
 import { getActiveDbProvider, getSupabaseClient, DatabaseProvider } from './lib/supabase';
 import { subscribeToSupabaseAuth, signOutSupabase } from './lib/supabaseAuth';
+import { ThemeMode, getSavedTheme, applyTheme } from './lib/theme';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement' | 'logs'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement'>('dashboard');
+  
+  // Theme state (Dark / Light)
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getSavedTheme());
+
+  useEffect(() => {
+    applyTheme(themeMode);
+  }, [themeMode]);
+
+  const handleSelectTheme = (mode: ThemeMode) => {
+    setThemeMode(mode);
+    applyTheme(mode);
+  };
   
   // Auth state
   const [user, setUser] = useState<any>(null);
@@ -160,6 +173,10 @@ export default function App() {
     try {
       setIsLoading(true);
       setSyncError(null);
+      
+      // Clean up legacy logs in background
+      purgeExistingAuditLogs().catch(() => {});
+
       const [prodRes, triageRes, pendingList, inflowList] = await Promise.all([
         getInitialBaseProducts(2500),
         getInitialTriageUnits(2500),
@@ -522,17 +539,6 @@ export default function App() {
                 <Boxes className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                 <span>Fluxo de Entradas</span>
               </button>
-
-              <button
-                onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'logs' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                id="nav-logs"
-              >
-                <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                <span>Auditoria & Logs</span>
-              </button>
             </nav>
 
             {/* Authenticated user profile, actions, and logout */}
@@ -712,16 +718,6 @@ export default function App() {
         </button>
 
         <button
-          onClick={() => { setActiveTab('logs'); setSelectedTriageUnit(null); }}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'logs' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
-          }`}
-        >
-          <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
-          <span>Auditoria</span>
-        </button>
-
-        <button
           onClick={handleLogout}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0 hover:bg-rose-500/20"
         >
@@ -739,13 +735,13 @@ export default function App() {
             </div>
             <h3 className="text-lg font-bold text-white">
               {syncError.toLowerCase().includes('quota') || syncError.toLowerCase().includes('resource')
-                ? 'Limite de Cota do Firebase Atingido'
+                ? 'Limite de Cota do Banco de Dados Atingido'
                 : 'Falha na Sincronização em Tempo Real'}
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
               {syncError.toLowerCase().includes('quota') || syncError.toLowerCase().includes('resource')
-                ? 'A base atual atingiu o limite de leituras diárias do plano gratuito do Google Cloud Firestore. Alterne para o Banco Reserva para restaurar o acesso instantaneamente.'
-                : 'Ocorreu um erro de permissão ou conexão ao se comunicar com o banco de dados Firestore remoto.'}
+                ? 'A base de dados atingiu o limite de operações ou conexão. Alterne a conexão ou verifique o status do Supabase para restaurar o acesso.'
+                : 'Ocorreu um erro de permissão ou conexão ao se comunicar com o banco de dados remoto.'}
             </p>
             <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-mono text-rose-400 max-w-full overflow-x-auto w-full break-all">
               {syncError}
@@ -837,16 +833,6 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'logs' && (
-              <LogsAudit 
-                userRole={userRole} 
-                userEmail={user?.email || ''}
-                productsCount={products.length}
-                triageUnitsCount={triageUnits.length}
-                dailyInflowsCount={dailyInflows.length}
-              />
-            )}
-
             {activeTab === 'movement' && (
               <ProductMovements 
                 products={products}
@@ -883,6 +869,8 @@ export default function App() {
         onClose={() => setIsSettingsModalOpen(false)}
         enableSpreadsheetImport={enableSpreadsheetImport}
         onToggleSpreadsheetImport={handleToggleSpreadsheetImport}
+        themeMode={themeMode}
+        onSelectTheme={handleSelectTheme}
         onOpenBackupModal={(tab) => {
           setIsBackupModalOpen(true);
         }}

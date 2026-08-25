@@ -909,16 +909,16 @@ export default function BackupModal({
             <div className="space-y-6 animate-in fade-in duration-150" id="section-auto-schedule">
               
               {/* Master Switch */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-950/40 to-slate-950 border border-sky-500/30 flex items-center justify-between gap-4">
+              <div className="backup-master-switch p-4 rounded-2xl bg-gradient-to-r from-sky-950/40 to-slate-950 border border-sky-500/30 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                  <div className="backup-master-icon p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
                     <Clock className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">
+                    <h4 className="backup-master-title text-sm font-bold text-white">
                       Rotinas de Backup Automático em Nuvem
                     </h4>
-                    <p className="text-xs text-slate-400">
+                    <p className="backup-master-desc text-xs text-slate-400">
                       Executa cópias de contingência silenciosamente em segundo plano
                     </p>
                   </div>

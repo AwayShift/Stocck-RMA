@@ -493,7 +493,7 @@ export default function BaseCatalog({
                   placeholder="Buscar por Modelo, Nome ou SKU..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-[#0b1321] border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors font-sans"
+                  className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors font-sans"
                   id="input-catalog-search"
                 />
               </div>
@@ -505,7 +505,7 @@ export default function BaseCatalog({
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#0b1321] border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 transition-colors"
+                className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 transition-colors"
                 id="select-filter-category"
               >
                 <option value="Todas">Todas as Categorias</option>
@@ -521,7 +521,7 @@ export default function BaseCatalog({
               <select
                 value={selectedVoltage}
                 onChange={(e) => setSelectedVoltage(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#0b1321] border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 transition-colors"
+                className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 transition-colors"
                 id="select-filter-voltage"
               >
                 <option value="Todas">Todas as Tensões</option>
@@ -556,14 +556,14 @@ export default function BaseCatalog({
             </div>
 
             {/* View Mode Toggle: Table (List) vs Grid (Cards) */}
-            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-end sm:self-auto" id="catalog-view-mode-toggle">
+            <div className="view-switcher-container flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-end sm:self-auto" id="catalog-view-mode-toggle">
               <button
                 type="button"
                 onClick={() => handleToggleViewMode('table')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`view-switcher-btn px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                   viewMode === 'table'
-                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    ? 'view-switcher-active bg-sky-500 text-white shadow-md shadow-sky-500/20'
+                    : 'view-switcher-inactive text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                 }`}
                 title="Modo Tabela / Lista"
                 id="btn-view-mode-table"
@@ -574,10 +574,10 @@ export default function BaseCatalog({
               <button
                 type="button"
                 onClick={() => handleToggleViewMode('grid')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`view-switcher-btn px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                   viewMode === 'grid'
-                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    ? 'view-switcher-active bg-sky-500 text-white shadow-md shadow-sky-500/20'
+                    : 'view-switcher-inactive text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                 }`}
                 title="Modo Grade / Cards"
                 id="btn-view-mode-grid"
@@ -745,16 +745,6 @@ export default function BaseCatalog({
                             </span>
                           </div>
 
-                          {/* Total Photos Badge (Top Right) */}
-                          {totalPhotos > 1 && (
-                            <div className="absolute top-2.5 right-2.5">
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-950/85 backdrop-blur-md text-slate-200 border border-white/10 flex items-center gap-1 shadow-md">
-                                <ImageIcon className="w-3 h-3 text-sky-400" />
-                                <span>{totalPhotos}</span>
-                              </span>
-                            </div>
-                          )}
-
                           {/* Quick Hover Overlay */}
                           <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none backdrop-blur-[1px]">
                             <span className="px-3 py-1.5 bg-sky-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transform scale-95 group-hover:scale-100 transition-transform">
@@ -861,14 +851,14 @@ export default function BaseCatalog({
                   </button>
                 )}
 
-                {/* Firestore Paginated Fetch Button: loads next 10 items via startAfter() */}
+                {/* Database Paginated Fetch Button: loads next 10 items */}
                 {hasMoreFromDb && onLoadMoreFromDb && (
                   <button
                     type="button"
                     onClick={onLoadMoreFromDb}
                     disabled={isLoadingMore}
                     className="px-6 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:bg-sky-950/60 disabled:text-sky-400/50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-sky-600/20 hover:shadow-sky-600/30 group"
-                    id="btn-load-more-firestore"
+                    id="btn-load-more-database"
                   >
                     {isLoadingMore ? (
                       <>
@@ -1113,9 +1103,9 @@ export default function BaseCatalog({
             }
           `}</style>
           
-          <div className="w-full max-w-3xl bg-[#111c2e] border border-slate-800 rounded-2xl shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 my-auto">
+          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 my-auto">
             {/* Modal Header */}
-            <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-[#0c1421]">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-slate-950">
               <h3 className="text-base font-black text-white">
                 {editingProduct ? 'Editar Produto Master' : 'Cadastrar Novo Produto'}
               </h3>
@@ -1154,7 +1144,7 @@ export default function BaseCatalog({
                     placeholder="Ex: Fritadeira Elétrica AirFryer Touch"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#0b1321] border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-600"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-600"
                     id="input-product-name"
                   />
                 </div>
@@ -1168,7 +1158,7 @@ export default function BaseCatalog({
                     value={sku}
                     onChange={(e) => setSku(e.target.value)}
                     disabled={!!editingProduct}
-                    className="w-full px-4 py-2.5 bg-[#0b1321] border border-slate-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm text-slate-200 uppercase focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all font-mono placeholder:text-slate-600"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm text-slate-200 uppercase focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all font-mono placeholder:text-slate-600"
                     id="input-product-sku"
                   />
                 </div>
@@ -1193,7 +1183,7 @@ export default function BaseCatalog({
                   <select 
                     value={voltage}
                     onChange={(e) => setVoltage(e.target.value as any)}
-                    className="w-full px-4 py-2.5 bg-[#0b1321] border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all"
                     id="select-product-voltage"
                   >
                     <option value="110V">110V</option>
@@ -1211,7 +1201,7 @@ export default function BaseCatalog({
                     placeholder="Ex: Cabo HDMI, Carregador..."
                     value={accessories}
                     onChange={(e) => setAccessories(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#0b1321] border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-600"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-600"
                     id="input-product-accessories"
                   />
                 </div>
@@ -1227,7 +1217,7 @@ export default function BaseCatalog({
                     placeholder="Ex: Electrolux, Philips, Samsung..."
                     value={brand}
                     onChange={(e) => setBrand(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#0b1321] border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-600"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-600"
                     id="input-product-brand"
                   />
                 </div>
@@ -1240,7 +1230,7 @@ export default function BaseCatalog({
                     placeholder="Ex: Eletroportáteis, Áudio, Informática..."
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#0b1321] border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-600"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-600"
                     id="input-product-category"
                   />
                 </div>
@@ -1277,7 +1267,7 @@ export default function BaseCatalog({
                 </div>
 
                 {/* Category Selector Tabs */}
-                <div className="grid grid-cols-3 gap-1 p-1 bg-[#0b1321] border border-slate-800 rounded-xl text-center text-xs text-slate-400" id="catalog-category-selector">
+                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-xl text-center text-xs text-slate-400" id="catalog-category-selector">
                   <button 
                     type="button" 
                     onClick={(e) => { e.stopPropagation(); setActiveUploadCategory('product'); }}
@@ -1302,7 +1292,7 @@ export default function BaseCatalog({
                 </div>
 
                 {/* Link/URL Input for Active Category */}
-                <div className="p-3 bg-[#0a111c] border border-slate-800 rounded-xl space-y-2">
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-400 font-medium flex items-center gap-1.5">
                       <LinkIcon className="w-3.5 h-3.5 text-sky-400" />
@@ -1323,7 +1313,7 @@ export default function BaseCatalog({
                         }
                       }}
                       placeholder="https://exemplo.com/imagem-produto.jpg"
-                      className="flex-1 px-3.5 py-2 bg-[#0b1321] border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:text-slate-600"
+                      className="flex-1 px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:text-slate-600"
                     />
                     <button
                       type="button"
@@ -1356,10 +1346,10 @@ export default function BaseCatalog({
                 {/* Dropzone & Paste Area */}
                 <div 
                   tabIndex={0}
-                  className={`border border-dashed rounded-xl p-4 bg-[#0a111c] transition-all flex flex-col items-center justify-center min-h-[100px] outline-none cursor-pointer select-none ${
+                  className={`border border-dashed rounded-xl p-4 bg-slate-950 transition-all flex flex-col items-center justify-center min-h-[100px] outline-none cursor-pointer select-none ${
                     isPasteFocused 
-                      ? 'border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.35)] bg-[#0c1d33]/50' 
-                      : 'border-slate-800 hover:bg-[#0a111c]/80 hover:border-slate-700'
+                      ? 'border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.35)] bg-sky-950/20' 
+                      : 'border-slate-800 hover:bg-slate-900/80 hover:border-slate-700'
                   }`}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {

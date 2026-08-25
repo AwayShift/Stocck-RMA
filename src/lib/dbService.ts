@@ -128,69 +128,26 @@ const DEFAULT_TRIAGE_UNITS: TriageUnit[] = [
   }
 ];
 
-// Corporate Audit Logging helper
+// Corporate Audit Logging helper (silent mode while audit module is restructured)
 export const createAuditLog = async (
-  action: string, 
-  details: string,
-  overrideEmail?: string,
-  overrideUid?: string
+  _action: string, 
+  _details: string,
+  _overrideEmail?: string,
+  _overrideUid?: string
 ) => {
+  // Audit log creation intentionally disabled for performance and database hygiene
+  return;
+};
+
+// Purge all legacy audit logs from Supabase & Firestore
+export const purgeExistingAuditLogs = async (): Promise<void> => {
   try {
-    let uid = overrideUid || '';
-    let email = overrideEmail || '';
-
-    if (getActiveDbProvider() === 'supabase') {
-      const supabase = getSupabaseClient();
-      if (supabase) {
-        if (!email) {
-          const authUser = await getCurrentActiveAuthUser();
-          if (authUser) {
-            uid = authUser.uid;
-            email = authUser.email;
-          }
-        }
-
-        if (!email) {
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user?.email) {
-              uid = session.user.id;
-              email = session.user.email;
-            }
-          } catch (sessionErr) {
-            // ignore
-          }
-        }
-
-        await supabase.from('audit_logs').insert({
-          user_id: uid || 'anonymous',
-          user_email: email || 'operador@stocckrma.local',
-          action,
-          details,
-          timestamp: new Date().toISOString()
-        });
-        return;
-      }
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('audit_logs').delete().neq('id', '___non_existent___');
     }
-
-    // Firestore provider fallback
-    if (!email) {
-      const user = auth.currentUser;
-      if (user) {
-        uid = user.uid;
-        email = user.email || 'operador@stocckrma.local';
-      }
-    }
-
-    await addDoc(collection(db, 'logs'), {
-      userId: uid || 'anonymous',
-      userEmail: email || 'operador@stocckrma.local',
-      action,
-      details,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error creating audit log:', error);
+  } catch (e) {
+    console.warn('Purge audit_logs table error:', e);
   }
 };
 

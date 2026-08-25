@@ -42,42 +42,1011 @@ html {
 body {
   font-family: var(--font-sans);
   background-color: #020617;
+  color: #f8fafc;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Quill rich-text customized overrides for dark mode theme */
-.ql-editor {
-  background-color: #020617 !important;
-  color: #F1F5F9 !important;
-  font-family: var(--font-sans) !important;
-  font-size: 0.875rem !important;
-  border-radius: 0 0 0.75rem 0.75rem !important;
-  border: 1px solid #1e293b !important;
+/* ==========================================================================
+   LIGHT MODE ADAPTIVE OVERRIDES (Clean, high-contrast, identical layout)
+   ========================================================================== */
+
+html.light,
+body.light {
+  background-color: #eaeff5 !important;
+  color: #0f172a !important;
+}
+
+html.light ::-webkit-scrollbar-track {
+  background: #eaeff5;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Dark background transforms into light surfaces */
+html.light .bg-slate-950,
+html.light .bg-slate-950\/95,
+html.light .bg-slate-950\/90,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/70,
+html.light .bg-slate-950\/60,
+html.light .bg-slate-950\/50,
+html.light .bg-slate-950\/40 {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .bg-slate-900,
+html.light .bg-slate-900\/95,
+html.light .bg-slate-900\/90,
+html.light .bg-slate-900\/80,
+html.light .bg-slate-900\/70,
+html.light .bg-slate-900\/60,
+html.light .bg-slate-900\/50,
+html.light .bg-slate-900\/40 {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-slate-850,
+html.light .bg-slate-800,
+html.light .bg-slate-800\/90,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-800\/70,
+html.light .bg-slate-800\/60,
+html.light .bg-slate-800\/50,
+html.light .bg-slate-800\/40 {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-slate-750,
+html.light .bg-slate-700,
+html.light .bg-slate-700\/50 {
+  background-color: #e2e8f0 !important;
+}
+
+/* Fallback catch-all for remaining hardcoded container hex backgrounds */
+html.light [class*="bg-[#"] {
+  background-color: #ffffff !important;
+}
+
+html.light [class*="border-[#"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* Borders in Light Mode */
+html.light .border-slate-950,
+html.light .border-slate-900,
+html.light .border-slate-850,
+html.light .border-slate-800,
+html.light .border-slate-800\/80,
+html.light .border-slate-800\/60,
+html.light .border-slate-750,
+html.light .border-slate-700,
+html.light .border-slate-700\/50,
+html.light .border-slate-600 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Typography in Light Mode */
+html.light .text-white {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-100,
+html.light .text-slate-200 {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-300 {
+  color: #334155 !important;
+}
+
+html.light .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.light .text-slate-500 {
+  color: #64748b !important;
+}
+
+/* Preserve crisp white text ONLY on solid filled action buttons */
+html.light button.bg-emerald-600,
+html.light button.bg-emerald-500,
+html.light button.bg-sky-600,
+html.light button.bg-sky-500,
+html.light button.bg-indigo-600,
+html.light button.bg-indigo-500,
+html.light button.bg-rose-600,
+html.light button.bg-rose-500,
+html.light button.bg-blue-600,
+html.light button.bg-blue-500,
+html.light a.bg-emerald-600,
+html.light a.bg-emerald-500,
+html.light a.bg-sky-600,
+html.light a.bg-sky-500,
+html.light .bg-sky-500.text-white,
+html.light .bg-emerald-500.text-white,
+html.light .bg-rose-500.text-white {
+  color: #ffffff !important;
+}
+
+html.light button.bg-emerald-600 *,
+html.light button.bg-emerald-500 *,
+html.light button.bg-sky-600 *,
+html.light button.bg-sky-500 *,
+html.light button.bg-indigo-600 *,
+html.light button.bg-indigo-500 *,
+html.light button.bg-rose-600 *,
+html.light button.bg-rose-500 *,
+html.light button.bg-blue-600 *,
+html.light button.bg-blue-500 * {
+  color: #ffffff !important;
+}
+
+/* Input, Select, Textarea in Light Mode */
+html.light input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Hover states in Light Mode */
+html.light .hover\:bg-slate-800:hover,
+html.light .hover\:bg-slate-800\/60:hover,
+html.light .hover\:bg-slate-750:hover,
+html.light .hover\:bg-slate-900:hover,
+html.light .hover\:bg-slate-950:hover {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+/* Backdrops */
+html.light .bg-black\/80,
+html.light .bg-black\/70,
+html.light .bg-black\/60,
+html.light .bg-black\/50 {
+  background-color: rgba(15, 23, 42, 0.55) !important;
+}
+
+/* Shadows in Light Mode */
+html.light .shadow-2xl {
+  box-shadow: 0 20px 30px -10px rgba(15, 23, 42, 0.12), 0 10px 15px -5px rgba(15, 23, 42, 0.08) !important;
+}
+
+html.light .shadow-xl {
+  box-shadow: 0 12px 20px -5px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light .shadow-lg {
+  box-shadow: 0 8px 15px -3px rgba(15, 23, 42, 0.07), 0 4px 6px -2px rgba(15, 23, 42, 0.03) !important;
+}
+
+/* Accents & Status text contrast in Light Mode */
+html.light .text-sky-300,
+html.light .text-sky-400 {
+  color: #0369a1 !important;
+}
+
+html.light .text-emerald-300,
+html.light .text-emerald-400 {
+  color: #047857 !important;
+}
+
+html.light .text-indigo-300,
+html.light .text-indigo-400 {
+  color: #4338ca !important;
+}
+
+html.light .text-purple-300,
+html.light .text-purple-400 {
+  color: #7e22ce !important;
+}
+
+html.light .text-amber-300,
+html.light .text-amber-400 {
+  color: #b45309 !important;
+}
+
+html.light .text-rose-300,
+html.light .text-rose-400 {
+  color: #be123c !important;
+}
+
+/* Badge & Card backgrounds in Light Mode */
+html.light .bg-emerald-950\/40,
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/15,
+html.light .bg-emerald-500\/20 {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+}
+
+html.light .bg-sky-500\/10,
+html.light .bg-sky-500\/15,
+html.light .bg-sky-500\/20 {
+  background-color: #f0f9ff !important;
+  border-color: #bae6fd !important;
+}
+
+html.light .bg-indigo-500\/10,
+html.light .bg-indigo-500\/15,
+html.light .bg-indigo-500\/20 {
+  background-color: #eef2ff !important;
+  border-color: #c7d2fe !important;
+}
+
+html.light .bg-amber-500\/10,
+html.light .bg-amber-500\/15,
+html.light .bg-amber-500\/20 {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
+html.light .bg-rose-500\/10,
+html.light .bg-rose-500\/15,
+html.light .bg-rose-500\/20 {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+}
+
+html.light .bg-purple-500\/10,
+html.light .bg-purple-500\/15,
+html.light .bg-purple-500\/20 {
+  background-color: #faf5ff !important;
+  border-color: #e9d5ff !important;
+}
+
+/* Card Voltage Badges in Light Mode */
+html.light .bg-sky-950\/85 {
+  background-color: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0369a1 !important;
+}
+
+html.light .bg-teal-950\/85 {
+  background-color: #ccfbf1 !important;
+  border-color: #5eead4 !important;
+  color: #0f766e !important;
+}
+
+html.light .bg-orange-950\/85 {
+  background-color: #ffedd5 !important;
+  border-color: #fdba74 !important;
+  color: #c2410c !important;
+}
+
+html.light .bg-slate-900\/85 {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+/* Header & navigation in Light Mode */
+html.light header {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light #desktop-navigation {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light #desktop-navigation button,
+html.light #mobile-navigation button {
+  color: #475569;
+}
+
+html.light #desktop-navigation button:hover,
+html.light #mobile-navigation button:hover {
+  color: #0f172a !important;
+  background-color: #e2e8f0 !important;
+}
+
+/* Active Nav Tab in Light Mode - High Contrast */
+html.light #desktop-navigation button.bg-sky-500\/20,
+html.light #mobile-navigation button.bg-sky-500\/20 {
+  background-color: #ffffff !important;
+  color: #0284c7 !important;
+  border-color: #0284c7 !important;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.18) !important;
+  font-weight: 800 !important;
+}
+
+html.light #desktop-navigation button.bg-sky-500\/20 *,
+html.light #mobile-navigation button.bg-sky-500\/20 * {
+  color: #0284c7 !important;
+}
+
+html.light #desktop-navigation button.bg-rose-500\/20,
+html.light #mobile-navigation button.bg-rose-500\/20 {
+  background-color: #ffffff !important;
+  color: #e11d48 !important;
+  border-color: #e11d48 !important;
+  box-shadow: 0 1px 4px rgba(225, 29, 72, 0.18) !important;
+  font-weight: 800 !important;
+}
+
+html.light #desktop-navigation button.bg-rose-500\/20 *,
+html.light #mobile-navigation button.bg-rose-500\/20 * {
+  color: #e11d48 !important;
+}
+
+/* Right Header Buttons in Light Mode */
+html.light #btn-open-db-switcher-header,
+html.light #mobile-btn-db-switcher {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+  color: #047857 !important;
+}
+html.light #btn-open-db-switcher-header:hover,
+html.light #mobile-btn-db-switcher:hover {
+  background-color: #d1fae5 !important;
+  border-color: #34d399 !important;
+  color: #065f46 !important;
+}
+html.light #btn-open-db-switcher-header span,
+html.light #mobile-btn-db-switcher span {
+  color: #047857 !important;
+}
+
+html.light #btn-open-backup-header,
+html.light #mobile-btn-backup {
+  background-color: #eef2ff !important;
+  border-color: #a5b4fc !important;
+  color: #4338ca !important;
+}
+html.light #btn-open-backup-header:hover,
+html.light #mobile-btn-backup:hover {
+  background-color: #e0e7ff !important;
+  border-color: #818cf8 !important;
+  color: #3730a3 !important;
+}
+html.light #btn-open-backup-header span,
+html.light #mobile-btn-backup span {
+  color: #4338ca !important;
+}
+
+html.light #btn-open-settings,
+html.light #mobile-btn-settings {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+html.light #btn-open-settings:hover,
+html.light #mobile-btn-settings:hover {
+  background-color: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+html.light #btn-open-settings span,
+html.light #mobile-btn-settings span {
+  color: #1e293b !important;
+}
+
+html.light a[href*="PRD_RMA_FLOW.md"] {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+  color: #047857 !important;
+}
+html.light a[href*="PRD_RMA_FLOW.md"]:hover {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+}
+html.light a[href*="PRD_RMA_FLOW.md"] span {
+  color: #047857 !important;
+}
+
+html.light #btn-logout {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #be123c !important;
+}
+html.light #btn-logout:hover {
+  background-color: #ffe4e6 !important;
+  border-color: #fda4af !important;
+  color: #9f1239 !important;
+}
+html.light #btn-logout span {
+  color: #be123c !important;
+}
+
+/* Card Action Buttons in Light Mode */
+html.light [id^="btn-edit-grid-"],
+html.light [id^="btn-delete-grid-"],
+html.light [id^="btn-view-card-"],
+html.light [id^="btn-view-"],
+html.light [id^="btn-edit-"],
+html.light [id^="btn-delete-"] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+html.light [id^="btn-edit-grid-"]:hover,
+html.light [id^="btn-edit-"]:hover,
+html.light [id^="btn-view-card-"]:hover,
+html.light [id^="btn-view-"]:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+}
+
+html.light [id^="btn-delete-grid-"]:hover,
+html.light [id^="btn-delete-"]:hover {
+  background-color: #fee2e2 !important;
+  color: #dc2626 !important;
+  border-color: #fca5a5 !important;
+}
+
+html.light footer {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light #db-switcher-modal {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light #db-switcher-modal * {
+  border-color: #e2e8f0;
+}
+
+html.light #db-switcher-modal .bg-\[\#181818\],
+html.light #db-switcher-modal .bg-\[\#121212\],
+html.light #db-switcher-modal .bg-\[\#141414\],
+html.light #db-switcher-modal .bg-\[\#161616\],
+html.light #db-switcher-modal .bg-\[\#1a1a1a\],
+html.light #db-switcher-modal .bg-\[\#1f1f1f\] {
+  background-color: #f8fafc !important;
+}
+
+html.light #db-switcher-modal .text-\[\#e0e0e0\],
+html.light #db-switcher-modal .text-\[\#cccccc\],
+html.light #db-switcher-modal .text-\[\#ffffff\],
+html.light #db-switcher-modal .text-\[\#a0a0a0\] {
+  color: #1e293b !important;
+}
+
+html.light #db-switcher-modal .text-\[\#888888\],
+html.light #db-switcher-modal .text-\[\#777777\],
+html.light #db-switcher-modal .text-\[\#666666\] {
+  color: #64748b !important;
+}
+
+/* Quill rich-text editor in Light Mode */
+html.light .ql-editor {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0 !important;
   border-top: none !important;
-  min-height: 140px;
 }
 
-.ql-toolbar {
-  background-color: #0f172a !important;
-  border-radius: 0.75rem 0.75rem 0 0 !important;
-  border: 1px solid #1e293b !important;
+html.light .ql-toolbar {
+  background-color: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
 }
 
-.ql-toolbar .ql-stroke {
-  stroke: #94A3B8 !important;
+html.light .ql-toolbar .ql-stroke {
+  stroke: #475569 !important;
 }
 
-.ql-toolbar .ql-fill {
-  fill: #94A3B8 !important;
+html.light .ql-toolbar .ql-fill {
+  fill: #475569 !important;
 }
 
-.ql-toolbar .ql-picker {
-  color: #94A3B8 !important;
+html.light .ql-toolbar .ql-picker {
+  color: #475569 !important;
 }
 
-.ql-toolbar button:hover .ql-stroke {
-  stroke: #FFFFFF !important;
+html.light .ql-toolbar button:hover .ql-stroke {
+  stroke: #0f172a !important;
 }
 
-.ql-toolbar button:hover .ql-fill {
-  fill: #FFFFFF !important;
+html.light .ql-toolbar button:hover .ql-fill {
+  fill: #0f172a !important;
 }
+
+/* =========================================================================
+   CALENDAR & UNITARY TRIAGE (FLUXO DE ENTRADAS) STYLES
+   ========================================================================= */
+
+/* Base Dark Mode Calendar Styles */
+.cal-day-cell {
+  background-color: rgba(2, 6, 23, 0.4);
+  border-color: rgba(30, 41, 59, 0.6);
+  color: #94a3b8;
+}
+.cal-day-empty {
+  background-color: rgba(2, 6, 23, 0.4);
+  border-color: rgba(30, 41, 59, 0.6);
+  color: #64748b;
+}
+.cal-day-empty:hover {
+  border-color: rgba(71, 85, 105, 0.8);
+  color: #cbd5e1;
+}
+.cal-day-tier1 {
+  background-color: rgba(49, 46, 129, 0.25);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #c7d2fe;
+}
+.cal-day-tier1 .cal-count {
+  color: #818cf8;
+}
+.cal-day-tier2 {
+  background-color: rgba(49, 46, 129, 0.6);
+  border-color: rgba(99, 102, 241, 0.55);
+  color: #e0e7ff;
+}
+.cal-day-tier2 .cal-count {
+  color: #a5b4fc;
+}
+.cal-day-tier3 {
+  background-color: rgba(99, 102, 241, 0.35);
+  border-color: rgba(129, 140, 248, 0.6);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+.cal-day-tier3 .cal-count {
+  color: #e0e7ff;
+}
+.cal-day-selected {
+  background-color: #4f46e5 !important;
+  border-color: #818cf8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 2px #6366f1 !important;
+}
+.cal-day-selected .cal-count,
+.cal-day-selected .cal-day-number {
+  color: #ffffff !important;
+}
+
+/* Light Mode Calendar Styles (High Contrast & Clean Visual Hierarchy) */
+html.light .cal-weekday-header {
+  color: #0f172a !important;
+  font-weight: 900 !important;
+}
+
+html.light .cal-day-empty {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+html.light .cal-day-empty .cal-day-number {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+html.light .cal-day-empty:hover {
+  background-color: #f8fafc !important;
+  border-color: #94a3b8 !important;
+}
+
+html.light .cal-day-tier1 {
+  background-color: #f0f4ff !important;
+  border-color: #c7d2fe !important;
+  color: #1e1b4b !important;
+}
+html.light .cal-day-tier1 .cal-day-number {
+  color: #1e1b4b !important;
+  font-weight: 800 !important;
+}
+html.light .cal-day-tier1 .cal-count {
+  color: #3730a3 !important;
+  font-weight: 900 !important;
+}
+html.light .cal-day-tier1:hover {
+  background-color: #e0e7ff !important;
+  border-color: #818cf8 !important;
+}
+
+html.light .cal-day-tier2 {
+  background-color: #e0e7ff !important;
+  border-color: #a5b4fc !important;
+  color: #1e1b4b !important;
+}
+html.light .cal-day-tier2 .cal-day-number {
+  color: #1e1b4b !important;
+  font-weight: 900 !important;
+}
+html.light .cal-day-tier2 .cal-count {
+  color: #312e81 !important;
+  font-weight: 900 !important;
+}
+html.light .cal-day-tier2:hover {
+  background-color: #c7d2fe !important;
+  border-color: #6366f1 !important;
+}
+
+html.light .cal-day-tier3 {
+  background-color: #c7d2fe !important;
+  border-color: #818cf8 !important;
+  color: #1e1b4b !important;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.15) !important;
+}
+html.light .cal-day-tier3 .cal-day-number {
+  color: #0f172a !important;
+  font-weight: 900 !important;
+}
+html.light .cal-day-tier3 .cal-count {
+  color: #1e1b4b !important;
+  font-weight: 900 !important;
+}
+html.light .cal-day-tier3:hover {
+  background-color: #a5b4fc !important;
+  border-color: #4f46e5 !important;
+}
+
+html.light .cal-day-selected {
+  background-color: #4338ca !important;
+  border-color: #3730a3 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(67, 56, 202, 0.35) !important;
+}
+html.light .cal-day-selected .cal-day-number,
+html.light .cal-day-selected .cal-count,
+html.light .cal-day-selected span {
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+/* Light Mode Detalhamento Unitário Styles */
+html.light .unit-search-input {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.light .unit-search-input::placeholder {
+  color: #94a3b8 !important;
+}
+html.light .unit-search-input:focus {
+  border-color: #0284c7 !important;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15) !important;
+}
+
+html.light .unit-movement-card {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+html.light .unit-movement-card:hover {
+  border-color: #94a3b8 !important;
+  background-color: #f8fafc !important;
+}
+
+html.light .unit-sku-badge {
+  background-color: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: #7dd3fc !important;
+  font-weight: 900 !important;
+}
+
+html.light .unit-platform {
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+
+html.light .unit-title {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+html.light .unit-tracking {
+  color: #1e293b !important;
+  background-color: #f1f5f9 !important;
+  padding: 0.1rem 0.4rem !important;
+  border-radius: 0.25rem !important;
+  border: 1px solid #cbd5e1 !important;
+  font-weight: 700 !important;
+}
+
+html.light .unit-serial {
+  color: #334155 !important;
+  font-weight: 600 !important;
+}
+
+html.light .unit-sector.text-emerald-400 {
+  color: #047857 !important;
+  font-weight: 900 !important;
+}
+
+html.light .unit-sector.text-amber-400 {
+  color: #b45309 !important;
+  font-weight: 900 !important;
+}
+
+html.light .unit-sector.text-rose-400 {
+  color: #be123c !important;
+  font-weight: 900 !important;
+}
+
+html.light .unit-date-badge {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+  font-weight: 700 !important;
+}
+
+html.light .unit-entry-badge {
+  background-color: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: #7dd3fc !important;
+  font-weight: 900 !important;
+}
+
+html.light .unit-count-badge {
+  background-color: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: #7dd3fc !important;
+  font-weight: 800 !important;
+}
+
+html.light .unit-month-total-badge {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  font-weight: 800 !important;
+}
+
+/* Light mode custom scroll container overrides */
+html.light .overflow-y-auto,
+html.light .overflow-x-auto,
+html.light .custom-scroll {
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+html.light .overflow-y-auto::-webkit-scrollbar-track,
+html.light .overflow-x-auto::-webkit-scrollbar-track,
+html.light .custom-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+}
+
+html.light .overflow-y-auto::-webkit-scrollbar-thumb,
+html.light .overflow-x-auto::-webkit-scrollbar-thumb,
+html.light .custom-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+  border-radius: 9999px;
+}
+
+html.light .overflow-y-auto::-webkit-scrollbar-thumb:hover,
+html.light .overflow-x-auto::-webkit-scrollbar-thumb:hover,
+html.light .custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8 !important;
+}
+
+/* =========================================================================
+   VIEW MODE TOGGLE SWITCHER (TABELA / GRADE / LINHAS)
+   ========================================================================= */
+html.light .view-switcher-container,
+html.light #stock-view-switcher,
+html.light #catalog-view-mode-toggle {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.light .view-switcher-active,
+html.light #btn-view-mode-table.bg-sky-500,
+html.light #btn-view-mode-grid.bg-sky-500,
+html.light #btn-view-grid.bg-sky-500,
+html.light #btn-view-list.bg-sky-500 {
+  background-color: #ffffff !important;
+  color: #0284c7 !important;
+  border-color: #0284c7 !important;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.15) !important;
+  font-weight: 800 !important;
+}
+
+html.light .view-switcher-active *,
+html.light #btn-view-mode-table.bg-sky-500 *,
+html.light #btn-view-mode-grid.bg-sky-500 *,
+html.light #btn-view-grid.bg-sky-500 *,
+html.light #btn-view-list.bg-sky-500 * {
+  color: #0284c7 !important;
+}
+
+html.light .view-switcher-inactive,
+html.light #btn-view-mode-table:not(.bg-sky-500),
+html.light #btn-view-mode-grid:not(.bg-sky-500),
+html.light #btn-view-grid:not(.bg-sky-500),
+html.light #btn-view-list:not(.bg-sky-500) {
+  color: #334155 !important;
+  background-color: transparent !important;
+  font-weight: 700 !important;
+}
+
+html.light .view-switcher-inactive *,
+html.light #btn-view-mode-table:not(.bg-sky-500) *,
+html.light #btn-view-mode-grid:not(.bg-sky-500) *,
+html.light #btn-view-grid:not(.bg-sky-500) *,
+html.light #btn-view-list:not(.bg-sky-500) * {
+  color: #334155 !important;
+}
+
+html.light .view-switcher-inactive:hover,
+html.light #btn-view-mode-table:not(.bg-sky-500):hover,
+html.light #btn-view-mode-grid:not(.bg-sky-500):hover,
+html.light #btn-view-grid:not(.bg-sky-500):hover,
+html.light #btn-view-list:not(.bg-sky-500):hover {
+  color: #0f172a !important;
+  background-color: #e2e8f0 !important;
+}
+
+/* =========================================================================
+   SUPABASE USAGE & DB SWITCHER MODAL (LIGHT MODE)
+   ========================================================================= */
+html.light #db-switcher-modal {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light #db-switcher-modal > div:first-child {
+  background-color: #f8fafc !important;
+  border-bottom-color: #cbd5e1 !important;
+}
+
+html.light #db-switcher-modal .overflow-y-auto {
+  background-color: #f8fafc !important;
+}
+
+/* Supabase Cost Banner */
+html.light #db-switcher-modal .bg-gradient-to-r.from-\[\#17231c\] {
+  background: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+}
+
+html.light #db-switcher-modal .bg-gradient-to-r.from-\[\#17231c\] h3 {
+  color: #065f46 !important;
+  font-weight: 900 !important;
+}
+
+html.light #db-switcher-modal .bg-gradient-to-r.from-\[\#17231c\] p {
+  color: #047857 !important;
+  font-weight: 600 !important;
+}
+
+html.light #db-switcher-modal .bg-gradient-to-r.from-\[\#17231c\] p strong.text-\[\#3ecf8e\] {
+  color: #059669 !important;
+  font-weight: 900 !important;
+}
+
+html.light #db-switcher-modal .bg-gradient-to-r.from-\[\#17231c\] p strong.text-white {
+  color: #064e3b !important;
+  font-weight: 800 !important;
+}
+
+html.light #db-switcher-modal button.bg-\[\#1b2b22\] {
+  background-color: #d1fae5 !important;
+  border-color: #34d399 !important;
+  color: #065f46 !important;
+  font-weight: 800 !important;
+}
+
+html.light #db-switcher-modal button.bg-\[\#1b2b22\] * {
+  color: #065f46 !important;
+}
+
+html.light #db-switcher-modal button.bg-\[\#1b2b22\]:hover {
+  background-color: #a7f3d0 !important;
+  border-color: #10b981 !important;
+}
+
+/* Supabase PAT Drawer in Light Mode */
+html.light #db-switcher-modal form.bg-\[\#181818\] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light #db-switcher-modal form.bg-\[\#181818\] h4 {
+  color: #0f172a !important;
+}
+
+html.light #db-switcher-modal form.bg-\[\#181818\] p {
+  color: #475569 !important;
+}
+
+html.light #db-switcher-modal form input.bg-\[\#111111\] {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* Supabase Usage Cards Grid */
+html.light #db-switcher-modal .border-\[\#262626\] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  divide-color: #e2e8f0 !important;
+}
+
+html.light #db-switcher-modal .divide-\[\#262626\] > * {
+  border-color: #e2e8f0 !important;
+}
+
+html.light #db-switcher-modal .hover\:bg-\[\#181818\]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+html.light #db-switcher-modal .text-\[\#a0a0a0\] {
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+
+html.light #db-switcher-modal .text-\[\#777777\],
+html.light #db-switcher-modal .text-\[\#888888\] {
+  color: #64748b !important;
+}
+
+html.light #db-switcher-modal .bg-\[\#141414\],
+html.light #db-switcher-modal .bg-\[\#181818\] {
+  background-color: #ffffff !important;
+}
+
+html.light #db-switcher-modal .bg-\[\#1a2e23\] {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+  color: #047857 !important;
+  font-weight: 800 !important;
+}
+
+/* =========================================================================
+   BACKUP AUTOMATIC SCHEDULE (ROTINAS DE BACKUP) LIGHT MODE
+   ========================================================================= */
+html.light .backup-master-switch {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.08) !important;
+}
+
+html.light .backup-master-icon {
+  background-color: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0369a1 !important;
+}
+
+html.light .backup-master-title {
+  color: #0c4a6e !important;
+  font-weight: 900 !important;
+}
+
+html.light .backup-master-desc {
+  color: #0369a1 !important;
+  font-weight: 600 !important;
+}
+
+html.light .backup-master-switch .bg-slate-800 {
+  background-color: #cbd5e1 !important;
+}
+
+html.light #section-auto-schedule .bg-slate-950\/60,
+html.light #section-auto-schedule .bg-slate-900\/40,
+html.light #section-auto-schedule .bg-slate-950 {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light #section-auto-schedule h5 {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+html.light #section-auto-schedule p {
+  color: #475569 !important;
+}
+

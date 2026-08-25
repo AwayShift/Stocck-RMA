@@ -1283,8 +1283,8 @@ export const restoreDatabaseFromBackup = async (
 
     if (errMsg.includes('not found') || errMsg.includes('Database') || errMsg.includes('offline')) {
       throw new Error(
-        `O Firestore deste projeto não está respondendo (erro: ${errMsg}). ` +
-        `Certifique-se de que o Firestore Database foi ativado no Firebase Console para o projeto atual.`
+        `O banco de dados deste projeto não está respondendo (erro: ${errMsg}). ` +
+        `Certifique-se de que a conexão remota com o banco de dados está ativa e configurada corretamente.`
       );
     }
     throw firestoreErr;
