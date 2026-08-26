@@ -607,6 +607,36 @@ export const updateLocalCacheItem = <T extends { id?: string }>(
 };
 
 /**
+ * Updates an entire collection in memory and persistent storage
+ */
+export const updateWholeCollectionCache = <T>(
+  collectionName: 'products' | 'triage_units' | 'daily_inflows' | 'pending_items',
+  items: T[]
+) => {
+  if (collectionName === 'products') {
+    memoryProducts = items as any;
+    persistToStorage(CACHE_KEY_PRODUCTS, items);
+    syncMeta.lastSyncProducts = new Date().toISOString();
+    saveMetadata();
+  } else if (collectionName === 'triage_units') {
+    memoryTriageUnits = items as any;
+    persistToStorage(CACHE_KEY_TRIAGE_UNITS, items);
+    syncMeta.lastSyncTriageUnits = new Date().toISOString();
+    saveMetadata();
+  } else if (collectionName === 'daily_inflows') {
+    memoryDailyInflows = items as any;
+    persistToStorage(CACHE_KEY_DAILY_INFLOWS, items);
+    syncMeta.lastSyncDailyInflows = new Date().toISOString();
+    saveMetadata();
+  } else if (collectionName === 'pending_items') {
+    memoryPendingItems = items as any;
+    persistToStorage(CACHE_KEY_PENDING_ITEMS, items);
+    syncMeta.lastSyncPendingItems = new Date().toISOString();
+    saveMetadata();
+  }
+};
+
+/**
  * Clears local cache to force a full re-sync if needed
  */
 export const invalidateAllSyncCaches = () => {

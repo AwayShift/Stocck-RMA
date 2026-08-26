@@ -49,6 +49,12 @@ import {
   // Removido imports obsoletos (createAuditLog, ensureUserProfileExists, resetDatabaseToDefaults)
   purgeExistingAuditLogs
 } from './lib/dbService';
+import {
+  getCachedBaseProducts,
+  getCachedTriageUnits,
+  getCachedDailyInflows,
+  getCachedPendingItems
+} from './lib/syncCacheService';
 
 import Dashboard from './components/Dashboard';
 import BaseCatalog from './components/BaseCatalog';
@@ -87,12 +93,15 @@ export default function App() {
   const [userName, setUserName] = useState<string>('');
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  // Database states
-  const [products, setProducts] = useState<BaseProduct[]>([]);
-  const [triageUnits, setTriageUnits] = useState<TriageUnit[]>([]);
-  const [dailyInflows, setDailyInflows] = useState<DailyInflowRecord[]>([]);
-  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Database states initialized instantly from local cache (0ms blocking time)
+  const [products, setProducts] = useState<BaseProduct[]>(() => getCachedBaseProducts());
+  const [triageUnits, setTriageUnits] = useState<TriageUnit[]>(() => getCachedTriageUnits());
+  const [dailyInflows, setDailyInflows] = useState<DailyInflowRecord[]>(() => getCachedDailyInflows());
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>(() => getCachedPendingItems());
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const hasCachedData = getCachedBaseProducts().length > 0 || getCachedTriageUnits().length > 0;
+    return !hasCachedData;
+  });
   const [syncError, setSyncError] = useState<string | null>(null);
 
   // Cross-component communication & modals
@@ -151,7 +160,6 @@ export default function App() {
   // Initial Data Fetching from Database
   const loadInitialData = async () => {
     try {
-      setIsLoading(true);
       setSyncError(null);
       
       // Clean up legacy logs in background
@@ -164,16 +172,32 @@ export default function App() {
         getInitialDailyInflows(1000)
       ]);
 
-      setProducts(prodRes.data);
-      setProductsLastDoc(prodRes.lastDoc);
-      setHasMoreProducts(prodRes.hasMore);
+      if (prodRes && Array.isArray(prodRes.data)) {
+        setProducts(prodRes.data);
+        setProductsLastDoc(prodRes.lastDoc);
+        setHasMoreProducts(prodRes.hasMore);
+      }
 
-      setTriageUnits(triageRes.data);
-      setPendingItems(pendingList);
-      setDailyInflows(inflowList);
+      if (triageRes && Array.isArray(triageRes.data)) {
+        setTriageUnits(triageRes.data);
+      }
+      if (Array.isArray(pendingList)) {
+        setPendingItems(pendingList);
+      }
+      if (Array.isArray(inflowList)) {
+        setDailyInflows(inflowList);
+      }
     } catch (err: any) {
       console.error('Error loading initial database data:', err);
-      setSyncError(err?.message || String(err));
+      const cachedProds = getCachedBaseProducts();
+      const cachedTriages = getCachedTriageUnits();
+      if (cachedProds.length > 0) setProducts(cachedProds);
+      if (cachedTriages.length > 0) setTriageUnits(cachedTriages);
+
+      // Only show error screen if we have absolutely no data to show
+      if (cachedProds.length === 0 && cachedTriages.length === 0) {
+        setSyncError(err?.message || String(err));
+      }
     } finally {
       setIsLoading(false);
     }

@@ -39,7 +39,8 @@ import {
   getCachedPendingItems,
   syncPendingItemsIncrementally,
   handleRealtimePendingItemEvent,
-  updateLocalCacheItem
+  updateLocalCacheItem,
+  updateWholeCollectionCache
 } from './syncCacheService';
 import { getCurrentActiveAuthUser } from './supabaseAuth';
 import { uploadImageToCloudStorage } from './storageService';
@@ -777,18 +778,23 @@ export const fetchStockMetricsRPC = async (): Promise<StockMetricsSummary | null
 export const getInitialBaseProducts = async (pageSize: number = 2500): Promise<PaginatedResult<BaseProduct>> => {
   const supabase = getSupabaseClient();
   if (supabase) {
-    const { data, error } = await supabase
-      .from('products')
-      .select(PRODUCT_COLUMNS)
-      .order('created_at', { ascending: false })
-      .limit(pageSize);
-    if (!error && data) {
-      const list = data.map(mapSupabaseToProduct);
-      return {
-        data: list,
-        lastDoc: null,
-        hasMore: data.length === pageSize
-      };
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select(PRODUCT_COLUMNS)
+        .order('created_at', { ascending: false })
+        .limit(pageSize);
+      if (!error && data) {
+        const list = data.map(mapSupabaseToProduct);
+        updateWholeCollectionCache('products', list);
+        return {
+          data: list,
+          lastDoc: null,
+          hasMore: data.length === pageSize
+        };
+      }
+    } catch (e) {
+      console.warn('Error fetching initial base products from Supabase, using cache:', e);
     }
   }
 
@@ -810,18 +816,22 @@ export const getMoreBaseProducts = async (
 export const getPaginatedBaseProducts = async (page: number = 1, pageSize: number = 50): Promise<{ data: BaseProduct[]; total: number }> => {
   const supabase = getSupabaseClient();
   if (supabase) {
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const { data, count, error } = await supabase
-      .from('products')
-      .select(PRODUCT_COLUMNS, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(from, to);
-    if (!error && data) {
-      return {
-        data: data.map(mapSupabaseToProduct),
-        total: count || 0
-      };
+    try {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data, count, error } = await supabase
+        .from('products')
+        .select(PRODUCT_COLUMNS, { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+      if (!error && data) {
+        return {
+          data: data.map(mapSupabaseToProduct),
+          total: count || 0
+        };
+      }
+    } catch (e) {
+      console.warn('Error in getPaginatedBaseProducts, using cache:', e);
     }
   }
   const cached = getCachedBaseProducts();
@@ -835,18 +845,23 @@ export const getPaginatedBaseProducts = async (page: number = 1, pageSize: numbe
 export const getInitialTriageUnits = async (pageSize: number = 2500): Promise<PaginatedResult<TriageUnit>> => {
   const supabase = getSupabaseClient();
   if (supabase) {
-    const { data, error } = await supabase
-      .from('triage_units')
-      .select(TRIAGE_COLUMNS)
-      .order('created_at', { ascending: false })
-      .limit(pageSize);
-    if (!error && data) {
-      const list = data.map(mapSupabaseToTriageUnit);
-      return {
-        data: list,
-        lastDoc: null,
-        hasMore: data.length === pageSize
-      };
+    try {
+      const { data, error } = await supabase
+        .from('triage_units')
+        .select(TRIAGE_COLUMNS)
+        .order('created_at', { ascending: false })
+        .limit(pageSize);
+      if (!error && data) {
+        const list = data.map(mapSupabaseToTriageUnit);
+        updateWholeCollectionCache('triage_units', list);
+        return {
+          data: list,
+          lastDoc: null,
+          hasMore: data.length === pageSize
+        };
+      }
+    } catch (e) {
+      console.warn('Error fetching initial triage units from Supabase, using cache:', e);
     }
   }
 
@@ -861,18 +876,22 @@ export const getInitialTriageUnits = async (pageSize: number = 2500): Promise<Pa
 export const getPaginatedTriageUnits = async (page: number = 1, pageSize: number = 50): Promise<{ data: TriageUnit[]; total: number }> => {
   const supabase = getSupabaseClient();
   if (supabase) {
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const { data, count, error } = await supabase
-      .from('triage_units')
-      .select(TRIAGE_COLUMNS, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(from, to);
-    if (!error && data) {
-      return {
-        data: data.map(mapSupabaseToTriageUnit),
-        total: count || 0
-      };
+    try {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data, count, error } = await supabase
+        .from('triage_units')
+        .select(TRIAGE_COLUMNS, { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+      if (!error && data) {
+        return {
+          data: data.map(mapSupabaseToTriageUnit),
+          total: count || 0
+        };
+      }
+    } catch (e) {
+      console.warn('Error in getPaginatedTriageUnits, using cache:', e);
     }
   }
   const cached = getCachedTriageUnits();
@@ -893,13 +912,19 @@ export const getMoreTriageUnits = async (
 export const getInitialPendingItems = async (pageSize: number = 1000): Promise<PendingItem[]> => {
   const supabase = getSupabaseClient();
   if (supabase) {
-    const { data, error } = await supabase
-      .from('pending_items')
-      .select(PENDING_COLUMNS)
-      .order('created_at', { ascending: false })
-      .limit(pageSize);
-    if (!error && data) {
-      return data.map(mapSupabaseToPendingItem);
+    try {
+      const { data, error } = await supabase
+        .from('pending_items')
+        .select(PENDING_COLUMNS)
+        .order('created_at', { ascending: false })
+        .limit(pageSize);
+      if (!error && data) {
+        const list = data.map(mapSupabaseToPendingItem);
+        updateWholeCollectionCache('pending_items', list);
+        return list;
+      }
+    } catch (e) {
+      console.warn('Error fetching initial pending items from Supabase, using cache:', e);
     }
   }
   return getCachedPendingItems();
@@ -908,13 +933,19 @@ export const getInitialPendingItems = async (pageSize: number = 1000): Promise<P
 export const getInitialDailyInflows = async (limitCount: number = 1000): Promise<DailyInflowRecord[]> => {
   const supabase = getSupabaseClient();
   if (supabase) {
-    const { data, error } = await supabase
-      .from('daily_inflows')
-      .select(INFLOW_COLUMNS)
-      .order('date', { ascending: true })
-      .limit(limitCount);
-    if (!error && data) {
-      return data.map(mapSupabaseToDailyInflow);
+    try {
+      const { data, error } = await supabase
+        .from('daily_inflows')
+        .select(INFLOW_COLUMNS)
+        .order('date', { ascending: true })
+        .limit(limitCount);
+      if (!error && data) {
+        const list = data.map(mapSupabaseToDailyInflow);
+        updateWholeCollectionCache('daily_inflows', list);
+        return list;
+      }
+    } catch (e) {
+      console.warn('Error fetching initial daily inflows from Supabase, using cache:', e);
     }
   }
   return getCachedDailyInflows();
@@ -923,20 +954,24 @@ export const getInitialDailyInflows = async (limitCount: number = 1000): Promise
 export const getAuditLogs = async (limitCount: number = 50): Promise<any[]> => {
   const supabase = getSupabaseClient();
   if (supabase) {
-    const { data, error } = await supabase
-      .from('audit_logs')
-      .select(AUDIT_LOG_COLUMNS)
-      .order('timestamp', { ascending: false })
-      .limit(limitCount);
-    if (!error && data) {
-      return data.map(r => ({
-        id: r.id,
-        userId: r.user_id,
-        userEmail: r.user_email,
-        action: r.action,
-        details: r.details,
-        timestamp: r.timestamp
-      }));
+    try {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select(AUDIT_LOG_COLUMNS)
+        .order('timestamp', { ascending: false })
+        .limit(limitCount);
+      if (!error && data) {
+        return data.map(r => ({
+          id: r.id,
+          userId: r.user_id,
+          userEmail: r.user_email,
+          action: r.action,
+          details: r.details,
+          timestamp: r.timestamp
+        }));
+      }
+    } catch (e) {
+      console.warn('Error fetching audit logs:', e);
     }
   }
   return [];
