@@ -171,7 +171,7 @@ export const uploadFileToStorage = async (file: File, folder: string = 'media'):
 const PRODUCT_COLUMNS = 'id, name, sku, voltage, description, image_url, images, images_product, images_box, images_accessories, accessories, brand, category, created_at, updated_at';
 const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date';
 const INFLOW_COLUMNS = 'id, date, rma, estoque, openbox, es, total_dia, notes, source, created_at, updated_at';
-const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, created_by_uid, created_by_email, created_by_name, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
+const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
 const AUDIT_LOG_COLUMNS = 'id, user_id, user_email, action, details, timestamp';
 const CASE_COLUMNS = 'id, code, platform, created_at, reason, resolution, status, notes, value';
 const USER_COLUMNS = 'uid, email, name, role, created_at, last_login, updated_at';
