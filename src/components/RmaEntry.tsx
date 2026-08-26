@@ -28,12 +28,7 @@ import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusT
 import { uploadFileToStorage } from '../lib/dbService';
 import { RichTextEditor } from './RichTextEditor';
 import { getBaseProductImages } from '../utils/productImages';
-import { processSafeImageUpload, processSafeImageUrl } from '../lib/imageSecurityService';
-
-// Image compression and pixel sanitization utility
-const compressImageToBase64 = async (file: File): Promise<string> => {
-  return await processSafeImageUpload(file, 1200, 1000, 0.75);
-};
+import { processSafeImageUrl } from '../lib/imageSecurityService';
 
 interface RmaEntryProps {
   products: BaseProduct[];
@@ -227,8 +222,8 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       }
       setSuccessMessage('Fotos enviadas com sucesso!');
       setTimeout(() => setSuccessMessage(''), 2000);
-    } catch (err) {
-      setErrorMessage('Erro ao realizar upload das fotos.');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao realizar upload das fotos.');
       console.error(err);
     } finally {
       setIsSubmitting(false);
@@ -726,8 +721,8 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
 
                     {/* Autocomplete Dropdown */}
                     {isProductDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-950 border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin scrollbar-thumb-slate-850">
-                        <div className="p-2.5 bg-slate-900/90 text-[11px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10 backdrop-blur-sm">
+                      <div className="product-search-dropdown absolute left-0 right-0 top-full mt-1.5 bg-slate-950 border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin scrollbar-thumb-slate-850">
+                        <div className="product-search-header p-2.5 bg-slate-900/90 text-[11px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10 backdrop-blur-sm">
                           <span className="flex items-center gap-1.5 font-bold text-slate-300">
                             <span className="w-2 h-2 rounded-full bg-sky-400"></span>
                             {filteredProducts.length} {filteredProducts.length === 1 ? 'produto' : 'produtos'} {productSearchTerm ? 'encontrados' : 'ordenados por frequência de entrada'}
@@ -749,20 +744,20 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                                 key={p.id}
                                 type="button"
                                 onClick={() => handleSelectProduct(p)}
-                                className={`w-full text-left p-2.5 hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3 cursor-pointer ${
-                                  isSelected ? 'bg-sky-500/10' : ''
+                                className={`product-search-item w-full text-left p-2.5 hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3 cursor-pointer ${
+                                  isSelected ? 'bg-sky-500/10 product-search-item-selected' : ''
                                 }`}
                               >
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-mono text-xs font-bold text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                    <span className="product-search-sku font-mono text-xs font-bold text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                                       {p.sku}
                                     </span>
-                                    <span className="text-[11px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
+                                    <span className="product-search-voltage text-[11px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
                                       {p.voltage}
                                     </span>
                                     {entryCount > 0 && (
-                                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                                      <span className={`product-search-freq text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
                                         isTop10 && !productSearchTerm 
                                           ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' 
                                           : 'bg-slate-800 text-slate-400'
@@ -773,7 +768,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-xs font-medium text-slate-200 mt-1 truncate">
+                                  <p className="product-search-title text-xs font-medium text-slate-200 mt-1 truncate">
                                     {p.name}
                                   </p>
                                 </div>

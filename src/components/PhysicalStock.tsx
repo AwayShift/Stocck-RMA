@@ -11,10 +11,8 @@ import {
   Package, 
   Trash2, 
   FileText, 
-  ArrowRight, 
   X, 
   CheckCircle2, 
-  MoveRight, 
   Sparkles,
   Layers,
   AlertTriangle,
@@ -29,8 +27,6 @@ import {
   Upload,
   Pencil,
   Save,
-  Plus,
-  RotateCcw,
   Camera,
   Image as ImageIcon,
   Download,
@@ -39,7 +35,6 @@ import {
   ClipboardPaste,
   Sliders,
   Zap,
-  Tag,
   ShieldCheck,
   RefreshCw
 } from 'lucide-react';
@@ -47,12 +42,8 @@ import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceSta
 import ExcelImportModal from './ExcelImportModal';
 import { ImageZoomModal } from './ImageZoomModal';
 import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct } from '../utils/productImages';
-import { processSafeImageUpload, processSafeImageUrl } from '../lib/imageSecurityService';
-
-// Helper to compress and sanitize image to safe base64
-const compressImageToBase64 = async (file: File): Promise<string> => {
-  return await processSafeImageUpload(file, 1200, 1000, 0.75);
-};
+import { processSafeImageUrl } from '../lib/imageSecurityService';
+import { uploadFileToStorage } from '../lib/dbService';
 
 interface PhysicalStockProps {
   units: TriageUnit[];
@@ -251,19 +242,19 @@ export default function PhysicalStock({
   const handleProcessImageFiles = async (files: File[], targetCategory: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
     if (!editForm || files.length === 0) return;
     try {
-      const base64Promises = files.map(file => compressImageToBase64(file));
-      const base64List = await Promise.all(base64Promises);
+      const uploadPromises = files.map(file => uploadFileToStorage(file, `stock_${targetCategory}`));
+      const urlList = await Promise.all(uploadPromises);
       const existing = editForm[targetCategory] || [];
       setEditForm({
         ...editForm,
-        [targetCategory]: [...existing, ...base64List]
+        [targetCategory]: [...existing, ...urlList]
       });
       const catLabel = targetCategory === 'photosProduct' ? 'Aparelho' : targetCategory === 'photosBox' ? 'Embalagem' : 'Acessórios';
       setActionSuccess(`${files.length} foto(s) adicionada(s) para Fotos do ${catLabel}!`);
       setTimeout(() => setActionSuccess(null), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setActionError('Erro ao processar imagem.');
+      setActionError(err?.message || 'Erro ao processar imagem.');
       setTimeout(() => setActionError(null), 3000);
     }
   };
@@ -2609,7 +2600,7 @@ export default function PhysicalStock({
                     <button
                       type="button"
                       onClick={(e) => handleCopyCode(currentUnit.baseProductSku, 'sku', e)}
-                      className="w-full text-left font-mono text-xs sm:text-sm font-extrabold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 px-2.5 py-1.5 rounded-lg border border-sky-500/25 block truncate transition-colors cursor-pointer group flex items-center justify-between"
+                      className="sku-badge w-full text-left font-mono text-xs sm:text-sm font-extrabold px-2.5 py-1.5 rounded-lg block truncate transition-colors cursor-pointer group flex items-center justify-between"
                       title="Clique para copiar SKU"
                     >
                       <span className="truncate">{currentUnit.baseProductSku}</span>

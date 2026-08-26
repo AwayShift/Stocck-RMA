@@ -13,10 +13,8 @@ import {
   Download, 
   Database,
   Calendar,
-  Layers,
   HelpCircle,
   RefreshCw,
-  TrendingUp,
   FileCheck
 } from 'lucide-react';
 import { DailyInflowRecord } from '../types';

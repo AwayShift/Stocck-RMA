@@ -196,6 +196,9 @@ export interface SystemBackupMetadata {
     cases?: number;
     logs?: number;
   };
+  totalItems?: number;
+  fileSizeBytes?: number;
+  integrityHash?: string;
 }
 
 export type BackupTriggerType = 'manual' | 'hourly' | 'end_of_day' | 'weekly' | 'monthly';
@@ -268,6 +271,7 @@ export interface SystemBackupPayload {
     pendingItems?: PendingItem[];
     cases?: CaseTracking[];
     logs?: any[];
+    auditLogs?: any[];
   };
   settings?: {
     enableSpreadsheetImport?: boolean;
@@ -279,8 +283,24 @@ export interface SystemBackupPayload {
 export interface BackupValidationResult {
   isValid: boolean;
   error?: string;
+  warning?: string;
   metadata?: SystemBackupMetadata;
   payload?: SystemBackupPayload;
+  summary?: {
+    version: string;
+    exportedAtFormatted: string;
+    exportedByName: string;
+    counts: {
+      products: number;
+      triageUnits: number;
+      dailyInflows: number;
+      cases: number;
+      pendingItems?: number;
+      auditLogs?: number;
+    };
+    totalItems: number;
+    fileSizeFormatted: string;
+  };
   stats?: {
     productsCount: number;
     triageUnitsCount: number;

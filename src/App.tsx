@@ -46,10 +46,8 @@ import {
   deletePendingItem,
   updatePendingItemStatus,
   transferPendingItemToStock,
-  resetDatabaseToDefaults,
-  createAuditLog,
-  purgeExistingAuditLogs,
-  ensureUserProfileExists
+  // Removido imports obsoletos (createAuditLog, ensureUserProfileExists, resetDatabaseToDefaults)
+  purgeExistingAuditLogs
 } from './lib/dbService';
 
 import Dashboard from './components/Dashboard';
@@ -63,10 +61,10 @@ import SettingsModal from './components/SettingsModal';
 import BackupModal from './components/BackupModal';
 import DatabaseSwitcherModal from './components/DatabaseSwitcherModal';
 import { checkAndRunScheduledBackups } from './lib/backupService';
-import { getActiveDatabaseProfile, DatabaseProfile } from './lib/firebaseConfigManager';
-import { getActiveDbProvider, getSupabaseClient, DatabaseProvider } from './lib/supabase';
+import { getSupabaseClient } from './lib/supabase';
 import { subscribeToSupabaseAuth, signOutSupabase } from './lib/supabaseAuth';
 import { ThemeMode, getSavedTheme, applyTheme } from './lib/theme';
+import { initSystemIntegrationsSync } from './lib/integrationsConfigService';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement'>('dashboard');
@@ -102,24 +100,6 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDbSwitcherModalOpen, setIsDbSwitcherModalOpen] = useState<boolean>(false);
-
-  // Active Database Profile and Provider tracking
-  const [activeDbProfile, setActiveDbProfile] = useState<DatabaseProfile>(() => getActiveDatabaseProfile());
-  const [activeDbProvider, setActiveDbProviderState] = useState<DatabaseProvider>(() => getActiveDbProvider());
-
-  useEffect(() => {
-    const handleDbSync = () => {
-      setActiveDbProfile(getActiveDatabaseProfile());
-      setActiveDbProviderState(getActiveDbProvider());
-    };
-
-    window.addEventListener('db-profiles-updated', handleDbSync);
-    window.addEventListener('db-provider-changed', handleDbSync);
-    return () => {
-      window.removeEventListener('db-profiles-updated', handleDbSync);
-      window.removeEventListener('db-provider-changed', handleDbSync);
-    };
-  }, []);
 
   // System Settings: Spreadsheet Import Visibility Toggle
   const [enableSpreadsheetImport, setEnableSpreadsheetImport] = useState<boolean>(() => {
@@ -230,6 +210,13 @@ export default function App() {
       setIsLoadingMoreProducts(false);
     }
   };
+
+  // Initialize Cross-Device System Integrations & Metrics Sync (Supabase PAT, Cloudinary, Saved Metrics)
+  useEffect(() => {
+    initSystemIntegrationsSync(user?.email).catch((err) => {
+      console.warn('System integrations background sync note:', err);
+    });
+  }, [user?.email]);
 
   // Auto-backup scheduler background runner
   useEffect(() => {

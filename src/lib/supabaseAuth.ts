@@ -119,7 +119,7 @@ export const signInWithSupabase = async (
       // Check if user exists in the custom users table for fallback validation
       const { data: dbUser } = await supabase
         .from('users')
-        .select('*')
+        .select('uid, email, name, role')
         .eq('email', cleanEmail)
         .maybeSingle();
 
@@ -284,7 +284,7 @@ export const syncUserProfileInDb = async (
   try {
     const { data: existing, error } = await supabase
       .from('users')
-      .select('*')
+      .select('uid, email, name, role, created_at, last_login')
       .eq('uid', user.id)
       .maybeSingle();
 

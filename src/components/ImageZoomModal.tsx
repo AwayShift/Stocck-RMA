@@ -4,8 +4,6 @@ import {
   ZoomIn, 
   ZoomOut, 
   RotateCw, 
-  Maximize2, 
-  Minimize2, 
   Move,
   ChevronLeft,
   ChevronRight,
@@ -145,20 +143,20 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 z-[120] bg-black/92 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-200"
+      className="image-zoom-overlay fixed inset-0 z-[120] bg-black/92 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-200"
       id="modal-image-zoom-viewer"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={() => setIsDragging(false)}
     >
       {/* Top Header Bar */}
-      <div className="w-full flex items-center justify-between px-6 py-3 bg-slate-950/80 border-b border-slate-800/80 backdrop-blur-md z-30">
+      <div className="image-zoom-header w-full flex items-center justify-between px-6 py-3 bg-slate-950/80 border-b border-slate-800/80 backdrop-blur-md z-30">
         <div className="flex items-center gap-3 min-w-0">
           <div className="min-w-0">
-            <h3 className="text-sm font-bold text-white truncate">
+            <h3 className="image-zoom-title text-sm font-bold text-white truncate">
               {imageTitle || 'Visualizador de Imagem'}
             </h3>
-            <p className="text-[11px] text-slate-400 flex items-center gap-2">
+            <p className="image-zoom-subtitle text-[11px] text-slate-400 flex items-center gap-2">
               <span>Role o mouse ou clique duplo para dar zoom</span>
               {scale > 1 && (
                 <>
@@ -169,7 +167,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
               {imagesList.length > 1 && (
                 <>
                   <span>&bull;</span>
-                  <span className="text-sky-400 font-mono font-semibold">
+                  <span className="image-zoom-counter text-sky-400 font-mono font-semibold">
                     {currentIndex + 1} de {imagesList.length}
                   </span>
                 </>
@@ -184,7 +182,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
             href={imageUrl} 
             target="_blank" 
             rel="noreferrer" 
-            className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-800 transition-colors cursor-pointer"
+            className="image-zoom-action-btn p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-800 transition-colors cursor-pointer"
             title="Abrir imagem original em nova aba"
           >
             <ExternalLink className="w-4 h-4" />
@@ -192,7 +190,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
           <button 
             type="button"
             onClick={onClose}
-            className="p-2 bg-slate-900 hover:bg-rose-950/80 hover:text-rose-300 text-slate-300 rounded-xl border border-slate-800 hover:border-rose-500/40 transition-colors cursor-pointer"
+            className="image-zoom-close-btn p-2 bg-slate-900 hover:bg-rose-950/80 hover:text-rose-300 text-slate-300 rounded-xl border border-slate-800 hover:border-rose-500/40 transition-colors cursor-pointer"
             title="Fechar (Esc)"
             id="btn-close-image-zoom"
           >
@@ -217,7 +215,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
                 e.stopPropagation();
                 onNavigate((currentIndex - 1 + imagesList.length) % imagesList.length);
               }}
-              className="absolute left-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-850 text-white border border-slate-700/60 shadow-2xl backdrop-blur-sm transition-all hover:scale-105 cursor-pointer"
+              className="image-zoom-nav-btn absolute left-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-850 text-white border border-slate-700/60 shadow-2xl backdrop-blur-sm transition-all hover:scale-105 cursor-pointer"
               title="Foto Anterior (Seta Esquerda)"
             >
               <ChevronLeft className="w-6 h-6" />
@@ -228,7 +226,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
                 e.stopPropagation();
                 onNavigate((currentIndex + 1) % imagesList.length);
               }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-850 text-white border border-slate-700/60 shadow-2xl backdrop-blur-sm transition-all hover:scale-105 cursor-pointer"
+              className="image-zoom-nav-btn absolute right-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-850 text-white border border-slate-700/60 shadow-2xl backdrop-blur-sm transition-all hover:scale-105 cursor-pointer"
               title="Próxima Foto (Seta Direita)"
             >
               <ChevronRight className="w-6 h-6" />
@@ -248,7 +246,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
           <img 
             src={imageUrl} 
             alt={imageTitle || 'Visualização ampliada'} 
-            className="max-w-[92vw] max-h-[80vh] w-auto h-auto object-contain rounded-xl shadow-2xl border border-slate-800 pointer-events-auto select-none"
+            className="image-zoom-img max-w-[92vw] max-h-[80vh] w-auto h-auto object-contain rounded-xl shadow-2xl border border-slate-800 pointer-events-auto select-none"
             draggable={false}
           />
         </div>
@@ -256,14 +254,14 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
 
       {/* Bottom Floating Controls Bar */}
       <div className="w-full pb-4 px-4 flex justify-center items-center z-30">
-        <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-2 px-3 shadow-2xl backdrop-blur-lg flex items-center gap-2 flex-wrap">
+        <div className="image-zoom-bottom-bar bg-slate-950/90 border border-slate-800 rounded-2xl p-2 px-3 shadow-2xl backdrop-blur-lg flex items-center gap-2 flex-wrap">
           
           {/* Zoom Out */}
           <button 
             type="button"
             onClick={handleZoomOut}
             disabled={scale <= 1}
-            className="p-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
+            className="image-zoom-ctrl-btn p-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
             title="Reduzir Zoom (-)"
           >
             <ZoomOut className="w-4 h-4" />
@@ -273,7 +271,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
           <button 
             type="button"
             onClick={handleReset}
-            className="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 text-slate-200 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer min-w-[58px] text-center"
+            className="image-zoom-scale-btn px-2.5 py-1 bg-slate-900 hover:bg-slate-850 text-slate-200 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer min-w-[58px] text-center"
             title="Ajustar à Tela (0)"
           >
             {Math.round(scale * 100)}%
@@ -284,19 +282,19 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
             type="button"
             onClick={handleZoomIn}
             disabled={scale >= 5}
-            className="p-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
+            className="image-zoom-ctrl-btn p-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
             title="Ampliar Zoom (+)"
           >
             <ZoomIn className="w-4 h-4" />
           </button>
 
-          <div className="w-px h-5 bg-slate-800" />
+          <div className="image-zoom-divider w-px h-5 bg-slate-800" />
 
           {/* Rotate 90 deg */}
           <button 
             type="button"
             onClick={handleRotate}
-            className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
+            className="image-zoom-ctrl-btn p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
             title="Girar Imagem 90° (R)"
           >
             <RotateCw className="w-4 h-4" />
@@ -307,7 +305,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
             <button 
               type="button"
               onClick={handleReset}
-              className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              className="image-zoom-reset-btn px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
             >
               Resetar
             </button>

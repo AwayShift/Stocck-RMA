@@ -17,7 +17,6 @@ import {
   ShieldAlert,
   Search,
   CheckCheck,
-  XCircle,
   Copy,
   Info
 } from 'lucide-react';

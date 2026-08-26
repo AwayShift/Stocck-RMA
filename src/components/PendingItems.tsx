@@ -15,31 +15,18 @@ import {
   Pencil,
   CheckCircle2,
   Image as ImageIcon,
-  Camera,
   Upload,
   X,
-  ArrowRight,
   Package,
-  Layers,
   ShieldCheck,
   Eye,
-  RefreshCw,
   FileSpreadsheet,
-  Tag,
-  Zap,
   Check,
-  RotateCcw,
   Info,
-  Sliders,
-  HelpCircle,
   MoveRight,
   LayoutGrid,
   List,
-  Sparkles,
-  ExternalLink,
-  ChevronDown,
-  Box,
-  FileText
+  Box
 } from 'lucide-react';
 import { 
   PendingItem, 
@@ -50,7 +37,7 @@ import {
   TriageUnit
 } from '../types';
 import { ImageZoomModal } from './ImageZoomModal';
-import { processSafeImageUpload } from '../lib/imageSecurityService';
+import { uploadFileToStorage } from '../lib/dbService';
 
 interface PendingItemsProps {
   items: PendingItem[];
@@ -262,13 +249,13 @@ export default function PendingItems({
       const newPhotos: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const compressedBase64 = await processSafeImageUpload(file, 1200, 1000, 0.75);
-        newPhotos.push(compressedBase64);
+        const uploadedUrl = await uploadFileToStorage(file, 'pending_items');
+        newPhotos.push(uploadedUrl);
       }
       setFormPhotos(prev => [...prev, ...newPhotos]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao processar upload de imagem:', err);
-      alert('Falha ao processar a imagem. Certifique-se de que é um formato válido (JPG, PNG, WEBP).');
+      alert(err?.message || 'Falha ao processar a imagem. Certifique-se de que é um formato válido (JPG, PNG, WEBP) e menor que 3MB.');
     } finally {
       setIsUploadingPhoto(false);
       e.target.value = '';
@@ -642,7 +629,7 @@ export default function PendingItems({
             return (
               <div
                 key={item.id}
-                className={`rounded-2xl p-4 flex flex-col justify-between transition-all group ${
+                className={`pending-card rounded-2xl p-4 flex flex-col justify-between transition-all group ${
                   isResolved
                     ? 'bg-slate-950/60 border border-slate-800/60 opacity-60 hover:opacity-100 shadow-sm'
                     : 'bg-slate-900 border border-slate-800 hover:border-slate-700 shadow-lg'
@@ -653,14 +640,14 @@ export default function PendingItems({
                   {/* Card Header: Badges & Actions */}
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadge(item.status)}`}>
+                      <span className={`pending-status-badge text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadge(item.status)}`}>
                         {item.status}
                       </span>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 border border-slate-800">
+                      <span className="pending-platform-badge text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 border border-slate-800">
                         {item.platform || 'Mercado Livre'}
                       </span>
                       {item.voltage && item.voltage !== 'N/A' && (
-                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                        <span className="pending-voltage-badge text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
                           {item.voltage}
                         </span>
                       )}
@@ -690,7 +677,7 @@ export default function PendingItems({
                   {/* SKU & Title */}
                   <div className="mb-2.5">
                     <div className="flex items-center gap-2">
-                      <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded border ${
+                      <span className={`pending-sku-badge font-mono text-xs font-bold px-2 py-0.5 rounded border ${
                         isResolved 
                           ? 'text-slate-400 bg-slate-800/60 border-slate-700/50' 
                           : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
@@ -698,7 +685,7 @@ export default function PendingItems({
                         {item.sku || 'SEM SKU'}
                       </span>
                     </div>
-                    <h4 className={`text-sm mt-1.5 line-clamp-2 leading-snug ${
+                    <h4 className={`pending-card-title text-sm mt-1.5 line-clamp-2 leading-snug ${
                       isResolved ? 'text-slate-300 font-semibold' : 'text-white font-bold'
                     }`}>
                       {item.productName || 'Produto sem título informado'}
@@ -706,7 +693,7 @@ export default function PendingItems({
                   </div>
 
                   {/* Tracking & Serial Info */}
-                  <div className="space-y-1 bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80 mb-3 text-[11px]">
+                  <div className="pending-info-box space-y-1 bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80 mb-3 text-[11px]">
                     {item.trackingCode && (
                       <div className="flex items-center justify-between text-slate-400">
                         <span className="text-slate-500">STI / Rastreio:</span>
@@ -729,7 +716,7 @@ export default function PendingItems({
 
                   {/* Pending Reason Banner */}
                   {isResolved ? (
-                    <div className="bg-slate-950/60 border border-slate-800/70 p-2.5 rounded-xl mb-3">
+                    <div className="pending-reason-banner-resolved bg-slate-950/60 border border-slate-800/70 p-2.5 rounded-xl mb-3">
                       <div className="text-[10px] font-semibold uppercase text-slate-400 flex items-center gap-1 mb-0.5">
                         <CheckCircle2 className="w-3 h-3 text-emerald-400/80" />
                         <span>Motivo (Resolvido)</span>
@@ -739,12 +726,12 @@ export default function PendingItems({
                       </p>
                     </div>
                   ) : (
-                    <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl mb-3">
-                      <div className="text-[10px] font-bold uppercase text-amber-400 flex items-center gap-1 mb-0.5">
+                    <div className="pending-reason-banner bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl mb-3">
+                      <div className="pending-reason-header text-[10px] font-bold uppercase text-amber-400 flex items-center gap-1 mb-0.5">
                         <AlertTriangle className="w-3 h-3 text-amber-400" />
                         <span>Motivo da Pendência</span>
                       </div>
-                      <p className="text-xs text-amber-200/90 font-medium leading-relaxed">
+                      <p className="pending-reason-text text-xs text-amber-200/90 font-medium leading-relaxed">
                         {item.pendingReason}
                       </p>
                     </div>
@@ -752,7 +739,7 @@ export default function PendingItems({
 
                   {/* Detailed Notes if any */}
                   {item.detailedNotes && (
-                    <div className="bg-slate-950/50 p-2 rounded-xl border border-slate-800/60 mb-3 text-[11px] text-slate-400 line-clamp-3">
+                    <div className="pending-notes-box bg-slate-950/50 p-2 rounded-xl border border-slate-800/60 mb-3 text-[11px] text-slate-400 line-clamp-3">
                       <span className="font-semibold text-slate-300">Obs: </span>
                       {item.detailedNotes}
                     </div>
@@ -791,7 +778,7 @@ export default function PendingItems({
                 </div>
 
                 {/* Card Footer: Transfer / Resolve Actions */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-2">
+                <div className="pending-card-footer pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-2">
                   {item.transferredToStock ? (
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 bg-slate-950/60 px-3 py-1.5 rounded-xl border border-slate-800/80 w-full justify-center">
                       <CheckCircle2 className="w-4 h-4 text-emerald-500/80" />
@@ -802,7 +789,7 @@ export default function PendingItems({
                       <select
                         value={item.status}
                         onChange={(e) => onUpdateStatus(item.id, e.target.value as any)}
-                        className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer"
+                        className="pending-status-select bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer"
                         title="Alterar status da pendência"
                       >
                         <option value="Pendente">Pendente</option>
@@ -815,7 +802,7 @@ export default function PendingItems({
 
                       <button
                         onClick={() => handleOpenTransferModal(item)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-900/20 hover:scale-[1.02]"
+                        className="pending-transfer-btn flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-900/20 hover:scale-[1.02]"
                         title="Liberar item e enviar para o estoque físico"
                         id={`btn-transfer-${item.id}`}
                       >

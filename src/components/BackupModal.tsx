@@ -6,35 +6,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   HardDriveDownload, 
-  HardDriveUpload, 
   X, 
   CheckCircle2, 
   AlertTriangle, 
   Database, 
-  Package, 
-  Boxes, 
-  Activity, 
   Download, 
   UploadCloud, 
   FileCheck, 
   RefreshCw, 
   ShieldCheck, 
-  HelpCircle,
   Clock,
-  Sparkles,
   Layers,
-  ArrowRight,
   RotateCcw,
   Check,
-  AlertCircle,
   Cloud,
   Calendar,
   Lock,
   FileCode,
-  Sliders,
   CheckCheck,
   Search,
-  ExternalLink,
   Trash2
 } from 'lucide-react';
 import { 
@@ -48,7 +38,6 @@ import {
   restoreFromCloudSnapshot,
   downloadCloudSnapshotAsJson,
   deleteCloudSnapshot,
-  formatBrDate,
   DEFAULT_AUTO_BACKUP_CONFIG
 } from '../lib/backupService';
 import { 

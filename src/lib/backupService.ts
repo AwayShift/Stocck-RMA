@@ -1,22 +1,16 @@
 /**
  * @license
- * SPDX-License-Identifier: Apache-2.5
+ * SPDX-License-Identifier: Apache-2.0
+ * 
+ * Backup & Disaster Recovery Service: Stocck-RMA (Supabase + PostgreSQL + Local Storage)
+ * 
+ * Supports:
+ * 1. Online Cloud Snapshots stored in Supabase `backup_snapshots` table (auto-chunked for high reliability).
+ * 2. Instant Local JSON Export / Import with SHA-256 integrity checks.
+ * 3. Intelligent Background Schedule Engine (Hourly, End of Day, Weekly, Monthly).
+ * 4. Safe Database Restoration (Merge or Clean Replace).
  */
 
-import { 
-  collection, 
-  getDocs, 
-  getDoc,
-  setDoc,
-  deleteDoc,
-  doc, 
-  writeBatch,
-  query,
-  orderBy,
-  limit,
-  onSnapshot
-} from 'firebase/firestore';
-import { db, auth } from './firebase';
 import { 
   BaseProduct, 
   TriageUnit, 
@@ -49,10 +43,9 @@ const BACKUP_SCHEMA_VERSION = '1.2.0';
 const APP_IDENTIFIER = 'stocckrma-pro-flow';
 
 /**
- * Max safe size per chunk in characters/bytes (~350 KB).
- * Well below Firestore 1 MB per document hard limit.
+ * Max safe size per chunk in bytes (~300 KB).
  */
-export const SNAPSHOT_CHUNK_SIZE = 350 * 1024;
+export const SNAPSHOT_CHUNK_SIZE = 300 * 1024;
 
 export const DEFAULT_AUTO_BACKUP_CONFIG: AutoBackupScheduleConfig = {
   enabled: true,
@@ -106,49 +99,57 @@ const formatFilenameTimestamp = (date: Date): string => {
 };
 
 /**
- * Helper to split large arrays into batches of safe size (< 400 docs per batch)
+ * Calculate SHA-256 integrity hash of a UTF-8 string
  */
-function chunkArray<T>(array: T[], size: number): T[][] {
+export const calculateSha256 = async (str: string): Promise<string> => {
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (err) {
+    console.warn('Fallback hash algorithm:', err);
+    // Simple fast fallback checksum
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return `chk_${Math.abs(hash).toString(16)}`;
+  }
+};
+
+/**
+ * Format bytes to readable string (e.g. 1.25 MB)
+ */
+export const formatBytes = (bytes: number): string => {
+  if (bytes <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
+
+/**
+ * Splits an array into chunks of a given maximum size
+ */
+export const chunkArray = <T>(arr: T[], size: number): T[][] => {
   const results: T[][] = [];
-  for (let i = 0; i < array.length; i += size) {
-    results.push(array.slice(i, i + size));
+  for (let i = 0; i < arr.length; i += size) {
+    results.push(arr.slice(i, i + size));
   }
   return results;
-}
+};
 
 /**
- * Calculate SHA-256 cryptographic checksum for payload validation
+ * Query current database records to assemble the complete backup payload
  */
-async function calculateSha256(text: string): Promise<string> {
-  try {
-    if (typeof crypto !== 'undefined' && crypto.subtle) {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(text);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-  } catch (e) {
-    console.warn('Crypto subtle fallback:', e);
-  }
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    const char = text.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  return 'chk_' + Math.abs(hash).toString(16);
-}
-
-/**
- * Extract live database payload
- */
-async function fetchCurrentDatabasePayload(userInfo?: {
+export const fetchCurrentDatabasePayload = async (userInfo?: {
   email?: string;
   name?: string;
   role?: string;
 }): Promise<{
-  payload: SystemBackupPayload;
   counts: {
     products: number;
     triageUnits: number;
@@ -159,9 +160,8 @@ async function fetchCurrentDatabasePayload(userInfo?: {
   jsonContent: string;
   fileSizeFormatted: string;
   sizeBytes: number;
-}> {
-  const now = new Date();
-
+  payload: SystemBackupPayload;
+}> => {
   let products: BaseProduct[] = [];
   let triageUnits: TriageUnit[] = [];
   let dailyInflows: DailyInflowRecord[] = [];
@@ -169,64 +169,46 @@ async function fetchCurrentDatabasePayload(userInfo?: {
   let logs: any[] = [];
   let pendingItems: PendingItem[] = [];
 
-  if (getActiveDbProvider() === 'supabase') {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      const [pRes, uRes, iRes, cRes, lRes, pendRes] = await Promise.all([
-        supabase.from('products').select('*').order('created_at', { ascending: false }),
-        supabase.from('triage_units').select('*').order('created_at', { ascending: false }),
-        supabase.from('daily_inflows').select('*').order('date', { ascending: true }),
-        supabase.from('cases').select('*').order('created_at', { ascending: false }),
-        supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(150),
-        supabase.from('pending_items').select('*').order('created_at', { ascending: false })
-      ]);
-
-      if (pRes.data) products = pRes.data.map(mapSupabaseToProduct);
-      if (uRes.data) triageUnits = uRes.data.map(mapSupabaseToTriageUnit);
-      if (iRes.data) dailyInflows = iRes.data.map(mapSupabaseToDailyInflow);
-      if (cRes.data) {
-        cases = cRes.data.map(r => ({
-          id: r.id,
-          code: r.code,
-          platform: r.platform,
-          createdAt: r.created_at,
-          reason: r.reason,
-          resolution: r.resolution,
-          status: r.status,
-          notes: r.notes,
-          value: r.value
-        }));
-      }
-      if (lRes.data) {
-        logs = lRes.data.map(r => ({
-          id: r.id,
-          userId: r.user_id,
-          userEmail: r.user_email,
-          action: r.action,
-          details: r.details,
-          timestamp: r.timestamp
-        }));
-      }
-      if (pendRes.data) {
-        pendingItems = pendRes.data.map(mapSupabaseToPendingItem);
-      }
-    }
-  } else {
-    const [productsSnap, unitsSnap, inflowsSnap, casesSnap, logsSnap, pendSnap] = await Promise.all([
-      getDocs(collection(db, 'products')),
-      getDocs(collection(db, 'triage_units')),
-      getDocs(collection(db, 'daily_inflows')),
-      getDocs(collection(db, 'cases')),
-      getDocs(query(collection(db, 'logs'), orderBy('timestamp', 'desc'), limit(150))),
-      getDocs(collection(db, 'pending_items'))
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const [pRes, uRes, iRes, cRes, lRes, pendRes] = await Promise.all([
+      supabase.from('products').select('*').limit(20000),
+      supabase.from('triage_units').select('*').limit(20000),
+      supabase.from('daily_inflows').select('*').limit(5000),
+      supabase.from('cases').select('*').limit(5000),
+      supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(200),
+      supabase.from('pending_items').select('*').limit(5000)
     ]);
 
-    products = productsSnap.docs.map(d => ({ ...(d.data() as BaseProduct), id: d.id }));
-    triageUnits = unitsSnap.docs.map(d => ({ ...(d.data() as TriageUnit), id: d.id }));
-    dailyInflows = inflowsSnap.docs.map(d => ({ ...(d.data() as DailyInflowRecord), id: d.id }));
-    cases = casesSnap.docs.map(d => ({ ...(d.data() as CaseTracking), id: d.id }));
-    logs = logsSnap.docs.map(d => ({ ...d.data(), id: d.id }));
-    pendingItems = pendSnap.docs.map(d => ({ ...(d.data() as PendingItem), id: d.id }));
+    if (pRes.data) products = pRes.data.map(mapSupabaseToProduct);
+    if (uRes.data) triageUnits = uRes.data.map(mapSupabaseToTriageUnit);
+    if (iRes.data) dailyInflows = iRes.data.map(mapSupabaseToDailyInflow);
+    if (cRes.data) {
+      cases = cRes.data.map(r => ({
+        id: r.id,
+        code: r.code,
+        platform: r.platform,
+        createdAt: r.created_at,
+        reason: r.reason,
+        resolution: r.resolution,
+        status: r.status,
+        notes: r.notes,
+        value: r.value
+      }));
+    }
+    if (lRes.data) {
+      logs = lRes.data.map(r => ({
+        id: r.id,
+        userId: r.user_id,
+        userEmail: r.user_email,
+        action: r.action,
+        details: r.details,
+        timestamp: r.timestamp
+      }));
+    }
+    if (pendRes.data) {
+      pendingItems = pendRes.data.map(mapSupabaseToPendingItem);
+    }
   }
 
   const counts = {
@@ -239,23 +221,26 @@ async function fetchCurrentDatabasePayload(userInfo?: {
 
   const enableSpreadsheetImport = localStorage.getItem('rmaflow_enable_spreadsheet_import') !== 'false';
 
-  const activeAuthUser = getActiveDbProvider() === 'supabase' ? await getCurrentActiveAuthUser() : null;
-  const userEmailResolved = userInfo?.email || activeAuthUser?.email || auth.currentUser?.email || 'operador@stocckrma.local';
-  const userNameResolved = userInfo?.name || activeAuthUser?.name || auth.currentUser?.displayName || 'Operador Corporativo';
-  const userUidResolved = activeAuthUser?.uid || auth.currentUser?.uid || '';
+  const activeAuthUser = await getCurrentActiveAuthUser();
+  const userEmailResolved = userInfo?.email || activeAuthUser?.email || 'operador@stocckrma.local';
+  const userNameResolved = userInfo?.name || activeAuthUser?.name || 'Operador Corporativo';
+  const userUidResolved = activeAuthUser?.uid || '';
 
   const metadata: SystemBackupMetadata = {
     version: BACKUP_SCHEMA_VERSION,
     appName: 'StocckRMA Triagem & Estoque Pro',
     systemIdentifier: APP_IDENTIFIER,
-    exportedAt: now.toISOString(),
-    exportedAtFormatted: formatBrDate(now),
+    exportedAt: new Date().toISOString(),
+    exportedAtFormatted: formatBrDate(new Date()),
     exportedBy: {
       uid: userUidResolved,
       email: userEmailResolved,
       name: userNameResolved
     },
-    collectionsCount: counts
+    collectionsCount: counts,
+    totalItems: counts.products + counts.triageUnits + counts.dailyInflows + counts.cases,
+    fileSizeBytes: 0,
+    integrityHash: ''
   };
 
   const payload: SystemBackupPayload = {
@@ -265,53 +250,55 @@ async function fetchCurrentDatabasePayload(userInfo?: {
       triageUnits,
       dailyInflows,
       cases,
-      logs,
-      pendingItems
-    } as any,
+      pendingItems,
+      auditLogs: logs
+    },
     settings: {
       enableSpreadsheetImport
     }
   };
 
-  const jsonContent = JSON.stringify(payload, null, 2);
-  const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
-  const sizeBytes = blob.size;
-  const fileSizeFormatted = sizeBytes > 1024 * 1024 
-    ? `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`
-    : `${(sizeBytes / 1024).toFixed(1)} KB`;
+  const tempJson = JSON.stringify(payload, null, 2);
+  const sizeBytes = new Blob([tempJson]).size;
+  const hash = await calculateSha256(tempJson);
+
+  payload.metadata.fileSizeBytes = sizeBytes;
+  payload.metadata.integrityHash = hash;
+
+  const finalJson = JSON.stringify(payload, null, 2);
 
   return {
-    payload,
     counts,
-    jsonContent,
-    fileSizeFormatted,
-    sizeBytes
+    jsonContent: finalJson,
+    fileSizeFormatted: formatBytes(sizeBytes),
+    sizeBytes,
+    payload
   };
-}
+};
 
 /**
- * Trigger browser download for a local backup JSON file
+ * Downloads a complete full database backup file (.json) to the user's computer
  */
-export const generateAndDownloadBackup = async (userInfo?: {
-  email?: string;
-  name?: string;
-  role?: string;
-}): Promise<{
-  success: boolean;
+export const exportDatabaseToJsonFile = async (
+  userInfo?: {
+    email?: string;
+    name?: string;
+    role?: string;
+  }
+): Promise<{
   filename: string;
+  sizeFormatted: string;
   counts: {
     products: number;
     triageUnits: number;
     dailyInflows: number;
     cases: number;
-    logs: number;
   };
-  fileSizeFormatted: string;
 }> => {
-  const now = new Date();
   const { counts, jsonContent, fileSizeFormatted } = await fetchCurrentDatabasePayload(userInfo);
+  const timestampStr = formatFilenameTimestamp(new Date());
+  const filename = `StocckRMA_Backup_${timestampStr}.json`;
 
-  const filename = `Backup_StocckRMA_${formatFilenameTimestamp(now)}.json`;
   const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -322,101 +309,62 @@ export const generateAndDownloadBackup = async (userInfo?: {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 
-  localStorage.setItem('stocckrma_last_backup_date', now.toISOString());
-  localStorage.setItem('stocckrma_last_backup_filename', filename);
-  localStorage.setItem('stocckrma_last_backup_stats', JSON.stringify(counts));
-
   try {
     await createAuditLog(
-      'BACKUP_EXPORTED',
-      `Exportou cópia de segurança local (${filename}) com ${counts.products} produtos, ${counts.triageUnits} unidades em estoque e ${counts.dailyInflows} registros de fluxo diário. Tamanho: ${fileSizeFormatted}.`
+      'BACKUP_EXPORT_FILE',
+      `Exportou arquivo JSON de backup do sistema (${fileSizeFormatted}). ${counts.products} produtos, ${counts.triageUnits} triagens/estoque, ${counts.dailyInflows} registros diários.`
     );
-  } catch (logErr) {
-    console.warn('Audit log recording error on backup export:', logErr);
+  } catch (err) {
+    console.warn('Audit log creation warning:', err);
   }
 
   return {
-    success: true,
     filename,
-    counts,
-    fileSizeFormatted
+    sizeFormatted: fileSizeFormatted,
+    counts
   };
 };
 
+export const generateAndDownloadBackup = exportDatabaseToJsonFile;
+
 /**
- * Fetch and reconstitute the full JSON payload for a CloudBackupRecord.
- * Seamlessly supports single-document legacy backups, Supabase multi-chunk records, and Firestore chunked subcollection payloads.
+ * Fetch full reconstructed JSON payload for a cloud snapshot (aggregating chunks if chunked)
  */
 export const fetchCloudSnapshotPayloadJson = async (snapshot: CloudBackupRecord): Promise<string> => {
-  // If payloadJson exists, is non-empty, and not marked as chunked
-  if (snapshot.payloadJson && snapshot.payloadJson.length > 20 && !snapshot.chunked) {
-    return snapshot.payloadJson;
-  }
-
-  // Supabase snapshot check
-  if (getActiveDbProvider() === 'supabase') {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      // 1. Check if snapshot is chunked in Supabase
-      if (snapshot.chunked || (snapshot.totalChunks && snapshot.totalChunks > 1)) {
-        const { data: parts, error: partsErr } = await supabase
-          .from('backup_snapshots')
-          .select('chunk_index, data')
-          .eq('backup_id', snapshot.id)
-          .order('chunk_index', { ascending: true });
-
-        if (!partsErr && parts && parts.length > 0) {
-          const fullJson = parts
-            .map(p => {
-              if (p.data && typeof p.data === 'object' && p.data.chunk_text) {
-                return p.data.chunk_text;
-              }
-              if (typeof p.data === 'string') return p.data;
-              return '';
-            })
-            .join('');
-
-          if (fullJson.length > 0) {
-            return fullJson;
-          }
-        }
-      }
-
-      // 2. Single row lookup
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    if (snapshot.chunked || snapshot.totalChunks > 1) {
+      // 1. Load chunk rows ordered by chunk_index
       const { data, error } = await supabase
         .from('backup_snapshots')
-        .select('data')
-        .eq('id', snapshot.id)
-        .maybeSingle();
+        .select('chunk_index, data')
+        .eq('backup_id', snapshot.id)
+        .order('chunk_index', { ascending: true });
 
-      if (data && data.data) {
-        return typeof data.data === 'string' ? data.data : JSON.stringify(data.data, null, 2);
-      }
-    }
-  }
-
-  // Otherwise, load ordered chunks from Firestore subcollection
-  try {
-    const chunksColRef = collection(db, '_system_backups', snapshot.id, 'chunks');
-    const q = query(chunksColRef, orderBy('index', 'asc'));
-    const snap = await getDocs(q);
-
-    if (!snap.empty) {
-      const parts: string[] = [];
-      snap.docs.forEach(d => {
-        const cData = d.data();
-        if (typeof cData.data === 'string') {
-          parts.push(cData.data);
+      if (!error && data && data.length > 0) {
+        const parts: string[] = [];
+        data.forEach(row => {
+          if (row.chunk_index > 0 && row.data && row.data.chunk_text) {
+            parts.push(row.data.chunk_text);
+          }
+        });
+        const fullJson = parts.join('');
+        if (fullJson.length > 0) {
+          return fullJson;
         }
-      });
-      const fullJson = parts.join('');
-      if (fullJson.length > 0) {
-        return fullJson;
       }
     }
-  } catch (err) {
-    console.error(`Error loading chunks for cloud snapshot ${snapshot.id}:`, err);
-    throw new Error(`Falha ao carregar os fragmentos do snapshot na nuvem: ${(err as any).message || err}`);
+
+    // 2. Single row lookup
+    const { data } = await supabase
+      .from('backup_snapshots')
+      .select('data')
+      .eq('id', snapshot.id)
+      .maybeSingle();
+
+    if (data && data.data) {
+      return typeof data.data === 'string' ? data.data : JSON.stringify(data.data, null, 2);
+    }
   }
 
   // Fallback to payloadJson if present
@@ -428,8 +376,7 @@ export const fetchCloudSnapshotPayloadJson = async (snapshot: CloudBackupRecord)
 };
 
 /**
- * Create a secure online cloud snapshot ("Plano B") stored in Firestore `_system_backups` collection or Supabase `backup_snapshots`
- * Automatically chunks large payloads across subdocuments or chunk rows to strictly respect size & timeout limits.
+ * Create a secure online cloud snapshot stored in Supabase `backup_snapshots`
  */
 export const createCloudSnapshot = async (
   triggerType: BackupTriggerType = 'manual',
@@ -444,7 +391,7 @@ export const createCloudSnapshot = async (
   snapshot: CloudBackupRecord;
 }> => {
   const now = new Date();
-  const { counts, jsonContent, fileSizeFormatted, sizeBytes, payload } = await fetchCurrentDatabasePayload(userInfo);
+  const { counts, jsonContent, fileSizeFormatted, sizeBytes } = await fetchCurrentDatabasePayload(userInfo);
   const hash = await calculateSha256(jsonContent);
 
   const triggerLabels: Record<BackupTriggerType, string> = {
@@ -463,399 +410,251 @@ export const createCloudSnapshot = async (
 
   const snapshotId = `bk_${now.getTime()}_${Math.random().toString(36).substring(2, 7)}`;
 
-  const activeAuthUser = getActiveDbProvider() === 'supabase' ? await getCurrentActiveAuthUser() : null;
-  const userEmailResolved = userInfo?.email || activeAuthUser?.email || auth.currentUser?.email || 'sistema@stocckrma.local';
-  const userNameResolved = userInfo?.name || activeAuthUser?.name || auth.currentUser?.displayName || (triggerType === 'manual' ? 'Operador' : 'Robô Automático');
-  const userUidResolved = activeAuthUser?.uid || auth.currentUser?.uid || '';
+  const activeAuthUser = await getCurrentActiveAuthUser();
+  const userEmailResolved = userInfo?.email || activeAuthUser?.email || 'sistema@stocckrma.local';
+  const userNameResolved = userInfo?.name || activeAuthUser?.name || (triggerType === 'manual' ? 'Operador' : 'Robô Automático');
+  const userUidResolved = activeAuthUser?.uid || '';
 
-  // ================= SUPABASE SNAPSHOT SAVE =================
-  if (getActiveDbProvider() === 'supabase') {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      const sanitizedCreatedBy = {
-        uid: userUidResolved,
-        email: userEmailResolved,
-        name: userNameResolved
-      };
-
-      const totalItems = Number(counts.products || 0) + Number(counts.triageUnits || 0) + Number(counts.dailyInflows || 0) + Number(counts.cases || 0);
-
-      // Determine if payload requires chunking (> 300 KB) to prevent Statement Timeout 57014
-      const CHUNK_SIZE = 300 * 1024;
-      const isChunked = jsonContent.length > CHUNK_SIZE;
-
-      if (isChunked) {
-        const chunks: string[] = [];
-        for (let i = 0; i < jsonContent.length; i += CHUNK_SIZE) {
-          chunks.push(jsonContent.substring(i, i + CHUNK_SIZE));
-        }
-
-        // 1. Save master metadata record (store collections counts in metadata so listing displays exact counts!)
-        const { error: masterErr } = await supabase
-          .from('backup_snapshots')
-          .upsert({
-            id: snapshotId,
-            backup_id: snapshotId,
-            filename: `Backup_${snapshotId}.json`,
-            created_at: now.toISOString(),
-            created_by: sanitizedCreatedBy,
-            trigger_type: triggerType,
-            checksum: hash,
-            total_items: totalItems,
-            file_size_formatted: fileSizeFormatted,
-            size_bytes: Math.round(Number(sizeBytes) || 0),
-            chunk_index: 0,
-            total_chunks: chunks.length,
-            data: {
-              metadata: {
-                version: '1.0.0',
-                generatedAt: now.toISOString(),
-                collectionsCount: counts,
-                totalItems,
-                fileSizeBytes: sizeBytes,
-                integrityHash: hash
-              }
-            }
-          });
-
-        if (masterErr) {
-          console.error('Supabase backup_snapshots master upsert error:', masterErr);
-          throw new Error(`Falha ao salvar cabeçalho do Snapshot no Supabase: ${masterErr.message}`);
-        }
-
-        // 2. Save individual chunk rows (1-indexed chunk_index)
-        for (let i = 0; i < chunks.length; i++) {
-          const { error: chunkErr } = await supabase
-            .from('backup_snapshots')
-            .upsert({
-              id: `${snapshotId}_chunk_${i + 1}`,
-              backup_id: snapshotId,
-              filename: `part_${i + 1}`,
-              created_at: now.toISOString(),
-              created_by: sanitizedCreatedBy,
-              trigger_type: triggerType,
-              checksum: hash,
-              total_items: 0,
-              file_size_formatted: fileSizeFormatted,
-              size_bytes: chunks[i].length,
-              chunk_index: i + 1,
-              total_chunks: chunks.length,
-              data: { chunk_text: chunks[i] }
-            });
-
-          if (chunkErr) {
-            console.error(`Supabase backup_snapshots chunk ${i + 1} upsert error:`, chunkErr);
-            throw new Error(`Falha ao salvar fragmento ${i + 1}/${chunks.length} do Snapshot no Supabase: ${chunkErr.message}`);
-          }
-        }
-      } else {
-        // Single row insert for lightweight snapshots
-        const cleanPayload = JSON.parse(jsonContent);
-        const { error: upsertError } = await supabase
-          .from('backup_snapshots')
-          .upsert({
-            id: snapshotId,
-            backup_id: snapshotId,
-            filename: `Backup_${snapshotId}.json`,
-            created_at: now.toISOString(),
-            created_by: sanitizedCreatedBy,
-            trigger_type: triggerType,
-            checksum: hash,
-            total_items: totalItems,
-            file_size_formatted: fileSizeFormatted,
-            size_bytes: Math.round(Number(sizeBytes) || 0),
-            chunk_index: 0,
-            total_chunks: 1,
-            data: cleanPayload
-          });
-
-        if (upsertError) {
-          console.error('Supabase backup_snapshots upsert error:', upsertError);
-          throw new Error(`Falha ao salvar Snapshot no Supabase: ${upsertError.message}`);
-        }
-      }
-
-      const snapshotRecord: CloudBackupRecord = {
-        id: snapshotId,
-        title: defaultTitle,
-        triggerType,
-        triggerLabel: triggerLabels[triggerType],
-        createdAt: now.toISOString(),
-        createdAtFormatted: formatBrDate(now),
-        createdBy: sanitizedCreatedBy,
-        collectionsCount: counts,
-        fileSizeBytes: sizeBytes,
-        fileSizeFormatted,
-        integrityHash: hash,
-        payloadJson: isChunked ? '' : jsonContent,
-        chunked: isChunked,
-        totalChunks: isChunked ? Math.ceil(jsonContent.length / (300 * 1024)) : 1,
-        status: 'active'
-      };
-
-      // Save last backup markers locally
-      localStorage.setItem('stocckrma_last_cloud_backup_date', now.toISOString());
-      localStorage.setItem('stocckrma_last_cloud_backup_id', snapshotId);
-      localStorage.setItem('stocckrma_last_cloud_backup_stats', JSON.stringify(counts));
-
-      if (triggerType !== 'manual') {
-        try {
-          const config = await loadAutoBackupConfig();
-          if (!config.lastRun) config.lastRun = {};
-          config.lastRun[triggerType] = now.toISOString();
-          config.lastBackupStatus = `Último backup em nuvem (${triggerLabels[triggerType]}) realizado com sucesso em ${formatBrDate(now)}`;
-          await saveAutoBackupConfig(config);
-        } catch (cfgErr) {
-          console.warn('Could not update auto backup config lastRun:', cfgErr);
-        }
-      }
-
-      try {
-        await createAuditLog(
-          'CLOUD_BACKUP_CREATED',
-          `Criou Snapshot Online de contingência (${defaultTitle}) [${triggerLabels[triggerType]}]. Total: ${counts.products} produtos base, ${counts.triageUnits} unidades físicas no Supabase.`
-        );
-      } catch (logErr) {
-        console.warn('Audit log error on cloud backup create:', logErr);
-      }
-
-      return {
-        success: true,
-        snapshot: snapshotRecord
-      };
-    }
-  }
-
-  // ================= FIRESTORE SNAPSHOT SAVE =================
-  const snapshotDocRef = doc(db, '_system_backups', snapshotId);
-
-  // Determine if payload requires chunking (> 350 KB)
-  const isChunked = jsonContent.length > SNAPSHOT_CHUNK_SIZE;
-  const chunks: string[] = [];
-
-  if (isChunked) {
-    for (let i = 0; i < jsonContent.length; i += SNAPSHOT_CHUNK_SIZE) {
-      chunks.push(jsonContent.substring(i, i + SNAPSHOT_CHUNK_SIZE));
-    }
-  }
-
-  const snapshotRecord: CloudBackupRecord = {
-    id: snapshotId,
-    title: defaultTitle,
-    triggerType,
-    triggerLabel: triggerLabels[triggerType],
-    createdAt: now.toISOString(),
-    createdAtFormatted: formatBrDate(now),
-    createdBy: {
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const sanitizedCreatedBy = {
       uid: userUidResolved,
       email: userEmailResolved,
       name: userNameResolved
-    },
-    collectionsCount: counts,
-    fileSizeBytes: sizeBytes,
-    fileSizeFormatted,
-    integrityHash: hash,
-    payloadJson: isChunked ? '' : jsonContent, // Keep main doc lightweight if chunked
-    chunked: isChunked,
-    totalChunks: isChunked ? chunks.length : 1,
-    status: 'active'
-  };
+    };
 
-  // 1. Save main metadata doc
-  await setDoc(snapshotDocRef, snapshotRecord);
+    const totalItems = Number(counts.products || 0) + Number(counts.triageUnits || 0) + Number(counts.dailyInflows || 0) + Number(counts.cases || 0);
 
-  // 2. If chunked, write fragments to subcollection
-  if (isChunked && chunks.length > 0) {
-    const chunkObjects = chunks.map((data, index) => ({ index, data, size: data.length }));
-    for (const chunkBatch of chunkArray(chunkObjects, 350)) {
-      const batch = writeBatch(db);
-      chunkBatch.forEach(c => {
-        const chunkDocRef = doc(db, '_system_backups', snapshotId, 'chunks', `chunk_${String(c.index).padStart(4, '0')}`);
-        batch.set(chunkDocRef, c);
-      });
-      await batch.commit();
+    const CHUNK_SIZE = 300 * 1024;
+    const isChunked = jsonContent.length > CHUNK_SIZE;
+
+    if (isChunked) {
+      const chunks: string[] = [];
+      for (let i = 0; i < jsonContent.length; i += CHUNK_SIZE) {
+        chunks.push(jsonContent.substring(i, i + CHUNK_SIZE));
+      }
+
+      // 1. Save master metadata record
+      const { error: masterErr } = await supabase
+        .from('backup_snapshots')
+        .upsert({
+          id: snapshotId,
+          backup_id: snapshotId,
+          filename: `Backup_${snapshotId}.json`,
+          created_at: now.toISOString(),
+          created_by: sanitizedCreatedBy,
+          trigger_type: triggerType,
+          checksum: hash,
+          total_items: totalItems,
+          file_size_formatted: fileSizeFormatted,
+          size_bytes: Math.round(Number(sizeBytes) || 0),
+          chunk_index: 0,
+          total_chunks: chunks.length,
+          data: {
+            metadata: {
+              version: '1.0.0',
+              generatedAt: now.toISOString(),
+              collectionsCount: counts,
+              totalItems,
+              fileSizeBytes: sizeBytes,
+              integrityHash: hash
+            }
+          }
+        });
+
+      if (masterErr) {
+        console.error('Supabase backup_snapshots master upsert error:', masterErr);
+        throw new Error(`Falha ao salvar cabeçalho do Snapshot no Supabase: ${masterErr.message}`);
+      }
+
+      // 2. Save individual chunk rows
+      for (let i = 0; i < chunks.length; i++) {
+        const { error: chunkErr } = await supabase
+          .from('backup_snapshots')
+          .upsert({
+            id: `${snapshotId}_chunk_${i + 1}`,
+            backup_id: snapshotId,
+            filename: `part_${i + 1}`,
+            created_at: now.toISOString(),
+            created_by: sanitizedCreatedBy,
+            trigger_type: triggerType,
+            checksum: hash,
+            total_items: 0,
+            file_size_formatted: fileSizeFormatted,
+            size_bytes: chunks[i].length,
+            chunk_index: i + 1,
+            total_chunks: chunks.length,
+            data: { chunk_text: chunks[i] }
+          });
+
+        if (chunkErr) {
+          console.error(`Supabase backup_snapshots chunk ${i + 1} upsert error:`, chunkErr);
+          throw new Error(`Falha ao salvar fragmento ${i + 1}/${chunks.length} do Snapshot no Supabase: ${chunkErr.message}`);
+        }
+      }
+    } else {
+      const cleanPayload = JSON.parse(jsonContent);
+      const { error: upsertError } = await supabase
+        .from('backup_snapshots')
+        .upsert({
+          id: snapshotId,
+          backup_id: snapshotId,
+          filename: `Backup_${snapshotId}.json`,
+          created_at: now.toISOString(),
+          created_by: sanitizedCreatedBy,
+          trigger_type: triggerType,
+          checksum: hash,
+          total_items: totalItems,
+          file_size_formatted: fileSizeFormatted,
+          size_bytes: Math.round(Number(sizeBytes) || 0),
+          chunk_index: 0,
+          total_chunks: 1,
+          data: cleanPayload
+        });
+
+      if (upsertError) {
+        console.error('Supabase backup_snapshots upsert error:', upsertError);
+        throw new Error(`Falha ao salvar Snapshot no Supabase: ${upsertError.message}`);
+      }
     }
+
+    const snapshotRecord: CloudBackupRecord = {
+      id: snapshotId,
+      title: defaultTitle,
+      triggerType,
+      triggerLabel: triggerLabels[triggerType],
+      createdAt: now.toISOString(),
+      createdAtFormatted: formatBrDate(now),
+      createdBy: sanitizedCreatedBy,
+      collectionsCount: counts,
+      fileSizeBytes: sizeBytes,
+      fileSizeFormatted,
+      integrityHash: hash,
+      payloadJson: isChunked ? '' : jsonContent,
+      chunked: isChunked,
+      totalChunks: isChunked ? Math.ceil(jsonContent.length / (300 * 1024)) : 1,
+      status: 'active'
+    };
+
+    localStorage.setItem('stocckrma_last_cloud_backup_date', now.toISOString());
+    localStorage.setItem('stocckrma_last_cloud_backup_id', snapshotId);
+    localStorage.setItem('stocckrma_last_cloud_backup_stats', JSON.stringify(counts));
+
+    return {
+      success: true,
+      snapshot: snapshotRecord
+    };
   }
 
-  // Save last backup markers locally
-  localStorage.setItem('stocckrma_last_cloud_backup_date', now.toISOString());
-  localStorage.setItem('stocckrma_last_cloud_backup_id', snapshotId);
-  localStorage.setItem('stocckrma_last_cloud_backup_stats', JSON.stringify(counts));
-
-  // Update schedule lastRun if applicable
-  if (triggerType !== 'manual') {
-    try {
-      const config = await loadAutoBackupConfig();
-      if (!config.lastRun) config.lastRun = {};
-      config.lastRun[triggerType] = now.toISOString();
-      config.lastBackupStatus = `Último backup em nuvem (${triggerLabels[triggerType]}) realizado com sucesso em ${formatBrDate(now)}`;
-      await saveAutoBackupConfig(config);
-    } catch (cfgErr) {
-      console.warn('Could not update auto backup config lastRun:', cfgErr);
-    }
-  }
-
-  try {
-    await createAuditLog(
-      'CLOUD_BACKUP_CREATED',
-      `Criou Snapshot Online de contingência (${defaultTitle}) [${triggerLabels[triggerType]}]. Total: ${counts.products} produtos base, ${counts.triageUnits} unidades físicas. Fragmentos: ${snapshotRecord.totalChunks || 1}. Hash SHA-256: ${hash.substring(0, 12)}...`
-    );
-  } catch (logErr) {
-    console.warn('Audit log error on cloud backup create:', logErr);
-  }
-
-  return {
-    success: true,
-    snapshot: snapshotRecord
-  };
+  throw new Error('Supabase Client não configurado.');
 };
 
 /**
- * Real-time subscription to cloud backups list
+ * Subscribe to list of Cloud Snapshots stored in Supabase
  */
 export const subscribeToCloudBackups = (
-  callback: (backups: CloudBackupRecord[]) => void
+  callback: (snapshots: CloudBackupRecord[]) => void
 ) => {
-  if (getActiveDbProvider() === 'supabase') {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      const fetchList = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('backup_snapshots')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(100);
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const fetchSnapshots = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('backup_snapshots')
+          .select('id, filename, created_at, created_by, trigger_type, checksum, total_items, file_size_formatted, size_bytes, chunk_index, total_chunks, data')
+          .eq('chunk_index', 0)
+          .neq('id', 'config_backup_schedule')
+          .order('created_at', { ascending: false })
+          .limit(50);
 
-          if (error) {
-            console.warn('Error fetching Supabase backup_snapshots:', error);
-            return;
-          }
-
-          if (data) {
-            // Filter in memory to guarantee no chunk fragments or config records are shown
-            const masterRecords = data.filter(r => 
-              r.id &&
-              r.id !== 'config_backup_schedule' &&
-              !r.id.includes('_chunk_') &&
-              !r.id.includes('_part_') &&
-              (r.chunk_index === null || r.chunk_index === undefined || r.chunk_index === 0)
-            );
-
-            const list: CloudBackupRecord[] = masterRecords.map(r => {
-              const p = r.data || {};
-              const counts = p.metadata?.collectionsCount || { 
-                products: Number(r.total_items) || 0, 
-                triageUnits: 0, 
-                dailyInflows: 0, 
-                cases: 0, 
-                logs: 0 
-              };
-
-              const triggerLabels: Record<string, string> = {
-                manual: 'Manual',
-                hourly: 'Por Hora',
-                end_of_day: 'Fim do Expediente',
-                weekly: 'Semanal',
-                monthly: 'Mensal'
-              };
-
-              const isChunked = Boolean(r.total_chunks && r.total_chunks > 1);
-
-              return {
-                id: r.id,
-                title: r.filename ? `Snapshot - ${r.filename}` : `Snapshot - ${r.id}`,
-                triggerType: (r.trigger_type as BackupTriggerType) || 'manual',
-                triggerLabel: triggerLabels[r.trigger_type] || 'Manual',
-                createdAt: r.created_at || '',
-                createdAtFormatted: r.created_at ? formatBrDate(new Date(r.created_at)) : '',
-                createdBy: r.created_by || { name: 'Sistema' },
-                collectionsCount: counts,
-                fileSizeBytes: r.size_bytes || 0,
-                fileSizeFormatted: r.file_size_formatted || '0 KB',
-                integrityHash: r.checksum || '',
-                payloadJson: isChunked ? '' : (typeof p === 'object' && Object.keys(p).length > 0 ? JSON.stringify(p) : ''),
-                chunked: isChunked,
-                totalChunks: r.total_chunks || 1,
-                status: 'active'
-              };
-            });
-            callback(list);
-          }
-        } catch (err) {
-          console.warn('Error in fetchList for Supabase backup_snapshots:', err);
+        if (error) {
+          console.warn('Could not list backup_snapshots from Supabase:', error.message);
+          return;
         }
-      };
 
-      fetchList();
-      const channel = supabase.channel('realtime_backups')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'backup_snapshots' }, () => {
-          fetchList();
-        })
-        .subscribe();
+        if (data) {
+          const list: CloudBackupRecord[] = data.map((r: any) => {
+            const triggerLabels: Record<string, string> = {
+              manual: 'Manual (Sob Demanda)',
+              hourly: 'Agendado (Por Hora)',
+              end_of_day: 'Final do Expediente',
+              weekly: 'Agendado (Semanal)',
+              monthly: 'Agendado (Mensal)'
+            };
+            const createdDate = new Date(r.created_at);
+            const counts = r.data?.metadata?.collectionsCount || {
+              products: 0,
+              triageUnits: 0,
+              dailyInflows: 0,
+              cases: 0,
+              logs: 0
+            };
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+            return {
+              id: r.id,
+              title: r.trigger_type === 'manual' 
+                ? `Snapshot Manual - ${formatFilenameTimestamp(createdDate)}`
+                : `Backup Automático (${triggerLabels[r.trigger_type] || r.trigger_type})`,
+              triggerType: r.trigger_type || 'manual',
+              triggerLabel: triggerLabels[r.trigger_type] || 'Manual',
+              createdAt: r.created_at,
+              createdAtFormatted: formatBrDate(createdDate),
+              createdBy: r.created_by || { name: 'Sistema' },
+              collectionsCount: counts,
+              fileSizeBytes: r.size_bytes || 0,
+              fileSizeFormatted: r.file_size_formatted || '0 KB',
+              integrityHash: r.checksum || '',
+              payloadJson: '',
+              chunked: (r.total_chunks || 1) > 1,
+              totalChunks: r.total_chunks || 1,
+              status: 'active'
+            };
+          });
+          callback(list);
+        }
+      } catch (err) {
+        console.warn('Silent catch for Supabase snapshots query:', err);
+      }
+    };
+
+    fetchSnapshots();
+
+    const channel = supabase.channel('realtime_snapshots')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'backup_snapshots' }, () => {
+        fetchSnapshots();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 
-  const backupsColRef = collection(db, '_system_backups');
-  const q = query(backupsColRef, orderBy('createdAt', 'desc'), limit(60));
-
-  return onSnapshot(q, (snapshot) => {
-    const list: CloudBackupRecord[] = snapshot.docs.map(docSnap => {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        title: data.title || 'Ponto de Restauração Online',
-        triggerType: data.triggerType || 'manual',
-        triggerLabel: data.triggerLabel || 'Manual',
-        createdAt: data.createdAt || '',
-        createdAtFormatted: data.createdAtFormatted || '',
-        createdBy: data.createdBy || { name: 'Sistema' },
-        collectionsCount: data.collectionsCount || { products: 0, triageUnits: 0, dailyInflows: 0, cases: 0, logs: 0 },
-        fileSizeBytes: data.fileSizeBytes || 0,
-        fileSizeFormatted: data.fileSizeFormatted || '0 KB',
-        integrityHash: data.integrityHash || '',
-        payloadJson: data.payloadJson || '',
-        chunked: Boolean(data.chunked),
-        totalChunks: data.totalChunks || 1,
-        status: data.status || 'active'
-      };
-    });
-    callback(list);
-  }, (err) => {
-    console.error('Error subscribing to _system_backups collection:', err);
-  });
+  callback([]);
+  return () => {};
 };
 
 /**
- * Delete a specific Cloud Snapshot from Supabase or Firestore
+ * Delete a specific Cloud Snapshot from Supabase
  */
 export const deleteCloudSnapshot = async (snapshotId: string): Promise<boolean> => {
-  if (getActiveDbProvider() === 'supabase') {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      const { error } = await supabase
-        .from('backup_snapshots')
-        .delete()
-        .or(`id.eq.${snapshotId},backup_id.eq.${snapshotId}`);
-      if (error) {
-        console.error('Error deleting snapshot from Supabase:', error);
-        throw error;
-      }
-      return true;
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const { error } = await supabase
+      .from('backup_snapshots')
+      .delete()
+      .or(`id.eq.${snapshotId},backup_id.eq.${snapshotId}`);
+    if (error) {
+      console.error('Error deleting snapshot from Supabase:', error);
+      throw error;
     }
-  } else {
-    await deleteDoc(doc(db, '_system_backups', snapshotId));
     return true;
   }
   return false;
 };
 
 /**
- * Load Auto-Backup schedule settings from Supabase/Firestore/LocalStorage
+ * Load Auto-Backup schedule settings from Supabase / LocalStorage
  */
 export const loadAutoBackupConfig = async (): Promise<AutoBackupScheduleConfig> => {
   const localSaved = localStorage.getItem('stocckrma_auto_backup_config');
@@ -868,80 +667,54 @@ export const loadAutoBackupConfig = async (): Promise<AutoBackupScheduleConfig> 
     }
   }
 
-  if (getActiveDbProvider() === 'supabase') {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data } = await supabase.from('backup_snapshots').select('data').eq('id', 'config_backup_schedule').maybeSingle();
-        if (data && data.data) {
-          const remoteConfig = data.data as AutoBackupScheduleConfig;
-          localStorage.setItem('stocckrma_auto_backup_config', JSON.stringify(remoteConfig));
-          return { ...baseConfig, ...remoteConfig };
-        }
-      } catch (e) {
-        console.warn('Could not read backup schedule config from Supabase:', e);
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { data } = await supabase.from('backup_snapshots').select('data').eq('id', 'config_backup_schedule').maybeSingle();
+      if (data && data.data) {
+        const remoteConfig = data.data as AutoBackupScheduleConfig;
+        localStorage.setItem('stocckrma_auto_backup_config', JSON.stringify(remoteConfig));
+        return { ...baseConfig, ...remoteConfig };
       }
+    } catch (e) {
+      console.warn('Could not read backup schedule config from Supabase:', e);
     }
-    return baseConfig;
-  }
-
-  try {
-    const configDocRef = doc(db, '_system_config', 'backup_schedule');
-    const snap = await getDoc(configDocRef);
-    if (snap.exists()) {
-      const remoteConfig = snap.data() as AutoBackupScheduleConfig;
-      localStorage.setItem('stocckrma_auto_backup_config', JSON.stringify(remoteConfig));
-      return { ...DEFAULT_AUTO_BACKUP_CONFIG, ...remoteConfig };
-    }
-  } catch (e) {
-    console.warn('Could not read remote backup config from Firestore:', e);
   }
 
   return baseConfig;
 };
 
 /**
- * Save Auto-Backup schedule settings to Supabase/Firestore & LocalStorage
+ * Save Auto-Backup schedule settings to Supabase & LocalStorage
  */
 export const saveAutoBackupConfig = async (
   config: AutoBackupScheduleConfig
 ): Promise<void> => {
   localStorage.setItem('stocckrma_auto_backup_config', JSON.stringify(config));
 
-  if (getActiveDbProvider() === 'supabase') {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('backup_snapshots').upsert({
-          id: 'config_backup_schedule',
-          backup_id: 'config_backup_schedule',
-          filename: 'config_backup_schedule.json',
-          created_at: new Date().toISOString(),
-          trigger_type: 'config',
-          checksum: 'cfg',
-          total_items: 0,
-          file_size_formatted: '1 KB',
-          size_bytes: 1024,
-          data: config
-        });
-      } catch (e) {
-        console.warn('Could not save auto backup config to Supabase:', e);
-      }
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.from('backup_snapshots').upsert({
+        id: 'config_backup_schedule',
+        backup_id: 'config_backup_schedule',
+        filename: 'config_backup_schedule.json',
+        created_at: new Date().toISOString(),
+        trigger_type: 'config',
+        checksum: 'cfg',
+        total_items: 0,
+        file_size_formatted: '1 KB',
+        size_bytes: 1024,
+        data: config
+      });
+    } catch (e) {
+      console.warn('Could not save auto backup config to Supabase:', e);
     }
-    return;
-  }
-
-  try {
-    const configDocRef = doc(db, '_system_config', 'backup_schedule');
-    await setDoc(configDocRef, config, { merge: true });
-  } catch (e) {
-    console.warn('Could not save auto backup config to Firestore:', e);
   }
 };
 
 /**
  * Download a specific CloudBackupRecord as a JSON file to local computer
- * Loads full content even if chunked across subcollections
  */
 export const downloadCloudSnapshotAsJson = async (snapshot: CloudBackupRecord) => {
   const jsonContent = await fetchCloudSnapshotPayloadJson(snapshot);
@@ -999,55 +772,70 @@ export const validateBackupFile = (
           triageUnits: Array.isArray(parsed.triageUnits) ? parsed.triageUnits.length : 0,
           dailyInflows: Array.isArray(parsed.dailyInflows) ? parsed.dailyInflows.length : 0,
           cases: Array.isArray(parsed.cases) ? parsed.cases.length : 0,
-          logs: Array.isArray(parsed.logs) ? parsed.logs.length : 0
-        }
+          logs: 0
+        },
+        totalItems: (parsed.products?.length || 0) + (parsed.triageUnits?.length || 0),
+        fileSizeBytes,
+        integrityHash: ''
       },
       data: {
-        products: Array.isArray(parsed.products) ? parsed.products : [],
-        triageUnits: Array.isArray(parsed.triageUnits) ? parsed.triageUnits : [],
-        dailyInflows: Array.isArray(parsed.dailyInflows) ? parsed.dailyInflows : [],
-        cases: Array.isArray(parsed.cases) ? parsed.cases : [],
-        logs: Array.isArray(parsed.logs) ? parsed.logs : []
+        products: parsed.products || [],
+        triageUnits: parsed.triageUnits || [],
+        dailyInflows: parsed.dailyInflows || [],
+        cases: parsed.cases || [],
+        pendingItems: parsed.pendingItems || [],
+        auditLogs: []
       }
     };
   } else {
     return {
       isValid: false,
-      error: 'O arquivo JSON não contém uma estrutura de backup reconhecida do StocckRMA (chaves "metadata" e "data" ausentes).'
+      error: 'O arquivo JSON não possui o esquema de backup reconhecido pelo Stocck-RMA.'
     };
   }
 
-  const productsList = Array.isArray(payload.data?.products) ? payload.data.products : [];
-  const unitsList = Array.isArray(payload.data?.triageUnits) ? payload.data.triageUnits : [];
-  const inflowsList = Array.isArray(payload.data?.dailyInflows) ? payload.data.dailyInflows : [];
-  const casesList = Array.isArray(payload.data?.cases) ? payload.data.cases : [];
-  const logsList = Array.isArray(payload.data?.logs) ? payload.data.logs : [];
+  const counts = {
+    products: payload.data?.products?.length || 0,
+    triageUnits: payload.data?.triageUnits?.length || 0,
+    dailyInflows: payload.data?.dailyInflows?.length || 0,
+    cases: payload.data?.cases?.length || 0,
+    pendingItems: payload.data?.pendingItems?.length || 0,
+    auditLogs: payload.data?.auditLogs?.length || 0
+  };
 
-  if (productsList.length === 0 && unitsList.length === 0 && inflowsList.length === 0) {
+  const total = counts.products + counts.triageUnits + counts.dailyInflows + counts.cases + counts.pendingItems;
+  if (total === 0) {
     return {
-      isValid: false,
-      error: 'O arquivo de backup não contém nenhum produto, unidade física ou lançamento de fluxo diário válido.'
+      isValid: true,
+      payload,
+      summary: {
+        version: payload.metadata?.version || '1.0.0',
+        exportedAtFormatted: payload.metadata?.exportedAtFormatted || 'Desconhecido',
+        exportedByName: payload.metadata?.exportedBy?.name || 'Operador',
+        counts,
+        totalItems: 0,
+        fileSizeFormatted: formatBytes(fileSizeBytes)
+      },
+      warning: 'Atenção: O arquivo de backup não contém nenhum registro cadastrado.'
     };
   }
 
   return {
     isValid: true,
-    metadata: payload.metadata,
     payload,
-    stats: {
-      productsCount: productsList.length,
-      triageUnitsCount: unitsList.length,
-      dailyInflowsCount: inflowsList.length,
-      casesCount: casesList.length,
-      logsCount: logsList.length,
-      fileSizeBytes: fileSizeBytes || new Blob([fileContent]).size
+    summary: {
+      version: payload.metadata?.version || '1.0.0',
+      exportedAtFormatted: payload.metadata?.exportedAtFormatted || formatBrDate(new Date()),
+      exportedByName: payload.metadata?.exportedBy?.name || 'Operador',
+      counts,
+      totalItems: total,
+      fileSizeFormatted: formatBytes(fileSizeBytes)
     }
   };
 };
 
 /**
- * Restore database collections from a validated SystemBackupPayload
- * Supports both Supabase (PostgreSQL) and Firestore
+ * Restore the database from a validated SystemBackupPayload into Supabase
  */
 export const restoreDatabaseFromBackup = async (
   payload: SystemBackupPayload,
@@ -1062,243 +850,92 @@ export const restoreDatabaseFromBackup = async (
     cases: number;
   };
 }> => {
-  const { data } = payload;
-  const products: BaseProduct[] = Array.isArray(data?.products) ? data.products : [];
-  const triageUnits: TriageUnit[] = Array.isArray(data?.triageUnits) ? data.triageUnits : [];
-  const dailyInflows: DailyInflowRecord[] = Array.isArray(data?.dailyInflows) ? data.dailyInflows : [];
-  const cases: CaseTracking[] = Array.isArray(data?.cases) ? data.cases : [];
-  const pendingItems: PendingItem[] = Array.isArray((data as any)?.pendingItems) ? (data as any).pendingItems : [];
+  const products = payload.data?.products || [];
+  const triageUnits = payload.data?.triageUnits || [];
+  const dailyInflows = payload.data?.dailyInflows || [];
+  const cases = payload.data?.cases || [];
+  const pendingItems = payload.data?.pendingItems || [];
 
-  // ===================== SUPABASE RESTORE FLOW =====================
-  if (getActiveDbProvider() === 'supabase') {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      throw new Error('Cliente Supabase não está configurado. Verifique as credenciais no menu de Banco de Dados.');
-    }
-
-    try {
-      if (mode === 'replace') {
-        onProgress?.('Limpando tabelas do Supabase...', 10);
-        await Promise.all([
-          supabase.from('products').delete().neq('id', '___all___'),
-          supabase.from('triage_units').delete().neq('id', '___all___'),
-          supabase.from('daily_inflows').delete().neq('id', '___all___'),
-          supabase.from('cases').delete().neq('id', '___all___'),
-          supabase.from('pending_items').delete().neq('id', '___all___')
-        ]);
-      }
-
-      // 1. Restore Products
-      if (products.length > 0) {
-        onProgress?.(`Restaurando ${products.length} produtos no Supabase...`, 30);
-        const mappedProducts = products.map(mapProductToSupabase);
-        for (const chunk of chunkArray(mappedProducts, 200)) {
-          const { error } = await supabase.from('products').upsert(chunk);
-          if (error) throw error;
-        }
-      }
-
-      // 2. Restore Triage Units
-      if (triageUnits.length > 0) {
-        onProgress?.(`Restaurando ${triageUnits.length} unidades de triagem/estoque no Supabase...`, 60);
-        const mappedUnits = triageUnits.map(mapTriageUnitToSupabase);
-        for (const chunk of chunkArray(mappedUnits, 200)) {
-          const { error } = await supabase.from('triage_units').upsert(chunk);
-          if (error) throw error;
-        }
-      }
-
-      // 3. Restore Daily Inflows
-      if (dailyInflows.length > 0) {
-        onProgress?.(`Restaurando ${dailyInflows.length} registros diários no Supabase...`, 80);
-        const mappedInflows = dailyInflows.map(mapDailyInflowToSupabase);
-        for (const chunk of chunkArray(mappedInflows, 200)) {
-          const { error } = await supabase.from('daily_inflows').upsert(chunk);
-          if (error) throw error;
-        }
-      }
-
-      // 4. Restore Cases
-      if (cases.length > 0) {
-        onProgress?.(`Restaurando ${cases.length} casos no Supabase...`, 90);
-        const mappedCases = cases.map(c => ({
-          id: c.id,
-          code: c.code,
-          platform: c.platform,
-          created_at: c.createdAt,
-          reason: c.reason,
-          resolution: c.resolution,
-          status: c.status || 'Pendente',
-          notes: c.notes || '',
-          value: c.value !== undefined ? c.value : null
-        }));
-        for (const chunk of chunkArray(mappedCases, 200)) {
-          const { error } = await supabase.from('cases').upsert(chunk);
-          if (error) throw error;
-        }
-      }
-
-      // 5. Restore Pending items if present
-      if (pendingItems.length > 0) {
-        const mappedPending = pendingItems.map(mapPendingItemToSupabase);
-        for (const chunk of chunkArray(mappedPending, 200)) {
-          await supabase.from('pending_items').upsert(chunk);
-        }
-      }
-    } catch (supaErr: any) {
-      console.error('Supabase restore error:', supaErr);
-      throw new Error(`Erro ao restaurar no Supabase: ${supaErr.message || supaErr}`);
-    }
-
-    // Apply settings if available
-    if (payload.settings?.enableSpreadsheetImport !== undefined) {
-      localStorage.setItem('rmaflow_enable_spreadsheet_import', String(payload.settings.enableSpreadsheetImport));
-    }
-
-    localStorage.setItem('base_products_seeded', 'true');
-    localStorage.setItem('triage_units_seeded', 'true');
-    localStorage.setItem('cases_seeded', 'true');
-    localStorage.setItem('daily_inflows_seeded', 'true');
-
-    onProgress?.('Finalizando restauração no Supabase...', 100);
-
-    const modeLabel = mode === 'replace' ? 'Substituição Completa' : 'Mesclagem (Merge)';
-    try {
-      await createAuditLog(
-        'BACKUP_RESTORED',
-        `Restaurou backup no Supabase (${modeLabel}). Total: ${products.length} produtos, ${triageUnits.length} unidades em estoque, ${dailyInflows.length} entradas diárias e ${cases.length} casos.`
-      );
-    } catch (logErr) {
-      console.warn('Audit log error:', logErr);
-    }
-
-    return {
-      success: true,
-      restoredCounts: {
-        products: products.length,
-        triageUnits: triageUnits.length,
-        dailyInflows: dailyInflows.length,
-        cases: cases.length
-      }
-    };
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error('Supabase client não está inicializado.');
   }
 
-  // ===================== FIRESTORE RESTORE FLOW =====================
-  const BATCH_SIZE = 350; // Under Firestore limit of 500
+  const BATCH_SIZE = 100;
 
-  // 1. If REPLACE mode, clear current collections first
-  try {
-    if (mode === 'replace') {
-      onProgress?.('Limpando coleções atuais do Firestore...', 10);
-      
-      try {
-        // Clear products
-        const pSnap = await getDocs(collection(db, 'products'));
-        for (const chunk of chunkArray(pSnap.docs, BATCH_SIZE)) {
-          const batch = writeBatch(db);
-          chunk.forEach(d => batch.delete(d.ref));
-          await batch.commit();
-        }
-
-        // Clear triage units
-        const uSnap = await getDocs(collection(db, 'triage_units'));
-        for (const chunk of chunkArray(uSnap.docs, BATCH_SIZE)) {
-          const batch = writeBatch(db);
-          chunk.forEach(d => batch.delete(d.ref));
-          await batch.commit();
-        }
-
-        // Clear daily inflows
-        const iSnap = await getDocs(collection(db, 'daily_inflows'));
-        for (const chunk of chunkArray(iSnap.docs, BATCH_SIZE)) {
-          const batch = writeBatch(db);
-          chunk.forEach(d => batch.delete(d.ref));
-          await batch.commit();
-        }
-
-        // Clear cases
-        const cSnap = await getDocs(collection(db, 'cases'));
-        for (const chunk of chunkArray(cSnap.docs, BATCH_SIZE)) {
-          const batch = writeBatch(db);
-          chunk.forEach(d => batch.delete(d.ref));
-          await batch.commit();
-        }
-      } catch (clearErr) {
-        console.warn('Could not clear remote Firestore collections:', clearErr);
-      }
+  // 1. If REPLACE mode, clear tables first
+  if (mode === 'replace') {
+    onProgress?.('Limpando tabelas atuais no Supabase...', 10);
+    try {
+      await supabase.from('products').delete().neq('id', '___all___');
+      await supabase.from('triage_units').delete().neq('id', '___all___');
+      await supabase.from('daily_inflows').delete().neq('id', '___all___');
+      await supabase.from('cases').delete().neq('id', '___all___');
+      await supabase.from('pending_items').delete().neq('id', '___all___');
+    } catch (clearErr) {
+      console.warn('Clear tables warning in Supabase:', clearErr);
     }
-
-    // 2. Restore Products
-    onProgress?.(`Restaurando ${products.length} produtos do Catálogo Base...`, 30);
-    for (const chunk of chunkArray(products, BATCH_SIZE)) {
-      const batch = writeBatch(db);
-      chunk.forEach(p => {
-        const pId = p.id || `bp-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-        const docRef = doc(db, 'products', pId);
-        batch.set(docRef, { ...p, id: pId }, { merge: mode === 'merge' });
-      });
-      await batch.commit();
-    }
-
-    // 3. Restore Triage Units (Physical Stock)
-    onProgress?.(`Restaurando ${triageUnits.length} unidades do Estoque Físico & Triagem...`, 60);
-    for (const chunk of chunkArray(triageUnits, BATCH_SIZE)) {
-      const batch = writeBatch(db);
-      chunk.forEach(u => {
-        const uId = u.id || `tr-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-        const docRef = doc(db, 'triage_units', uId);
-        batch.set(docRef, { ...u, id: uId }, { merge: mode === 'merge' });
-      });
-      await batch.commit();
-    }
-
-    // 4. Restore Daily Inflows
-    onProgress?.(`Restaurando ${dailyInflows.length} registros do Fluxo Diário de Entradas...`, 85);
-    for (const chunk of chunkArray(dailyInflows, BATCH_SIZE)) {
-      const batch = writeBatch(db);
-      chunk.forEach(i => {
-        const iId = i.id || `inflow-${i.date || Date.now()}`;
-        const docRef = doc(db, 'daily_inflows', iId);
-        batch.set(docRef, { ...i, id: iId }, { merge: mode === 'merge' });
-      });
-      await batch.commit();
-    }
-
-    // 5. Restore Cases if any
-    if (cases.length > 0) {
-      onProgress?.(`Restaurando ${cases.length} casos de garantia...`, 95);
-      for (const chunk of chunkArray(cases, BATCH_SIZE)) {
-        const batch = writeBatch(db);
-        chunk.forEach(c => {
-          const cId = c.id || `case-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-          const docRef = doc(db, 'cases', cId);
-          batch.set(docRef, { ...c, id: cId }, { merge: mode === 'merge' });
-        });
-        await batch.commit();
-      }
-    }
-  } catch (firestoreErr: any) {
-    console.error('Firestore write error during backup restore:', firestoreErr);
-    const errMsg = firestoreErr?.message || String(firestoreErr);
-
-    if (errMsg.includes('not found') || errMsg.includes('Database') || errMsg.includes('offline')) {
-      throw new Error(
-        `O banco de dados deste projeto não está respondendo (erro: ${errMsg}). ` +
-        `Certifique-se de que a conexão remota com o banco de dados está ativa e configurada corretamente.`
-      );
-    }
-    throw firestoreErr;
   }
 
-  // 6. Apply settings if available
+  // 2. Restore Products
+  onProgress?.(`Restaurando ${products.length} produtos no Catálogo de Base (Supabase)...`, 30);
+  for (const chunk of chunkArray(products, BATCH_SIZE)) {
+    const rows = chunk.map(mapProductToSupabase);
+    const { error } = await supabase.from('products').upsert(rows);
+    if (error) throw new Error(`Erro ao restaurar produtos no Supabase: ${error.message}`);
+  }
+
+  // 3. Restore Triage Units
+  onProgress?.(`Restaurando ${triageUnits.length} unidades do Estoque Físico & Triagem (Supabase)...`, 60);
+  for (const chunk of chunkArray(triageUnits, BATCH_SIZE)) {
+    const rows = chunk.map(mapTriageUnitToSupabase);
+    const { error } = await supabase.from('triage_units').upsert(rows);
+    if (error) throw new Error(`Erro ao restaurar unidades no Supabase: ${error.message}`);
+  }
+
+  // 4. Restore Daily Inflows
+  onProgress?.(`Restaurando ${dailyInflows.length} registros de fluxo diário (Supabase)...`, 80);
+  for (const chunk of chunkArray(dailyInflows, BATCH_SIZE)) {
+    const rows = chunk.map(mapDailyInflowToSupabase);
+    const { error } = await supabase.from('daily_inflows').upsert(rows);
+    if (error) throw new Error(`Erro ao restaurar fluxos diários no Supabase: ${error.message}`);
+  }
+
+  // 5. Restore Cases
+  if (cases.length > 0) {
+    onProgress?.(`Restaurando ${cases.length} casos de garantia (Supabase)...`, 90);
+    for (const chunk of chunkArray(cases, BATCH_SIZE)) {
+      const rows = chunk.map(c => ({
+        id: c.id,
+        code: c.code,
+        platform: c.platform,
+        created_at: c.createdAt,
+        reason: c.reason,
+        resolution: c.resolution,
+        status: c.status,
+        notes: c.notes,
+        value: c.value
+      }));
+      const { error } = await supabase.from('cases').upsert(rows);
+      if (error) throw new Error(`Erro ao restaurar casos no Supabase: ${error.message}`);
+    }
+  }
+
+  // 6. Restore Pending Items
+  if (pendingItems.length > 0) {
+    onProgress?.(`Restaurando ${pendingItems.length} itens de pendências (Supabase)...`, 95);
+    for (const chunk of chunkArray(pendingItems, BATCH_SIZE)) {
+      const rows = chunk.map(mapPendingItemToSupabase);
+      const { error } = await supabase.from('pending_items').upsert(rows);
+      if (error) throw new Error(`Erro ao restaurar pendências no Supabase: ${error.message}`);
+    }
+  }
+
+  // Settings & Flags
   if (payload.settings?.enableSpreadsheetImport !== undefined) {
-    localStorage.setItem(
-      'rmaflow_enable_spreadsheet_import', 
-      String(payload.settings.enableSpreadsheetImport)
-    );
+    localStorage.setItem('rmaflow_enable_spreadsheet_import', String(payload.settings.enableSpreadsheetImport));
   }
 
-  // Set seed flags to prevent mock initialization over restored data
   localStorage.setItem('base_products_seeded', 'true');
   localStorage.setItem('triage_units_seeded', 'true');
   localStorage.setItem('cases_seeded', 'true');
@@ -1306,15 +943,14 @@ export const restoreDatabaseFromBackup = async (
 
   onProgress?.('Finalizando restauração e gravando log de auditoria...', 100);
 
-  // 7. Audit log record
   const modeLabel = mode === 'replace' ? 'Substituição Completa' : 'Mesclagem (Merge)';
   try {
     await createAuditLog(
       'BACKUP_RESTORED',
-      `Restaurou backup no modo ${modeLabel}. Total restaurado: ${products.length} produtos no catálogo, ${triageUnits.length} unidades de estoque/triagem, ${dailyInflows.length} entradas diárias e ${cases.length} casos.`
+      `Restaurou backup no modo ${modeLabel}. Total restaurado: ${products.length} produtos, ${triageUnits.length} unidades de estoque/triagem, ${dailyInflows.length} entradas diárias e ${cases.length} casos.`
     );
   } catch (logErr) {
-    console.warn('Audit log recording error on backup restore:', logErr);
+    console.warn('Audit log recording warning:', logErr);
   }
 
   return {
@@ -1344,7 +980,6 @@ export const restoreFromCloudSnapshot = async (
 
 /**
  * Intelligent background schedule engine
- * Evaluates if hourly, end of day, weekly, or monthly triggers are due.
  */
 export const checkAndRunScheduledBackups = async (userInfo?: {
   email?: string;
@@ -1363,13 +998,12 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
   const now = new Date();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
-  const currentDayOfWeek = now.getDay(); // 0-6
-  const currentDayOfMonth = now.getDate(); // 1-31
+  const currentDayOfWeek = now.getDay();
+  const currentDayOfMonth = now.getDate();
   const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   const lastRun = config.lastRun || {};
 
-  // Concurrency Guard: Mutex in localStorage to avoid multiple tabs running simultaneously
   const mutexKey = 'stocckrma_backup_exec_mutex';
   const mutexVal = localStorage.getItem(mutexKey);
   if (mutexVal && Date.now() - parseInt(mutexVal, 10) < 60000) {
@@ -1388,7 +1022,7 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
     }
   }
 
-  // 2. Check End of Day Trigger (e.g. 18:00)
+  // 2. Check End of Day Trigger
   if (config.endOfDay.enabled && config.endOfDay.time) {
     const [eodHourStr, eodMinStr] = config.endOfDay.time.split(':');
     const eodHour = parseInt(eodHourStr || '18', 10);
@@ -1404,7 +1038,7 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
     }
   }
 
-  // 3. Check Weekly Trigger (e.g. Friday 18:30)
+  // 3. Check Weekly Trigger
   if (config.weekly.enabled) {
     const [wkHourStr, wkMinStr] = config.weekly.time.split(':');
     const wkHour = parseInt(wkHourStr || '18', 10);
@@ -1421,7 +1055,7 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
     }
   }
 
-  // 4. Check Monthly Trigger (e.g. Day 1 19:00)
+  // 4. Check Monthly Trigger
   if (config.monthly.enabled) {
     const [moHourStr, moMinStr] = config.monthly.time.split(':');
     const moHour = parseInt(moHourStr || '19', 10);

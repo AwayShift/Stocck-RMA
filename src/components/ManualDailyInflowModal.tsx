@@ -6,15 +6,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, 
-  Plus, 
   Trash2, 
   Save, 
   X, 
-  Package, 
-  Layers, 
   Boxes, 
-  Sparkles,
-  RotateCcw
+  Sparkles
 } from 'lucide-react';
 import { DailyInflowRecord } from '../types';
 import { getWeekdayName, formatBrDate } from '../utils/excelHelpers';

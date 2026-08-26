@@ -15,7 +15,6 @@ import {
   Code, 
   Copy, 
   Info, 
-  Layers, 
   Sparkles,
   Key,
   DollarSign,
@@ -28,7 +27,7 @@ import {
   EyeOff,
   ChevronDown,
   ChevronUp,
-  Clock
+  Cloud
 } from 'lucide-react';
 import {
   getSupabaseClient,
@@ -41,6 +40,15 @@ import {
   SUPABASE_SQL_SCHEMA,
   SupabaseConfig
 } from '../lib/supabase';
+import { isCloudinaryActive, getCloudinaryConfig } from '../lib/cloudinaryService';
+import {
+  CloudinaryMetricsSummary,
+  calculateCloudinaryMetricsFromDatabase,
+  getLocalCachedSupabaseMetrics,
+  getLocalCachedCloudinaryMetrics,
+  fetchRemoteSystemIntegrations,
+  persistSystemIntegrationsToCloud
+} from '../lib/integrationsConfigService';
 
 interface DatabaseSwitcherModalProps {
   isOpen: boolean;
@@ -143,11 +151,21 @@ export default function DatabaseSwitcherModal({
   const [copiedRef, setCopiedRef] = useState<boolean>(false);
   const [showSqlCode, setShowSqlCode] = useState<boolean>(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState<boolean>(false);
+  const [isCloudSyncActive, setIsCloudSyncActive] = useState<boolean>(true);
+
+  // Cloudinary Live & Cached Metrics state
+  const [cloudinaryMetrics, setCloudinaryMetrics] = useState<CloudinaryMetricsSummary | null>(() => getLocalCachedCloudinaryMetrics());
 
   // Fetch usage metrics (attempts official API first if PAT exists, otherwise queries Postgres tables directly)
   const fetchSupabaseUsage = async (forcedToken?: string) => {
     setIsLoadingMetrics(true);
     setTokenError(null);
+
+    // Refresh Cloudinary metrics in parallel
+    calculateCloudinaryMetricsFromDatabase().then((cMetrics) => {
+      setCloudinaryMetrics(cMetrics);
+      persistSystemIntegrationsToCloud({ cachedCloudinaryMetrics: cMetrics }).catch(() => {});
+    }).catch((e) => console.warn('Cloudinary metrics calc note:', e));
 
     const tokenToUse = forcedToken !== undefined ? forcedToken : (managementToken || getSupabaseManagementToken());
     const startTime = performance.now();
@@ -336,6 +354,34 @@ export default function DatabaseSwitcherModal({
 
   useEffect(() => {
     if (isOpen) {
+      // 1. Instantly restore cached Supabase metrics if available
+      const cachedSupabase = getLocalCachedSupabaseMetrics();
+      if (cachedSupabase && typeof cachedSupabase === 'object' && cachedSupabase.egressGb) {
+        setMetrics(prev => ({
+          ...prev,
+          ...cachedSupabase,
+          isOfficial: cachedSupabase.isOfficial ?? prev.isOfficial
+        }));
+      }
+
+      // 2. Instantly restore cached Cloudinary metrics if available
+      const cachedCloudinary = getLocalCachedCloudinaryMetrics();
+      if (cachedCloudinary) {
+        setCloudinaryMetrics(cachedCloudinary);
+      }
+
+      // 3. Check and sync remote token from cloud if not yet loaded locally
+      fetchRemoteSystemIntegrations().then((remotePayload) => {
+        if (remotePayload?.supabasePat) {
+          setManagementToken(remotePayload.supabasePat);
+          setTokenInput(remotePayload.supabasePat);
+        }
+        if (remotePayload?.cachedCloudinaryMetrics) {
+          setCloudinaryMetrics(remotePayload.cachedCloudinaryMetrics);
+        }
+      }).catch(() => {});
+
+      // 4. Fetch live metrics
       fetchSupabaseUsage();
     }
   }, [isOpen]);
@@ -346,8 +392,11 @@ export default function DatabaseSwitcherModal({
     saveSupabaseManagementToken(cleanToken);
     setManagementToken(cleanToken);
     setTokenSaveSuccess(true);
-    setTimeout(() => setTokenSaveSuccess(false), 3000);
+    setTimeout(() => setTokenSaveSuccess(false), 4000);
     setIsEditingToken(false);
+    
+    // Explicitly persist to cloud database so other devices / browsers get it
+    await persistSystemIntegrationsToCloud({ supabasePat: cleanToken });
     await fetchSupabaseUsage(cleanToken);
   };
 
@@ -356,6 +405,7 @@ export default function DatabaseSwitcherModal({
     setManagementToken('');
     setTokenInput('');
     setIsEditingToken(false);
+    await persistSystemIntegrationsToCloud({ supabasePat: '' });
     await fetchSupabaseUsage('');
   };
 
@@ -450,7 +500,10 @@ export default function DatabaseSwitcherModal({
         <div className="p-4 sm:p-6 space-y-5 max-h-[78vh] overflow-y-auto bg-[#121212]">
           
           {/* Quick Summary Cost & Quota Banner */}
-          <div className="p-4 bg-gradient-to-r from-[#17231c] via-[#141d18] to-[#121714] border border-[#2a4d38] rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div 
+            id="db-quick-cost-banner"
+            className="p-4 bg-gradient-to-r from-[#17231c] via-[#141d18] to-[#121714] border border-[#2a4d38] rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+          >
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-[#3ecf8e]" />
@@ -567,6 +620,81 @@ export default function DatabaseSwitcherModal({
               </div>
             </form>
           )}
+
+          {/* Cloudinary CDN Metrics & Cloud Storage Efficiency Card */}
+          <div 
+            id="db-cloudinary-metrics-card"
+            className="p-4 sm:p-5 bg-gradient-to-r from-[#0d1f2d] via-[#0e1724] to-[#12141c] border border-sky-900/60 rounded-xl space-y-4 animate-in fade-in"
+          >
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                  <Cloud className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-xs font-bold text-white tracking-wide uppercase">
+                      Cloudinary Media CDN &amp; Persistência Multi-Dispositivo
+                    </h3>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded bg-sky-950/80 text-sky-400 border border-sky-800/80">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                      Sincronizado na Nuvem
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    As credenciais PAT e Cloudinary ficam salvas no banco central, ativas em qualquer computador ou navegador.
+                  </p>
+                </div>
+              </div>
+
+              {isCloudinaryActive() ? (
+                <span className="text-[11px] font-bold text-sky-300 bg-sky-950/90 border border-sky-700/60 px-3 py-1 rounded-lg flex items-center gap-1.5 shrink-0 shadow-sm">
+                  <Check className="w-3.5 h-3.5 text-sky-400" />
+                  CDN Ativo ({getCloudinaryConfig().cloudName})
+                </span>
+              ) : (
+                <span className="text-[11px] font-medium text-slate-400 bg-slate-800/70 border border-slate-700 px-3 py-1 rounded-lg shrink-0">
+                  Cloudinary Não Vinculado
+                </span>
+              )}
+            </div>
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+              <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg">
+                <span className="text-[10px] text-slate-400 block font-medium">Fotos no Cloudinary</span>
+                <span className="text-base sm:text-lg font-bold text-sky-400 font-mono">
+                  {cloudinaryMetrics?.totalCloudinaryImages ?? 0} fotos
+                </span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">URLs HTTPS CDN</span>
+              </div>
+
+              <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg">
+                <span className="text-[10px] text-slate-400 block font-medium">Storage Supabase Salvo</span>
+                <span className="text-base sm:text-lg font-bold text-emerald-400 font-mono">
+                  {cloudinaryMetrics?.estimatedStorageSavedFormatted ?? '0 B'}
+                </span>
+                <span className="text-[10px] text-emerald-500/80 block mt-0.5">Economizado no DB</span>
+              </div>
+
+              <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg">
+                <span className="text-[10px] text-slate-400 block font-medium">Egress Supabase Poupado</span>
+                <span className="text-base sm:text-lg font-bold text-emerald-400 font-mono">
+                  {cloudinaryMetrics?.estimatedEgressSavedFormatted ?? '0 B'}
+                </span>
+                <span className="text-[10px] text-emerald-500/80 block mt-0.5">0 bytes no banco</span>
+              </div>
+
+              <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg">
+                <span className="text-[10px] text-slate-400 block font-medium">Sincronização Nuvem</span>
+                <span className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5 mt-0.5">
+                  <ShieldCheck className="w-4 h-4 text-[#3ecf8e]" />
+                  Global
+                </span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">Multi-navegador</span>
+              </div>
+            </div>
+          </div>
 
           {/* Main 2-Column Usage Grid exactly as Supabase Dashboard */}
           <div className="border border-[#262626] rounded-xl overflow-hidden bg-[#141414] divide-y divide-[#262626]">
@@ -722,16 +850,34 @@ export default function DatabaseSwitcherModal({
               <div className="p-5 hover:bg-[#181818] transition-colors">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-[#a0a0a0] flex items-center gap-1.5">
-                    Storage Size (Fotos e Arquivos)
+                    Storage Size (Fotos &amp; Mídias)
                     <ChevronRight className="w-3.5 h-3.5 text-[#666666]" />
                   </span>
                   <span className="text-[11px] text-[#777777] font-mono">
                     Limite: {metrics.storageLimitGb}
                   </span>
                 </div>
-                <div className="mt-2 text-xl sm:text-2xl font-bold text-white tracking-tight">
-                  {metrics.storageSizeGb} / {metrics.storageLimitGb}
+                <div className="mt-2 flex items-baseline justify-between">
+                  <div className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                    {metrics.storageSizeGb} / {metrics.storageLimitGb}
+                  </div>
+                  {isCloudinaryActive() ? (
+                    <span className="text-[10px] text-sky-400 font-semibold bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/60 flex items-center gap-1">
+                      <Cloud className="w-3 h-3" />
+                      Cloudinary CDN Ativo
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 font-medium bg-[#1e1e1e] px-2 py-0.5 rounded border border-[#333333]">
+                      Supabase Storage
+                    </span>
+                  )}
                 </div>
+                {isCloudinaryActive() && (
+                  <p className="text-[11px] text-sky-400/80 mt-1.5 flex items-center gap-1">
+                    <Cloud className="w-3 h-3 shrink-0" />
+                    <span>Uploads redirecionados ao Cloudinary (0 bytes consumidos no banco).</span>
+                  </p>
+                )}
               </div>
 
               {/* Realtime Messages */}
@@ -848,12 +994,13 @@ export default function DatabaseSwitcherModal({
               </h4>
               <p className="text-xs text-[#cccccc] leading-relaxed">
                 O <strong>Egress</strong> mede todo o tráfego de dados baixados do banco de dados e do Storage no ciclo mensal. 
-                O sistema Stocck-RMA aplica as seguintes otimizações obrigatórias para manter o consumo muito abaixo da cota de 5 GB:
+                O sistema Stocck-RMA aplica as seguintes otimizações ativas para manter o consumo muito abaixo da cota de 5 GB:
               </p>
               <ul className="text-xs text-[#a0a0a0] list-disc list-inside space-y-1">
-                <li>Paginação obrigatória em todas as listagens com <code className="text-[#3ecf8e]">.range()</code> ou <code className="text-[#3ecf8e]">.limit()</code>.</li>
-                <li>Conversão prévia no navegador de todas as fotos para o formato ultraleve <strong>.WebP</strong> (teto máximo de 3MB).</li>
-                <li>Consultas com seleção estrita de colunas visíveis.</li>
+                <li><strong className="text-white">Cache &amp; Sync Incremental:</strong> Carregamento local instantâneo (0ms, 0 Egress) com busca diferencial somente de registros modificados via <code className="text-[#3ecf8e]">updated_at</code> e mutações granulares em Realtime.</li>
+                <li><strong className="text-white">Compressão de Texto (LZ-String):</strong> Compressão transparente de notas, laudos e descrições longas antes de persistir no PostgreSQL.</li>
+                <li><strong className="text-white">Paginação Obrigatória:</strong> Consultas com <code className="text-[#3ecf8e]">.range()</code> ou <code className="text-[#3ecf8e]">.limit()</code> em todas as telas de listagem.</li>
+                <li><strong className="text-white">Mídias Otimizadas:</strong> Conversão prévia no navegador de todas as fotos para o formato ultraleve <strong>.WebP</strong> (teto máximo de 3MB).</li>
               </ul>
             </div>
           )}

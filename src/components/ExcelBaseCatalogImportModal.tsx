@@ -11,17 +11,10 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Check, 
-  Package, 
-  Sparkles, 
   Download, 
-  ArrowRight,
   Database,
   Search,
   RefreshCw,
-  Plus,
-  Zap,
-  Tag,
-  Layers,
   HelpCircle
 } from 'lucide-react';
 import { BaseProduct } from '../types';

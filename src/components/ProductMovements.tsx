@@ -5,11 +5,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  TrendingUp, 
   Calendar, 
   Search, 
   Package, 
-  Clock, 
   Boxes,
   ChevronLeft,
   ChevronRight,
@@ -21,12 +19,8 @@ import {
   Upload,
   Edit2,
   Trash2,
-  Layers,
-  Sparkles,
   BarChart3,
   Table as TableIcon,
-  CheckCircle2,
-  ArrowUpDown,
   RotateCcw
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, DailyInflowRecord, isMigrationUnit } from '../types';

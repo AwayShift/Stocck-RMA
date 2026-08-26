@@ -310,6 +310,78 @@ html.light .bg-purple-500\/20 {
   border-color: #e9d5ff !important;
 }
 
+/* ==========================================================================
+   SKU BADGES & IDENTIFIERS (Dark & Light Mode High-Contrast Styling)
+   ========================================================================== */
+
+.product-sku-badge,
+.sku-badge,
+.unit-sku-badge,
+.product-search-sku {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background-color: rgba(12, 74, 110, 0.45);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: all 0.15s ease-in-out;
+}
+
+.product-sku-badge:hover,
+.sku-badge:hover,
+.product-search-sku:hover {
+  border-color: rgba(56, 189, 248, 0.7);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
+}
+
+/* SKU Badges in Light Mode - Crisp, High-Contrast & Modern Identity */
+html.light .product-sku-badge,
+html.light .sku-badge,
+html.light .unit-sku-badge,
+html.light .product-search-sku {
+  background: linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 100%) !important;
+  border: 1px solid #7dd3fc !important;
+  color: #0369a1 !important;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.12) !important;
+  text-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.8);
+}
+
+html.light .product-sku-badge:hover,
+html.light .sku-badge:hover,
+html.light .product-search-sku:hover {
+  background: linear-gradient(180deg, #e0f2fe 0%, #bae6fd 100%) !important;
+  border-color: #38bdf8 !important;
+  color: #0284c7 !important;
+  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.2) !important;
+}
+
+/* Light mode overrides for Sky backgrounds and borders used for SKUs and codes */
+html.light .bg-sky-950,
+html.light .bg-sky-950\/90,
+html.light .bg-sky-950\/80,
+html.light .bg-sky-950\/60,
+html.light .bg-sky-950\/50,
+html.light .bg-sky-950\/40,
+html.light .bg-sky-950\/30,
+html.light .bg-sky-900\/40,
+html.light .bg-sky-900\/30 {
+  background-color: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+}
+
+html.light .border-sky-800,
+html.light .border-sky-800\/80,
+html.light .border-sky-800\/60,
+html.light .border-sky-800\/50,
+html.light .border-sky-800\/40,
+html.light .border-sky-800\/30,
+html.light .border-sky-900,
+html.light .border-sky-700 {
+  border-color: #7dd3fc !important;
+}
+
 /* Card Voltage Badges in Light Mode */
 html.light .bg-sky-950\/85 {
   background-color: #e0f2fe !important;
@@ -528,6 +600,101 @@ html.light #db-switcher-modal .text-\[\#888888\],
 html.light #db-switcher-modal .text-\[\#777777\],
 html.light #db-switcher-modal .text-\[\#666666\] {
   color: #64748b !important;
+}
+
+/* Quick Summary Cost & Quota Banner in Light Mode */
+html.light #db-quick-cost-banner,
+html.light #db-switcher-modal #db-quick-cost-banner {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 50%, #f0fdf4 100%) !important;
+  border: 1px solid #86efac !important;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.08) !important;
+}
+
+html.light #db-quick-cost-banner h3,
+html.light #db-switcher-modal #db-quick-cost-banner h3 {
+  color: #065f46 !important;
+}
+
+html.light #db-quick-cost-banner p,
+html.light #db-switcher-modal #db-quick-cost-banner p {
+  color: #334155 !important;
+}
+
+/* Cloudinary CDN Metrics Banner in Light Mode */
+html.light #db-cloudinary-metrics-card,
+html.light #db-switcher-modal #db-cloudinary-metrics-card {
+  background: linear-gradient(135deg, #f0f9ff 0%, #f8fafc 50%, #f0fdf4 100%) !important;
+  border: 1px solid #7dd3fc !important;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.08) !important;
+}
+
+html.light #db-cloudinary-metrics-card h3,
+html.light #db-switcher-modal #db-cloudinary-metrics-card h3,
+html.light #db-cloudinary-metrics-card .text-white,
+html.light #db-switcher-modal #db-cloudinary-metrics-card .text-white {
+  color: #0c4a6e !important;
+  font-weight: 800 !important;
+}
+
+html.light #db-cloudinary-metrics-card p,
+html.light #db-switcher-modal #db-cloudinary-metrics-card p,
+html.light #db-cloudinary-metrics-card .text-slate-400,
+html.light #db-switcher-modal #db-cloudinary-metrics-card .text-slate-400 {
+  color: #475569 !important;
+}
+
+html.light #db-cloudinary-metrics-card .bg-sky-500\/15 {
+  background-color: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0284c7 !important;
+}
+
+html.light #db-cloudinary-metrics-card .bg-sky-950\/80 {
+  background-color: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0369a1 !important;
+}
+
+html.light #db-cloudinary-metrics-card .bg-sky-950\/90 {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+  color: #047857 !important;
+}
+
+html.light #db-cloudinary-metrics-card .grid > div,
+html.light #db-switcher-modal #db-cloudinary-metrics-card .grid > div {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light #db-cloudinary-metrics-card .grid span.text-slate-400,
+html.light #db-switcher-modal #db-cloudinary-metrics-card .grid span.text-slate-400 {
+  color: #64748b !important;
+  font-weight: 600 !important;
+}
+
+html.light #db-cloudinary-metrics-card .grid span.text-slate-500,
+html.light #db-switcher-modal #db-cloudinary-metrics-card .grid span.text-slate-500 {
+  color: #64748b !important;
+}
+
+html.light #db-cloudinary-metrics-card .grid span.text-sky-400,
+html.light #db-switcher-modal #db-cloudinary-metrics-card .grid span.text-sky-400 {
+  color: #0284c7 !important;
+  font-weight: 800 !important;
+}
+
+html.light #db-cloudinary-metrics-card .grid span.text-emerald-400,
+html.light #db-switcher-modal #db-cloudinary-metrics-card .grid span.text-emerald-400 {
+  color: #047857 !important;
+  font-weight: 800 !important;
+}
+
+html.light #db-cloudinary-metrics-card .grid span.text-emerald-500\/80,
+html.light #db-switcher-modal #db-cloudinary-metrics-card .grid span.text-emerald-500\/80 {
+  color: #059669 !important;
+  font-weight: 600 !important;
 }
 
 /* Quill rich-text editor in Light Mode */
@@ -1049,4 +1216,332 @@ html.light #section-auto-schedule h5 {
 html.light #section-auto-schedule p {
   color: #475569 !important;
 }
+
+/* =========================================================================
+   PENDING ITEMS (ABA PENDÊNCIAS) LIGHT MODE
+   ========================================================================= */
+html.light .pending-card {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .pending-card:hover {
+  border-color: #94a3b8 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+html.light .pending-card-title {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+html.light .pending-sku-badge {
+  background-color: #fef3c7 !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+  font-weight: 800 !important;
+}
+
+html.light .pending-platform-badge {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+
+html.light .pending-voltage-badge {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  font-weight: 800 !important;
+}
+
+html.light .pending-info-box {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .pending-info-box .text-slate-500 {
+  color: #64748b !important;
+}
+
+html.light .pending-info-box .text-slate-300,
+html.light .pending-info-box .text-slate-400 {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+/* Pending Reason Box in Light Mode - High Contrast Amber */
+html.light .pending-reason-banner,
+html.light .bg-amber-500\/10.border-amber-500\/20 {
+  background-color: #fffbeb !important;
+  border-color: #fcd34d !important;
+  box-shadow: 0 1px 2px rgba(217, 119, 6, 0.06) !important;
+}
+
+html.light .pending-reason-header,
+html.light .pending-reason-banner .text-amber-400,
+html.light .bg-amber-500\/10.border-amber-500\/20 .text-amber-400 {
+  color: #92400e !important;
+  font-weight: 900 !important;
+}
+
+html.light .pending-reason-header svg,
+html.light .pending-reason-banner svg {
+  color: #b45309 !important;
+}
+
+html.light .pending-reason-text,
+html.light .pending-reason-banner .text-amber-200\/90,
+html.light .bg-amber-500\/10.border-amber-500\/20 .text-amber-200\/90,
+html.light .bg-amber-500\/10.border-amber-500\/20 p {
+  color: #78350f !important;
+  font-weight: 700 !important;
+}
+
+html.light .pending-reason-banner-resolved {
+  background-color: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+}
+
+html.light .pending-reason-banner-resolved p {
+  color: #166534 !important;
+  font-weight: 600 !important;
+}
+
+html.light .pending-notes-box {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+
+html.light .pending-card-footer {
+  border-top-color: #e2e8f0 !important;
+}
+
+html.light .pending-status-select,
+html.light select.bg-slate-950 {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+html.light .pending-status-select:focus,
+html.light select.bg-slate-950:focus {
+  border-color: #0284c7 !important;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15) !important;
+}
+
+html.light .pending-transfer-btn {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+}
+
+html.light .pending-transfer-btn:hover {
+  background-color: #047857 !important;
+}
+
+/* =========================================================================
+   PRODUCT AUTOCOMPLETE & SEARCH DROPDOWN HOVER (LIGHT MODE)
+   ========================================================================= */
+html.light .product-search-dropdown {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+  divide-color: #f1f5f9 !important;
+}
+
+html.light .product-search-header {
+  background-color: #f8fafc !important;
+  border-bottom-color: #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+html.light .product-search-header .text-slate-300 {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+html.light .product-search-header .text-slate-500 {
+  color: #64748b !important;
+}
+
+html.light .product-search-item {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  transition: background-color 0.15s ease;
+}
+
+html.light .product-search-item:hover,
+html.light .hover\:bg-slate-800\/80:hover {
+  background-color: #f0f9ff !important;
+}
+
+html.light .product-search-item-selected {
+  background-color: #e0f2fe !important;
+}
+
+html.light .product-search-sku {
+  background-color: #e0f2fe !important;
+  border-color: #bae6fd !important;
+  color: #0369a1 !important;
+  font-weight: 800 !important;
+}
+
+html.light .product-search-voltage {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+
+html.light .product-search-freq {
+  background-color: #fef3c7 !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+  font-weight: 800 !important;
+}
+
+html.light .product-search-title {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+html.light .product-search-item:hover .product-search-title {
+  color: #0284c7 !important;
+}
+
+/* Global Light Mode Table and Card Product Row Hover Overrides */
+html.light tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+
+html.light .hover\:bg-slate-800\/40:hover,
+html.light .hover\:bg-slate-800\/30:hover,
+html.light .hover\:bg-slate-800\/50:hover,
+html.light .hover\:bg-slate-900:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* =========================================================================
+   IMAGE VIEWER / ZOOM MODAL (LIGHT MODE)
+   ========================================================================= */
+html.light #modal-image-zoom-viewer,
+html.light .image-zoom-overlay {
+  background-color: rgba(241, 245, 249, 0.94) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+html.light .image-zoom-header {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-bottom-color: #cbd5e1 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light .image-zoom-title {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+html.light .image-zoom-subtitle {
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+html.light .image-zoom-counter {
+  color: #0284c7 !important;
+  font-weight: 800 !important;
+}
+
+html.light .image-zoom-action-btn {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .image-zoom-action-btn:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+}
+
+html.light .image-zoom-close-btn {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .image-zoom-close-btn:hover {
+  background-color: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  color: #b91c1c !important;
+}
+
+html.light .image-zoom-nav-btn {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light .image-zoom-nav-btn:hover {
+  background-color: #ffffff !important;
+  border-color: #94a3b8 !important;
+  color: #0284c7 !important;
+}
+
+html.light .image-zoom-img {
+  border-color: #cbd5e1 !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.15), 0 0 1px 1px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .image-zoom-bottom-bar {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light .image-zoom-ctrl-btn {
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.light .image-zoom-ctrl-btn:hover:not(:disabled) {
+  background-color: #e0f2fe !important;
+  color: #0284c7 !important;
+  border-color: #bae6fd !important;
+}
+
+html.light .image-zoom-scale-btn {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  font-weight: 800 !important;
+}
+
+html.light .image-zoom-scale-btn:hover {
+  background-color: #e2e8f0 !important;
+  color: #0284c7 !important;
+}
+
+html.light .image-zoom-divider {
+  background-color: #cbd5e1 !important;
+}
+
+html.light .image-zoom-reset-btn {
+  background-color: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  color: #b91c1c !important;
+  font-weight: 700 !important;
+}
+
+html.light .image-zoom-reset-btn:hover {
+  background-color: #fecaca !important;
+}
+
 

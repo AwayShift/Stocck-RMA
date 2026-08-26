@@ -18,8 +18,6 @@ import {
   Image as ImageIcon,
   Eye,
   ZoomIn,
-  ZoomOut,
-  RotateCcw,
   FileSpreadsheet,
   Download,
   ChevronDown,
@@ -612,8 +610,11 @@ export default function BaseCatalog({
                   <tbody className="divide-y divide-slate-800 bg-slate-900" id="catalog-table-body">
                     {displayedProducts.map((product) => (
                       <tr key={product.id} className="hover:bg-slate-800/50 transition-colors" id={`product-row-${product.id}`}>
-                        <td className="px-6 py-4 whitespace-nowrap font-mono font-bold text-sky-400">
-                          {product.sku}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="product-sku-badge font-mono text-xs font-extrabold px-2.5 py-1 rounded-md inline-flex items-center gap-1 shadow-sm">
+                            <span className="opacity-60 text-[10px] font-sans font-normal select-none">#</span>
+                            <span>{product.sku}</span>
+                          </span>
                         </td>
                         <td className="px-6 py-4 font-semibold text-white">
                           <div 
@@ -759,8 +760,9 @@ export default function BaseCatalog({
                           <div className="space-y-2">
                             {/* SKU & Brand */}
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-mono text-xs font-bold text-sky-400 bg-sky-950/40 border border-sky-800/40 px-2 py-0.5 rounded-md truncate max-w-[65%]" title={product.sku}>
-                                {product.sku}
+                              <span className="product-sku-badge font-mono text-xs font-extrabold px-2 py-0.5 rounded-md truncate max-w-[65%] inline-flex items-center gap-1" title={`Código SKU: ${product.sku}`}>
+                                <span className="opacity-60 text-[10px] font-sans font-normal select-none">#</span>
+                                <span>{product.sku}</span>
                               </span>
                               {product.brand && (
                                 <span className="text-[10px] font-medium text-slate-400 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-800 truncate max-w-[35%]" title={product.brand}>
@@ -835,7 +837,7 @@ export default function BaseCatalog({
               </div>
             )}
 
-            {/* Pagination / Carregar Mais do Firestore & Exibição */}
+            {/* Pagination / Carregar Mais do Banco de Dados & Exibição */}
             <div className="p-5 bg-slate-950/80 border-t border-slate-800/80 flex flex-col items-center justify-center gap-3 text-center" id="catalog-pagination-footer">
               <div className="flex flex-wrap items-center justify-center gap-2.5">
                 {/* Local visible pagination (if more items in local state) */}
@@ -1479,7 +1481,13 @@ export default function BaseCatalog({
                 </div>
                 <div>
                   <h3 className="font-bold text-white text-base">Ficha Técnica do Produto</h3>
-                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">SKU: <span className="text-sky-400 font-bold">{viewingProduct.sku}</span></p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[11px] text-slate-400 font-medium">Código SKU:</span>
+                    <span className="product-sku-badge font-mono text-xs font-extrabold px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-sm">
+                      <span className="opacity-60 text-[10px] font-sans font-normal select-none">#</span>
+                      <span>{viewingProduct.sku}</span>
+                    </span>
+                  </div>
                 </div>
               </div>
               <button 

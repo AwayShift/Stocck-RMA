@@ -5,6 +5,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { BaseProduct, TriageUnit, DailyInflowRecord, PendingItem, CaseTracking, UserAccount } from '../types';
+import { compressText, decompressText } from './compressionService';
 
 export interface SupabaseConfig {
   url: string;
@@ -14,9 +15,9 @@ export interface SupabaseConfig {
 
 const STORAGE_SUPABASE_CONFIG_KEY = 'stocckrma_supabase_config';
 const STORAGE_SUPABASE_PAT_KEY = 'stocckrma_supabase_pat';
-const STORAGE_DB_PROVIDER_KEY = 'stocckrma_active_db_provider'; // 'firestore' | 'supabase'
+const STORAGE_DB_PROVIDER_KEY = 'stocckrma_active_db_provider';
 
-export type DatabaseProvider = 'firestore' | 'supabase';
+export type DatabaseProvider = 'supabase';
 
 // Default / fallback configurations or environment variables
 export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
@@ -39,8 +40,14 @@ export const getSupabaseManagementToken = (): string => {
 
 export const saveSupabaseManagementToken = (token: string): void => {
   try {
-    localStorage.setItem(STORAGE_SUPABASE_PAT_KEY, token.trim());
-    window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token } }));
+    const clean = token.trim();
+    localStorage.setItem(STORAGE_SUPABASE_PAT_KEY, clean);
+    window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: clean } }));
+
+    // Silently synchronize token to the central cloud database so other devices/browsers receive it
+    import('./integrationsConfigService').then(({ persistSystemIntegrationsToCloud }) => {
+      persistSystemIntegrationsToCloud({ supabasePat: clean }).catch(() => {});
+    }).catch(() => {});
   } catch (err) {
     console.error('Error saving Supabase PAT:', err);
   }
@@ -164,7 +171,7 @@ export const fetchOfficialSupabaseUsage = async (
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     const daysRemaining = Math.max(1, endOfMonth.getDate() - now.getDate());
 
-    return {
+    const usageResult: OfficialSupabaseUsage = {
       isOfficial: true,
       projectRef,
       projectName: projectData?.name || projectRef,
@@ -198,6 +205,14 @@ export const fetchOfficialSupabaseUsage = async (
       estimatedCostUsd: 0.00,
       rawResponse: resultJson
     };
+
+    // Cache metrics remotely in the cloud so other devices have access immediately
+    import('./integrationsConfigService').then(({ persistSystemIntegrationsToCloud, setLocalCachedSupabaseMetrics }) => {
+      setLocalCachedSupabaseMetrics(usageResult);
+      persistSystemIntegrationsToCloud({ cachedSupabaseMetrics: usageResult }).catch(() => {});
+    }).catch(() => {});
+
+    return usageResult;
   } catch (err: any) {
     console.error('Error fetching official Supabase Management API metrics:', err);
     throw err;
@@ -231,14 +246,6 @@ export const saveSupabaseConfig = (config: SupabaseConfig): void => {
 };
 
 export const getActiveDbProvider = (): DatabaseProvider => {
-  try {
-    const saved = localStorage.getItem(STORAGE_DB_PROVIDER_KEY);
-    if (saved === 'supabase' || saved === 'firestore') {
-      return saved as DatabaseProvider;
-    }
-  } catch (err) {
-    console.error('Error reading active DB provider:', err);
-  }
   return 'supabase';
 };
 
@@ -559,19 +566,20 @@ CREATE POLICY "Public storage delete product-images" ON storage.objects FOR DELE
 `;
 
 // Helper conversion functions between StocckRMA App Types and Supabase Postgres Rows
+// Long text fields are transparently compressed/decompressed with LZ-String to save Egress.
 
 export const mapProductToSupabase = (p: BaseProduct) => ({
   id: p.id,
   name: p.name,
   sku: p.sku,
   voltage: p.voltage || 'Bivolt',
-  description: p.description || '',
+  description: compressText(p.description || ''),
   image_url: p.imageUrl || '',
   images: p.images || [],
   images_product: p.imagesProduct || [],
   images_box: p.imagesBox || [],
   images_accessories: p.imagesAccessories || [],
-  accessories: p.accessories || '',
+  accessories: compressText(p.accessories || ''),
   brand: p.brand || '',
   category: p.category || '',
   created_at: p.createdAt || new Date().toISOString(),
@@ -583,13 +591,13 @@ export const mapSupabaseToProduct = (r: any): BaseProduct => ({
   name: r.name,
   sku: r.sku,
   voltage: r.voltage || 'Bivolt',
-  description: r.description || '',
+  description: decompressText(r.description || ''),
   imageUrl: r.image_url || r.imageUrl || '',
   images: r.images || [],
   imagesProduct: r.images_product || r.imagesProduct || [],
   imagesBox: r.images_box || r.imagesBox || [],
   imagesAccessories: r.images_accessories || r.imagesAccessories || [],
-  accessories: r.accessories || '',
+  accessories: decompressText(r.accessories || ''),
   brand: r.brand || '',
   category: r.category || '',
   createdAt: r.created_at || r.createdAt,
@@ -605,12 +613,12 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => ({
   base_product_sku: u.baseProductSku || '',
   base_product_voltage: u.baseProductVoltage || '',
   platform: u.platform,
-  customer_reason: u.customerReason || '',
+  customer_reason: compressText(u.customerReason || ''),
   device_status: u.deviceStatus || '',
   package_status: u.packageStatus || '',
-  accessories_inclusion: u.accessoriesInclusion || '',
+  accessories_inclusion: compressText(u.accessoriesInclusion || ''),
   destination_sector: u.destinationSector || 'RMA',
-  notes: u.notes || '',
+  notes: compressText(u.notes || ''),
   photos_product: u.photosProduct || [],
   photos_box: u.photosBox || [],
   photos_accessories: u.photosAccessories || [],
@@ -631,12 +639,12 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => ({
   baseProductSku: r.base_product_sku || r.baseProductSku || '',
   baseProductVoltage: r.base_product_voltage || r.baseProductVoltage || '',
   platform: r.platform,
-  customerReason: r.customer_reason || r.customerReason || '',
+  customerReason: decompressText(r.customer_reason || r.customerReason || ''),
   deviceStatus: r.device_status || r.deviceStatus || '',
   packageStatus: r.package_status || r.packageStatus || '',
-  accessoriesInclusion: r.accessories_inclusion || r.accessoriesInclusion || '',
+  accessoriesInclusion: decompressText(r.accessories_inclusion || r.accessoriesInclusion || ''),
   destinationSector: r.destination_sector || r.destinationSector || 'RMA',
-  notes: r.notes || '',
+  notes: decompressText(r.notes || ''),
   photosProduct: r.photos_product || r.photosProduct || [],
   photosBox: r.photos_box || r.photosBox || [],
   photosAccessories: r.photos_accessories || r.photosAccessories || [],
@@ -655,7 +663,7 @@ export const mapDailyInflowToSupabase = (d: DailyInflowRecord) => ({
   openbox: d.openbox || 0,
   es: d.es || 0,
   total_dia: d.totalDia || 0,
-  notes: d.notes || '',
+  notes: compressText(d.notes || ''),
   source: d.source || 'manual',
   created_at: d.createdAt || new Date().toISOString(),
   updated_at: d.updatedAt || new Date().toISOString()
@@ -669,7 +677,7 @@ export const mapSupabaseToDailyInflow = (r: any): DailyInflowRecord => ({
   openbox: Number(r.openbox) || 0,
   es: Number(r.es) || 0,
   totalDia: Number(r.total_dia ?? r.totalDia) || 0,
-  notes: r.notes || '',
+  notes: decompressText(r.notes || ''),
   source: r.source || 'manual',
   createdAt: r.created_at || r.createdAt,
   updatedAt: r.updated_at || r.updatedAt
@@ -683,8 +691,8 @@ export const mapPendingItemToSupabase = (p: PendingItem) => ({
   serial_number: p.serialNumber || '',
   tracking_code: p.trackingCode || '',
   platform: p.platform || '',
-  pending_reason: p.pendingReason || '',
-  detailed_notes: p.detailedNotes || '',
+  pending_reason: compressText(p.pendingReason || ''),
+  detailed_notes: compressText(p.detailedNotes || ''),
   status: p.status || 'Pendente',
   photos: p.photos || [],
   created_at: p.createdAt || new Date().toISOString(),
@@ -704,8 +712,8 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => ({
   serialNumber: r.serial_number || r.serialNumber || '',
   trackingCode: r.tracking_code || r.trackingCode || '',
   platform: r.platform || '',
-  pendingReason: r.pending_reason || r.pendingReason || '',
-  detailedNotes: r.detailed_notes || r.detailedNotes || '',
+  pendingReason: decompressText(r.pending_reason || r.pendingReason || ''),
+  detailedNotes: decompressText(r.detailed_notes || r.detailedNotes || ''),
   status: r.status || 'Pendente',
   photos: r.photos || [],
   createdAt: r.created_at || r.createdAt,

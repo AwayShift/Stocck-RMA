@@ -2,16 +2,17 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Supabase Storage & WebP Media Service
+ * Cloudinary & Supabase Storage WebP Media Service
  * 
  * Enforces PRD Directives:
  * 1. Hard upload limit of 3MB per file (client-side validation with friendly alerts).
  * 2. Automatic frontend conversion to `.webp` format using pure Canvas before upload.
- * 3. Isolated Storage: files stored in Supabase Storage buckets, saving only public URLs in DB tables.
+ * 3. Isolated Storage: files stored in Cloudinary CDN / Supabase Storage, saving ONLY the public HTTPS URLs in DB tables.
  */
 
 import { getActiveDbProvider, getSupabaseClient } from './supabase';
 import { validateAndSanitizeImage } from './imageSecurityService';
+import { isCloudinaryActive, uploadToCloudinary } from './cloudinaryService';
 
 export const MAX_IMAGE_UPLOAD_SIZE_BYTES = 3 * 1024 * 1024; // Exactly 3MB
 export const DEFAULT_STORAGE_BUCKET = 'product-images';
@@ -32,10 +33,12 @@ export const dataUrlToBlob = (dataUrl: string): Blob => {
 };
 
 /**
- * Prepares and validates an image file on the client:
+ * Prepares, sanitizes, and uploads an image:
  * 1. Checks 3MB ceiling.
  * 2. Sanitizes and converts to pristine .webp via Canvas.
- * 3. Uploads to Supabase Storage if active, or returns sanitized WebP data URL.
+ * 3. Uploads to Cloudinary (Primary Storage & CDN) returning high-speed secure_url.
+ * 4. If Cloudinary is not configured, uploads to Supabase Storage if active.
+ * 5. Fallback to sanitized WebP data URL.
  */
 export const uploadImageToCloudStorage = async (
   file: File | Blob,
@@ -80,7 +83,24 @@ export const uploadImageToCloudStorage = async (
     throw new Error('A imagem otimizada em WebP ainda excede o teto de 3 MB. Reduza as dimensões da foto.');
   }
 
-  // 3. Upload to Supabase Storage if active
+  // 3. Primary: Upload to Cloudinary if configured
+  if (isCloudinaryActive()) {
+    try {
+      const cloudinaryFolder = `stocck_rma/${folder.replace(/^stocck_rma\//, '')}`;
+      const uploadRes = await uploadToCloudinary(sanitized.sanitizedBase64, cloudinaryFolder);
+      if (uploadRes && uploadRes.url) {
+        return uploadRes.url;
+      }
+    } catch (cloudinaryErr: any) {
+      console.warn('Cloudinary upload attempt failed, falling back:', cloudinaryErr?.message);
+      // If user configured Cloudinary but it failed with an explicit error, let them know or fallback
+      if (cloudinaryErr?.message && (cloudinaryErr.message.includes('Preset') || cloudinaryErr.message.includes('Cloud Name'))) {
+        throw cloudinaryErr;
+      }
+    }
+  }
+
+  // 4. Secondary: Upload to Supabase Storage if active
   if (getActiveDbProvider() === 'supabase') {
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -112,6 +132,7 @@ export const uploadImageToCloudStorage = async (
     }
   }
 
-  // Fallback to high-efficiency WebP Data URL
+  // 5. Fallback to high-efficiency WebP Data URL
   return sanitized.sanitizedBase64;
 };
+
