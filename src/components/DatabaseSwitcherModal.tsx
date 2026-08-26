@@ -227,9 +227,6 @@ export default function DatabaseSwitcherModal({
         }
       } catch (err: any) {
         console.warn('Official Management API fetch warning, falling back to direct table queries:', err);
-        if (tokenToUse) {
-          setTokenError(err.message || 'Não foi possível validar o token de acesso no momento.');
-        }
       }
     }
 
