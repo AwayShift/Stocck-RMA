@@ -43,11 +43,6 @@ export const saveSupabaseManagementToken = (token: string): void => {
     const clean = token.trim();
     localStorage.setItem(STORAGE_SUPABASE_PAT_KEY, clean);
     window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: clean } }));
-
-    // Silently synchronize token to the central cloud database so other devices/browsers receive it
-    import('./integrationsConfigService').then(({ persistSystemIntegrationsToCloud }) => {
-      persistSystemIntegrationsToCloud({ supabasePat: clean }).catch(() => {});
-    }).catch(() => {});
   } catch (err) {
     console.error('Error saving Supabase PAT:', err);
   }

@@ -62,11 +62,6 @@ export const saveCloudinaryConfig = (config: Partial<CloudinaryConfig>): Cloudin
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     window.dispatchEvent(new CustomEvent('stocck:cloudinary_config_changed', { detail: updated }));
-
-    // Silently synchronize Cloudinary config to the central cloud database
-    import('./integrationsConfigService').then(({ persistSystemIntegrationsToCloud }) => {
-      persistSystemIntegrationsToCloud({ cloudinaryConfig: updated }).catch(() => {});
-    }).catch(() => {});
   } catch (e) {
     console.error('Failed to save Cloudinary configuration:', e);
   }

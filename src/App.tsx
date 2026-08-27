@@ -291,7 +291,8 @@ export default function App() {
 
   // Initialize Cross-Device System Integrations & Metrics Sync (Supabase PAT, Cloudinary, Saved Metrics)
   useEffect(() => {
-    initSystemIntegrationsSync(user?.email).catch((err) => {
+    if (!user?.email) return;
+    initSystemIntegrationsSync(user.email).catch((err) => {
       console.warn('System integrations background sync note:', err);
     });
   }, [user?.email]);
