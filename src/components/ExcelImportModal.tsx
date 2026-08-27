@@ -598,7 +598,7 @@ export default function ExcelImportModal({
             <div className="space-y-5">
               
               {/* Default Configurations */}
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-850">
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
                     Setor Padrão de Destino
@@ -664,7 +664,7 @@ export default function ExcelImportModal({
               </div>
 
               {/* Download Sample Template Banner */}
-              <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-950 rounded-xl border border-slate-850 gap-3">
+              <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-950 rounded-xl border border-slate-800 gap-3">
                 <div className="flex items-center gap-3">
                   <FileText className="w-5 h-5 text-sky-400 shrink-0" />
                   <div className="text-xs">

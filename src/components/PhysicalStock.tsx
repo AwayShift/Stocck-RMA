@@ -43,7 +43,7 @@ import ExcelImportModal from './ExcelImportModal';
 import { ImageZoomModal } from './ImageZoomModal';
 import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct } from '../utils/productImages';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
-import { uploadFileToStorage } from '../lib/dbService';
+import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 
 interface PhysicalStockProps {
   units: TriageUnit[];
@@ -55,6 +55,8 @@ interface PhysicalStockProps {
   onClearSelectedUnit?: () => void;
   onSaveTriage?: (unit: TriageUnit) => Promise<void>;
   enableSpreadsheetImport?: boolean;
+  enableSpreadsheetExport?: boolean;
+  isLight?: boolean;
 }
 
 export default function PhysicalStock({ 
@@ -66,7 +68,9 @@ export default function PhysicalStock({
   initialSelectedUnit,
   onClearSelectedUnit,
   onSaveTriage,
-  enableSpreadsheetImport = true
+  enableSpreadsheetImport = true,
+  enableSpreadsheetExport = true,
+  isLight = false
 }: PhysicalStockProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('Todas');
@@ -291,15 +295,25 @@ export default function PhysicalStock({
         const text = await navigator.clipboard.readText();
         if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('data:image/'))) {
           if (!editForm) return;
-          const existing = editForm[targetCategory] || [];
-          setEditForm({
-            ...editForm,
-            [targetCategory]: [...existing, text.trim()]
-          });
-          const catLabel = targetCategory === 'photosProduct' ? 'Aparelho' : targetCategory === 'photosBox' ? 'Embalagem' : 'Acessórios';
-          setActionSuccess(`Link de imagem colado para Fotos do ${catLabel}!`);
-          setTimeout(() => setActionSuccess(null), 3000);
-          return;
+          setIsSanitizingUrl(true);
+          try {
+            const uploadedUrl = await uploadImageUrlToStorage(text.trim(), `stock_${targetCategory}`);
+            const existing = editForm[targetCategory] || [];
+            setEditForm({
+              ...editForm,
+              [targetCategory]: [...existing, uploadedUrl]
+            });
+            const catLabel = targetCategory === 'photosProduct' ? 'Aparelho' : targetCategory === 'photosBox' ? 'Embalagem' : 'Acessórios';
+            setActionSuccess(`Link de imagem colado e enviado ao Cloudinary para Fotos do ${catLabel}!`);
+            setTimeout(() => setActionSuccess(null), 3000);
+            return;
+          } catch (urlErr: any) {
+            setActionError(urlErr?.message || 'Erro ao enviar imagem colada ao Cloudinary.');
+            setTimeout(() => setActionError(null), 3500);
+            return;
+          } finally {
+            setIsSanitizingUrl(false);
+          }
         }
       }
 
@@ -385,18 +399,18 @@ export default function PhysicalStock({
     setActionError(null);
 
     try {
-      const sanitizedUrlOrBase64 = await processSafeImageUrl(url, 1200, 1000, 0.75);
+      const uploadedUrl = await uploadImageUrlToStorage(url, `stock_${category}`);
       const existing = editForm[category] || [];
       setEditForm({
         ...editForm,
-        [category]: [...existing, sanitizedUrlOrBase64]
+        [category]: [...existing, uploadedUrl]
       });
       setImageUrlInput('');
       const catLabel = category === 'photosProduct' ? 'Aparelho' : category === 'photosBox' ? 'Embalagem' : 'Acessórios';
-      setActionSuccess(`Foto via link desinfectada e adicionada para Fotos do ${catLabel}!`);
+      setActionSuccess(`Foto via link enviada e hospedada no Cloudinary para Fotos do ${catLabel}!`);
       setTimeout(() => setActionSuccess(null), 3000);
     } catch (err: any) {
-      setActionError(err?.message || 'Erro ao validar imagem por link.');
+      setActionError(err?.message || 'Erro ao validar e enviar imagem por link ao Cloudinary.');
       setTimeout(() => setActionError(null), 4000);
     } finally {
       setIsSanitizingUrl(false);
@@ -566,6 +580,7 @@ export default function PhysicalStock({
       brandName.includes(term) ||
       categoryName.includes(term) ||
       (unit.trackingCode || '').toLowerCase().includes(term) ||
+      (unit.orderNumber || '').toLowerCase().includes(term) ||
       (unit.serialNumber || '').toLowerCase().includes(term) ||
       (unit.destinationSector !== 'Openbox' && (unit.platform || '').toLowerCase().includes(term)) ||
       (unit.customerReason || '').toLowerCase().includes(term) ||
@@ -694,6 +709,7 @@ export default function PhysicalStock({
         return {
           'SKU': unit.baseProductSku || '',
           'STI': unit.trackingCode || '',
+          'Nº do Pedido': unit.orderNumber || '',
           'Descrição do produto': unit.baseProductName || '',
           'Embalagem': packaging,
           'Observações': obs,
@@ -708,6 +724,7 @@ export default function PhysicalStock({
       worksheet['!cols'] = [
         { wch: 16 }, // SKU
         { wch: 18 }, // STI
+        { wch: 22 }, // Nº do Pedido
         { wch: 48 }, // Descrição do produto
         { wch: 16 }, // Embalagem
         { wch: 38 }, // Observações
@@ -965,15 +982,17 @@ export default function PhysicalStock({
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            onClick={() => handleExportExcel()}
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-200 font-bold rounded-xl text-xs transition-all border border-slate-700 hover:border-slate-600 flex items-center gap-2 cursor-pointer shrink-0 shadow-sm"
-            id="btn-export-stock-excel"
-            title="Exportar produtos do estoque físico atual para planilha Excel (.xlsx)"
-          >
-            <Download className="w-4 h-4 text-sky-400" />
-            <span>Exportar Planilha Excel ({filteredUnits.length})</span>
-          </button>
+          {enableSpreadsheetExport && (
+            <button
+              onClick={() => handleExportExcel()}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-200 font-bold rounded-xl text-xs transition-all border border-slate-700 hover:border-slate-600 flex items-center gap-2 cursor-pointer shrink-0 shadow-sm"
+              id="btn-export-stock-excel"
+              title="Exportar produtos do estoque físico atual para planilha Excel (.xlsx)"
+            >
+              <Download className="w-4 h-4 text-sky-400" />
+              <span>Exportar Planilha Excel ({filteredUnits.length})</span>
+            </button>
+          )}
 
           {enableSpreadsheetImport && (
             <button
@@ -1098,19 +1117,21 @@ export default function PhysicalStock({
             <div className="flex items-center gap-2.5 justify-between xl:justify-end flex-wrap">
               {selectedUnitIds.length > 0 && (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const selectedUnits = units.filter(u => selectedUnitIds.includes(u.id));
-                      handleExportExcel(selectedUnits);
-                    }}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-sky-300 hover:text-white font-bold rounded-xl text-xs transition-all border border-slate-700 hover:border-sky-500/50 flex items-center gap-1.5 cursor-pointer shadow-sm animate-in fade-in"
-                    id="btn-export-selected"
-                    title="Exportar apenas as unidades selecionadas para planilha Excel"
-                  >
-                    <Download className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Exportar ({selectedUnitIds.length})</span>
-                  </button>
+                  {enableSpreadsheetExport && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selectedUnits = units.filter(u => selectedUnitIds.includes(u.id));
+                        handleExportExcel(selectedUnits);
+                      }}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-sky-300 hover:text-white font-bold rounded-xl text-xs transition-all border border-slate-700 hover:border-sky-500/50 flex items-center gap-1.5 cursor-pointer shadow-sm animate-in fade-in"
+                      id="btn-export-selected"
+                      title="Exportar apenas as unidades selecionadas para planilha Excel"
+                    >
+                      <Download className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Exportar ({selectedUnitIds.length})</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={handleBatchCheckout}
@@ -1255,7 +1276,7 @@ export default function PhysicalStock({
           </div>
 
           {/* Active Filter Badges & Results Counter Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-850 text-xs text-slate-400" id="stock-filter-summary">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800 text-xs text-slate-400" id="stock-filter-summary">
             <div className="flex items-center gap-2 flex-wrap">
               <Filter className="w-3.5 h-3.5 text-sky-400 shrink-0" />
               <span>
@@ -1774,32 +1795,44 @@ export default function PhysicalStock({
           <div className="w-full max-w-5xl bg-slate-900 border border-slate-800/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-4 sm:my-8 animate-in fade-in zoom-in-95 duration-200">
             
             {/* Modal Header */}
-            <div className="px-6 py-4 bg-slate-950/90 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className={`px-6 py-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+              isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/90 border-slate-800'
+            }`}>
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs font-black text-sky-400 bg-sky-500/15 border border-sky-500/30 px-2.5 py-0.5 rounded-md flex items-center gap-1.5" title="Código SKU">
-                    <span className="text-[10px] text-sky-300/70 font-sans font-bold">SKU</span>
+                  <span className={`font-mono text-xs font-black px-2.5 py-0.5 rounded-md flex items-center gap-1.5 border ${
+                    isLight 
+                      ? 'bg-sky-50 border-sky-200 text-sky-700' 
+                      : 'text-sky-400 bg-sky-500/15 border-sky-500/30'
+                  }`} title="Código SKU">
+                    <span className={`text-[10px] font-sans font-bold ${isLight ? 'text-sky-600' : 'text-sky-300/70'}`}>SKU</span>
                     {isEditingUnit && editForm ? editForm.baseProductSku : currentUnit.baseProductSku}
                   </span>
 
                   <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md border ${
                     (isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector) === 'Principal'
-                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      ? (isLight ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30')
                       : (isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector) === 'Openbox'
-                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                      : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                      ? (isLight ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-amber-500/15 text-amber-300 border-amber-500/30')
+                      : (isLight ? 'bg-rose-50 text-rose-800 border-rose-300' : 'bg-rose-500/15 text-rose-300 border-rose-500/30')
                   }`}>
                     Setor: {isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector}
                   </span>
 
                   {isEditingUnit && (
-                    <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black rounded-md uppercase tracking-wider">
+                    <span className={`px-2 py-0.5 text-[10px] font-black rounded-md uppercase tracking-wider border ${
+                      isLight 
+                        ? 'bg-amber-100 text-amber-900 border-amber-300' 
+                        : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    }`}>
                       Modo Edição
                     </span>
                   )}
                 </div>
 
-                <h3 className="text-lg sm:text-xl font-black text-white tracking-tight pt-0.5">
+                <h3 className={`text-lg sm:text-xl font-black tracking-tight pt-0.5 ${
+                  isLight ? 'text-slate-900' : 'text-white'
+                }`}>
                   {isEditingUnit && editForm ? editForm.baseProductName : currentUnit.baseProductName}
                 </h3>
               </div>
@@ -1810,7 +1843,11 @@ export default function PhysicalStock({
                     <button 
                       type="button"
                       onClick={() => { setIsEditingUnit(false); setEditForm(null); }}
-                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
+                        isLight
+                          ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-sm'
+                          : 'bg-slate-800 hover:bg-slate-750 text-slate-300 border-slate-700'
+                      }`}
                     >
                       Cancelar
                     </button>
@@ -1838,7 +1875,11 @@ export default function PhysicalStock({
                     <button 
                       type="button"
                       onClick={handleCloseDetails}
-                      className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800 transition-colors cursor-pointer"
+                      className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                        isLight 
+                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border-slate-300'
+                          : 'bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border-slate-800'
+                      }`}
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -1850,10 +1891,18 @@ export default function PhysicalStock({
             {/* Modal Body: Switch between View Mode and Edit Mode */}
             {isEditingUnit && editForm ? (
               /* EDIT MODE CONTENT */
-              <div className="p-6 sm:p-8 space-y-6 overflow-y-auto max-h-[75vh]">
-                <div className="p-3.5 bg-sky-950/60 border border-sky-500/30 rounded-xl text-sky-200 text-xs flex items-center gap-2">
-                  <Pencil className="w-4 h-4 text-sky-400 shrink-0" />
-                  <span>Modo de edição do produto. Altere imagens, descrição, nome, SKU e especificações do item.</span>
+              <div className={`p-6 sm:p-8 space-y-6 overflow-y-auto max-h-[75vh] ${
+                isLight ? 'bg-white' : ''
+              }`}>
+                <div className={`p-3.5 rounded-xl text-xs flex items-center gap-2.5 border ${
+                  isLight
+                    ? 'bg-sky-50 border-sky-200 text-sky-900 shadow-sm'
+                    : 'bg-sky-950/60 border-sky-500/30 text-sky-200'
+                }`}>
+                  <Pencil className={`w-4 h-4 shrink-0 ${isLight ? 'text-sky-600' : 'text-sky-400'}`} />
+                  <span className={isLight ? 'text-sky-950 font-medium' : 'text-sky-200'}>
+                    Modo de edição do produto. Altere imagens, descrição, nome, SKU e especificações do item.
+                  </span>
                 </div>
 
                 {/* Section 1: Main Info */}
@@ -1941,7 +1990,21 @@ export default function PhysicalStock({
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        <span>Número de Pedido</span>
+                        <span className="text-slate-500 font-normal ml-1">(Opcional)</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        value={editForm.orderNumber || ''} 
+                        onChange={(e) => setEditForm({ ...editForm, orderNumber: e.target.value })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
+                        placeholder="Ex: 2000008172648"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-3">
                       <label className="block text-[11px] font-bold text-slate-300 mb-1">
                         Setor de Destino
                       </label>
@@ -2719,13 +2782,27 @@ export default function PhysicalStock({
 
                 {/* Secondary metadata: Origin & Dates */}
                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-950/60 p-3.5 px-4 rounded-xl border border-slate-800/60">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     {currentUnit.destinationSector !== 'Openbox' && (
                       <div className="flex items-center gap-2">
                         <span className="text-slate-400 font-semibold text-[11px]">Canal:</span>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}>
                           {currentUnit.platform}
                         </span>
+                      </div>
+                    )}
+                    {currentUnit.orderNumber && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400 font-semibold text-[11px]">Nº Pedido:</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCode(currentUnit.orderNumber || '', 'order', e)}
+                          className="font-mono text-[11px] font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 rounded transition-colors cursor-pointer group flex items-center gap-1"
+                          title="Clique para copiar Número do Pedido"
+                        >
+                          <span>{currentUnit.orderNumber}</span>
+                          <Copy className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                        </button>
                       </div>
                     )}
                     <div className="flex items-center gap-1.5 text-slate-400">
@@ -2939,16 +3016,18 @@ export default function PhysicalStock({
                   </button>
                 ) : (
                   <>
-                    <button 
-                      type="button"
-                      onClick={() => handleExportExcel([currentUnit])}
-                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                      title="Exportar este produto para planilha Excel (.xlsx)"
-                      id="btn-modal-export-unit"
-                    >
-                      <Download className="w-3.5 h-3.5 text-sky-400" />
-                      <span>Exportar Excel</span>
-                    </button>
+                    {enableSpreadsheetExport && (
+                      <button 
+                        type="button"
+                        onClick={() => handleExportExcel([currentUnit])}
+                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        title="Exportar este produto para planilha Excel (.xlsx)"
+                        id="btn-modal-export-unit"
+                      >
+                        <Download className="w-3.5 h-3.5 text-sky-400" />
+                        <span>Exportar Excel</span>
+                      </button>
+                    )}
 
                     <button 
                       onClick={() => handleDelete(currentUnit.id)}

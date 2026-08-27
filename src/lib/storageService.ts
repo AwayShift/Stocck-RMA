@@ -11,7 +11,7 @@
  */
 
 import { getActiveDbProvider, getSupabaseClient } from './supabase';
-import { validateAndSanitizeImage } from './imageSecurityService';
+import { validateAndSanitizeImage, processSafeImageUrl } from './imageSecurityService';
 import { isCloudinaryActive, uploadToCloudinary } from './cloudinaryService';
 
 export const MAX_IMAGE_UPLOAD_SIZE_BYTES = 3 * 1024 * 1024; // Exactly 3MB
@@ -134,5 +134,116 @@ export const uploadImageToCloudStorage = async (
 
   // 5. Fallback to high-efficiency WebP Data URL
   return sanitized.sanitizedBase64;
+};
+
+/**
+ * Sanitizes and uploads an image URL to Cloudinary (Primary Storage & CDN)
+ * or Supabase Storage, ensuring the database only ever stores permanent CDN/storage URLs.
+ * 
+ * 1. Checks URL protocol, domain, and dangerous script extensions.
+ * 2. If Cloudinary is configured:
+ *    - First attempts canvas sanitization to WebP base64 -> uploads to Cloudinary.
+ *    - If canvas sanitization hit browser CORS on a third-party host, passes the remote URL
+ *      directly to Cloudinary's unsigned upload endpoint (which fetches and converts it server-side).
+ *    - Returns the Cloudinary permanent secure_url CDN link.
+ * 3. If Cloudinary is not configured and Supabase Storage is active:
+ *    - Sanitizes via canvas, converts to WebP Blob, uploads to Supabase Storage bucket, returns public URL.
+ * 4. Fallback: returns sanitized WebP base64 or safe URL.
+ */
+export const uploadImageUrlToCloudStorage = async (
+  rawUrl: string,
+  folder: string = 'catalog',
+  options: {
+    bucketName?: string;
+    maxWidth?: number;
+    maxHeight?: number;
+    quality?: number;
+  } = {}
+): Promise<string> => {
+  const {
+    bucketName = DEFAULT_STORAGE_BUCKET,
+    maxWidth = 1600,
+    maxHeight = 1600,
+    quality = 0.82
+  } = options;
+
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed) {
+    throw new Error('Informe uma URL de imagem válida.');
+  }
+
+  // If already hosted on Cloudinary
+  if (trimmed.includes('res.cloudinary.com')) {
+    return trimmed;
+  }
+
+  const cloudinaryFolder = `stocck_rma/${folder.replace(/^stocck_rma\//, '')}`;
+
+  // 1. First attempt to sanitize and convert via Canvas to pure WebP
+  let sanitizedBase64OrUrl: string | null = null;
+  try {
+    sanitizedBase64OrUrl = await processSafeImageUrl(trimmed, maxWidth, maxHeight, quality, 'image/webp');
+  } catch (err: any) {
+    console.warn('Canvas sanitization failed or blocked by CORS:', err?.message);
+  }
+
+  // 2. Primary: Upload to Cloudinary if active
+  if (isCloudinaryActive()) {
+    try {
+      if (sanitizedBase64OrUrl && sanitizedBase64OrUrl.startsWith('data:image/')) {
+        const uploadRes = await uploadToCloudinary(sanitizedBase64OrUrl, cloudinaryFolder);
+        if (uploadRes && uploadRes.url) {
+          return uploadRes.url;
+        }
+      } else {
+        // If canvas was blocked by browser CORS, Cloudinary API fetches remote HTTP/HTTPS directly!
+        const uploadRes = await uploadToCloudinary(trimmed, cloudinaryFolder);
+        if (uploadRes && uploadRes.url) {
+          return uploadRes.url;
+        }
+      }
+    } catch (cloudinaryErr: any) {
+      console.warn('Cloudinary upload from URL failed, attempting fallbacks:', cloudinaryErr?.message);
+      if (cloudinaryErr?.message && (cloudinaryErr.message.includes('Preset') || cloudinaryErr.message.includes('Cloud Name'))) {
+        throw cloudinaryErr;
+      }
+    }
+  }
+
+  // 3. Secondary: Upload to Supabase Storage if active
+  if (getActiveDbProvider() === 'supabase' && sanitizedBase64OrUrl && sanitizedBase64OrUrl.startsWith('data:image/')) {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const webpBlob = dataUrlToBlob(sanitizedBase64OrUrl);
+        const timestamp = Date.now();
+        const randomId = Math.random().toString(36).substring(2, 9);
+        const filename = `${folder}/${timestamp}_${randomId}.webp`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(bucketName)
+          .upload(filename, webpBlob, {
+            contentType: 'image/webp',
+            cacheControl: '31536000',
+            upsert: true
+          });
+
+        if (!uploadError && uploadData) {
+          const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(filename);
+          if (urlData && urlData.publicUrl) {
+            return urlData.publicUrl;
+          }
+        }
+      } catch (storageErr) {
+        console.warn('Supabase Storage upload error from URL:', storageErr);
+      }
+    }
+  }
+
+  if (sanitizedBase64OrUrl) {
+    return sanitizedBase64OrUrl;
+  }
+
+  return trimmed;
 };
 

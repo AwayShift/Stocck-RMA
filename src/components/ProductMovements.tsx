@@ -11,6 +11,7 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Filter,
   X,
   FileSpreadsheet,
@@ -44,6 +45,8 @@ interface ProductMovementsProps {
   onSaveTriage: (unit: TriageUnit) => Promise<void>;
   userRole: 'admin' | 'operator' | null;
   enableSpreadsheetImport?: boolean;
+  enableSpreadsheetExport?: boolean;
+  isLight?: boolean;
 }
 
 export default function ProductMovements({ 
@@ -55,7 +58,9 @@ export default function ProductMovements({
   onDeleteDailyInflow,
   onSaveTriage, 
   userRole,
-  enableSpreadsheetImport = true 
+  enableSpreadsheetImport = true,
+  enableSpreadsheetExport = true,
+  isLight = false
 }: ProductMovementsProps) {
   // Navigation & View mode
   const [activeView, setActiveView] = useState<'spreadsheet' | 'visual'>('spreadsheet');
@@ -479,9 +484,10 @@ export default function ProductMovements({
         const matchesName = u.baseProductName?.toLowerCase().includes(query);
         const matchesTracking = u.trackingCode?.toLowerCase().includes(query);
         const matchesSerial = u.serialNumber?.toLowerCase().includes(query);
+        const matchesOrder = u.orderNumber?.toLowerCase().includes(query);
         const matchesPlatform = u.platform?.toLowerCase().includes(query);
         const matchesSector = u.destinationSector?.toLowerCase().includes(query);
-        return matchesSku || matchesName || matchesTracking || matchesSerial || matchesPlatform || matchesSector;
+        return matchesSku || matchesName || matchesTracking || matchesSerial || matchesOrder || matchesPlatform || matchesSector;
       }
 
       return true;
@@ -568,14 +574,20 @@ export default function ProductMovements({
     <div className="space-y-6" id="product-movements-tab">
       
       {/* Top Header Card with Title and Actions */}
-      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 bg-slate-900/50 p-6 rounded-2xl border border-slate-800/60 shadow-md">
+      <div className={`flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 p-6 rounded-2xl border transition-colors ${
+        isLight
+          ? 'bg-white border-slate-200 shadow-sm'
+          : 'bg-slate-900/50 border-slate-800/60 shadow-md'
+      }`}>
         <div>
-          <div className="flex items-center gap-2 text-sky-400 font-bold text-xs uppercase tracking-wider mb-1">
+          <div className="flex items-center gap-2 text-sky-500 font-bold text-xs uppercase tracking-wider mb-1">
             <Boxes className="w-4 h-4" />
             Fluxo de Entradas
           </div>
-          <h2 className="text-xl font-black text-white">Fluxo de Entradas & Importação Excel</h2>
-          <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+          <h2 className={`text-xl font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+            Fluxo de Entradas & Importação Excel
+          </h2>
+          <p className={`text-xs mt-1 max-w-2xl leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
             Consolide o banco de dados de entradas com importação de planilhas Excel, lançamentos manuais por dia e totalização semanal automatizada.
           </p>
         </div>
@@ -583,39 +595,56 @@ export default function ProductMovements({
         {/* Toolbar & Actions */}
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Month Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+          <div className={`flex items-center gap-1 p-1.5 rounded-xl border transition-colors ${
+            isLight
+              ? 'bg-slate-100 border-slate-300 shadow-sm'
+              : 'bg-slate-950/80 border-slate-800 shadow-inner'
+          }`}>
             <button
               onClick={handlePrevMonth}
               disabled={isOldestMonth}
               className={`p-1.5 rounded-lg transition-colors ${
                 isOldestMonth
-                  ? 'text-slate-600 cursor-not-allowed opacity-30'
-                  : 'hover:bg-slate-900 text-slate-400 hover:text-white cursor-pointer'
+                  ? (isLight ? 'text-slate-300 cursor-not-allowed opacity-30' : 'text-slate-600 cursor-not-allowed opacity-30')
+                  : (isLight ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900 cursor-pointer' : 'hover:bg-slate-900 text-slate-400 hover:text-white cursor-pointer')
               }`}
               title={isOldestMonth ? "Mês mais antigo disponível" : "Mês Anterior"}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-transparent text-xs font-black text-white border-0 focus:ring-0 focus:outline-none cursor-pointer px-2 text-center"
-            >
-              {availableMonths.map((m) => (
-                <option key={m} value={m} className="bg-slate-950 text-slate-200 font-bold">
-                  {formatMonthOptionName(m)}
-                </option>
-              ))}
-            </select>
+            <div className="relative inline-flex items-center">
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className={`appearance-none bg-transparent text-xs font-black border-0 focus:ring-0 focus:outline-none cursor-pointer pl-2.5 pr-6 py-1 rounded-lg transition-colors text-center ${
+                  isLight
+                    ? 'text-slate-800 hover:text-sky-600 hover:bg-slate-200/70'
+                    : 'text-white hover:text-sky-300 hover:bg-slate-900/60'
+                }`}
+              >
+                {availableMonths.map((m) => (
+                  <option
+                    key={m}
+                    value={m}
+                    className={`font-bold py-1 ${isLight ? 'bg-white text-slate-900' : 'bg-slate-900 text-slate-100'}`}
+                  >
+                    {formatMonthOptionName(m)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className={`w-3.5 h-3.5 pointer-events-none absolute right-1.5 transition-colors ${
+                isLight ? 'text-slate-500' : 'text-slate-400'
+              }`} />
+            </div>
 
             <button
               onClick={handleNextMonth}
               disabled={isLatestMonth}
               className={`p-1.5 rounded-lg transition-colors ${
                 isLatestMonth
-                  ? 'text-slate-600 cursor-not-allowed opacity-30'
-                  : 'hover:bg-slate-900 text-slate-400 hover:text-white cursor-pointer'
+                  ? (isLight ? 'text-slate-300 cursor-not-allowed opacity-30' : 'text-slate-600 cursor-not-allowed opacity-30')
+                  : (isLight ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900 cursor-pointer' : 'hover:bg-slate-900 text-slate-400 hover:text-white cursor-pointer')
               }`}
               title={isLatestMonth ? "Mês mais recente disponível" : "Próximo Mês"}
             >
@@ -645,14 +674,16 @@ export default function ProductMovements({
           )}
 
           {/* Action: Export Excel */}
-          <button
-            onClick={() => exportInflowRecordsToExcel(monthDailyInflows.length > 0 ? monthDailyInflows : dailyInflows, `fluxo_entradas_${selectedMonth}.xlsx`)}
-            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Exportar dados para Excel (.xlsx)"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Exportar</span>
-          </button>
+          {enableSpreadsheetExport && (
+            <button
+              onClick={() => exportInflowRecordsToExcel(monthDailyInflows.length > 0 ? monthDailyInflows : dailyInflows, `fluxo_entradas_${selectedMonth}.xlsx`)}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Exportar dados para Excel (.xlsx)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Exportar</span>
+            </button>
+          )}
 
           {/* Action: Download Template */}
           <button
@@ -954,12 +985,14 @@ export default function ProductMovements({
                       <td className="py-4 px-4 text-center font-mono text-emerald-400 text-base bg-slate-900">{monthTotals.totalGeral}</td>
                       <td className="py-4 px-4 text-center font-mono text-sky-400 text-base bg-blue-950/40">{monthTotals.totalGeral}</td>
                       <td className="py-4 px-4 text-right">
-                        <button
-                          onClick={() => exportInflowRecordsToExcel(monthDailyInflows, `fluxo_entradas_${selectedMonth}.xlsx`)}
-                          className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded border border-slate-700"
-                        >
-                          Exportar
-                        </button>
+                        {enableSpreadsheetExport && (
+                          <button
+                            onClick={() => exportInflowRecordsToExcel(monthDailyInflows, `fluxo_entradas_${selectedMonth}.xlsx`)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded border border-slate-700"
+                          >
+                            Exportar
+                          </button>
+                        )}
                       </td>
                     </tr>
                   </tbody>

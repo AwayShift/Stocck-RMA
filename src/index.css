@@ -236,31 +236,45 @@ html.light .shadow-lg {
 }
 
 /* Accents & Status text contrast in Light Mode */
+html.light .text-sky-100,
+html.light .text-sky-200,
 html.light .text-sky-300,
 html.light .text-sky-400 {
   color: #0369a1 !important;
 }
 
+html.light .text-emerald-100,
+html.light .text-emerald-200,
 html.light .text-emerald-300,
 html.light .text-emerald-400 {
   color: #047857 !important;
 }
 
+html.light .text-indigo-100,
+html.light .text-indigo-200,
 html.light .text-indigo-300,
 html.light .text-indigo-400 {
   color: #4338ca !important;
 }
 
+html.light .text-purple-100,
+html.light .text-purple-200,
 html.light .text-purple-300,
 html.light .text-purple-400 {
   color: #7e22ce !important;
 }
 
+html.light .text-amber-100,
+html.light .text-amber-200,
 html.light .text-amber-300,
-html.light .text-amber-400 {
-  color: #b45309 !important;
+html.light .text-amber-400,
+html.light .text-amber-500,
+html.light .text-amber-600 {
+  color: #92400e !important;
 }
 
+html.light .text-rose-100,
+html.light .text-rose-200,
 html.light .text-rose-300,
 html.light .text-rose-400 {
   color: #be123c !important;
@@ -291,8 +305,16 @@ html.light .bg-indigo-500\/20 {
 
 html.light .bg-amber-500\/10,
 html.light .bg-amber-500\/15,
-html.light .bg-amber-500\/20 {
+html.light .bg-amber-500\/20,
+html.light .bg-amber-500\/25 {
   background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
+html.light .border-amber-500\/20,
+html.light .border-amber-500\/25,
+html.light .border-amber-500\/30,
+html.light .border-amber-500\/40 {
   border-color: #fde68a !important;
 }
 

@@ -143,43 +143,57 @@ export const syncBaseProductsIncrementally = async (
     return currentCached;
   }
 
-  // Incremental fetch: only records updated after last sync
+  // Incremental fetch: records updated after last sync + lightweight ID reconciliation for deletions
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(PRODUCT_COLUMNS)
-      .gt('updated_at', lastSync)
-      .order('updated_at', { ascending: true });
+    const [updatedRes, idsRes] = await Promise.all([
+      supabase
+        .from('products')
+        .select(PRODUCT_COLUMNS)
+        .gt('updated_at', lastSync)
+        .order('updated_at', { ascending: true }),
+      supabase
+        .from('products')
+        .select('id')
+    ]);
 
-    if (error) {
-      console.warn('Incremental product sync error, using cache:', error);
+    if (updatedRes.error) {
+      console.warn('Incremental product sync error, using cache:', updatedRes.error);
       return currentCached;
     }
 
-    if (data && data.length > 0) {
-      const updatedMap = new Map<string, BaseProduct>();
-      currentCached.forEach(p => updatedMap.set(p.id, p));
+    let validIdSet: Set<string> | null = null;
+    if (!idsRes.error && idsRes.data) {
+      validIdSet = new Set(idsRes.data.map(r => r.id));
+    }
 
-      data.forEach(r => {
+    const updatedMap = new Map<string, BaseProduct>();
+    
+    // 1. Keep only items that still exist on server
+    currentCached.forEach(p => {
+      if (!validIdSet || validIdSet.has(p.id)) {
+        updatedMap.set(p.id, p);
+      }
+    });
+
+    // 2. Apply deltas
+    if (updatedRes.data && updatedRes.data.length > 0) {
+      updatedRes.data.forEach(r => {
         const prod = mapSupabaseToProduct(r);
-        updatedMap.set(prod.id, prod);
+        if (!validIdSet || validIdSet.has(prod.id)) {
+          updatedMap.set(prod.id, prod);
+        }
       });
-
-      const merged = Array.from(updatedMap.values()).sort(
-        (a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()
-      );
-
-      memoryProducts = merged;
-      persistToStorage(CACHE_KEY_PRODUCTS, merged);
-      syncMeta.lastSyncProducts = new Date().toISOString();
-      saveMetadata();
-      return merged;
-    } else {
-      // 0 bytes egress wasted! No items were modified.
-      syncMeta.lastSyncProducts = new Date().toISOString();
-      saveMetadata();
-      return currentCached;
     }
+
+    const merged = Array.from(updatedMap.values()).sort(
+      (a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()
+    );
+
+    memoryProducts = merged;
+    persistToStorage(CACHE_KEY_PRODUCTS, merged);
+    syncMeta.lastSyncProducts = new Date().toISOString();
+    saveMetadata();
+    return merged;
   } catch (err) {
     console.warn('Incremental sync exception:', err);
     return currentCached;
@@ -231,42 +245,54 @@ export const syncTriageUnitsIncrementally = async (
     return currentCached;
   }
 
-  // Incremental fetch: only changed triage units
+  // Incremental fetch: only changed triage units + deletion reconciliation
   try {
-    const { data, error } = await supabase
-      .from('triage_units')
-      .select(TRIAGE_COLUMNS)
-      .gt('updated_at', lastSync)
-      .order('updated_at', { ascending: true });
+    const [updatedRes, idsRes] = await Promise.all([
+      supabase
+        .from('triage_units')
+        .select(TRIAGE_COLUMNS)
+        .gt('updated_at', lastSync)
+        .order('updated_at', { ascending: true }),
+      supabase
+        .from('triage_units')
+        .select('id')
+    ]);
 
-    if (error) {
-      console.warn('Incremental triage sync error, using cache:', error);
+    if (updatedRes.error) {
+      console.warn('Incremental triage sync error, using cache:', updatedRes.error);
       return currentCached;
     }
 
-    if (data && data.length > 0) {
-      const unitMap = new Map<string, TriageUnit>();
-      currentCached.forEach(u => unitMap.set(u.id, u));
+    let validIdSet: Set<string> | null = null;
+    if (!idsRes.error && idsRes.data) {
+      validIdSet = new Set(idsRes.data.map(r => r.id));
+    }
 
-      data.forEach(r => {
+    const unitMap = new Map<string, TriageUnit>();
+    currentCached.forEach(u => {
+      if (!validIdSet || validIdSet.has(u.id)) {
+        unitMap.set(u.id, u);
+      }
+    });
+
+    if (updatedRes.data && updatedRes.data.length > 0) {
+      updatedRes.data.forEach(r => {
         const unit = mapSupabaseToTriageUnit(r);
-        unitMap.set(unit.id, unit);
+        if (!validIdSet || validIdSet.has(unit.id)) {
+          unitMap.set(unit.id, unit);
+        }
       });
-
-      const merged = Array.from(unitMap.values()).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-
-      memoryTriageUnits = merged;
-      persistToStorage(CACHE_KEY_TRIAGE_UNITS, merged);
-      syncMeta.lastSyncTriageUnits = new Date().toISOString();
-      saveMetadata();
-      return merged;
-    } else {
-      syncMeta.lastSyncTriageUnits = new Date().toISOString();
-      saveMetadata();
-      return currentCached;
     }
+
+    const merged = Array.from(unitMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    memoryTriageUnits = merged;
+    persistToStorage(CACHE_KEY_TRIAGE_UNITS, merged);
+    syncMeta.lastSyncTriageUnits = new Date().toISOString();
+    saveMetadata();
+    return merged;
   } catch (err) {
     console.warn('Incremental sync exception for triage units:', err);
     return currentCached;
@@ -319,36 +345,50 @@ export const syncDailyInflowsIncrementally = async (
   }
 
   try {
-    const { data, error } = await supabase
-      .from('daily_inflows')
-      .select(INFLOW_COLUMNS)
-      .gt('updated_at', lastSync)
-      .order('updated_at', { ascending: true });
+    const [updatedRes, idsRes] = await Promise.all([
+      supabase
+        .from('daily_inflows')
+        .select(INFLOW_COLUMNS)
+        .gt('updated_at', lastSync)
+        .order('updated_at', { ascending: true }),
+      supabase
+        .from('daily_inflows')
+        .select('id, date')
+    ]);
 
-    if (error) {
+    if (updatedRes.error) {
       return currentCached;
     }
 
-    if (data && data.length > 0) {
-      const inflowMap = new Map<string, DailyInflowRecord>();
-      currentCached.forEach(d => inflowMap.set(d.id || d.date, d));
+    let validIdSet: Set<string> | null = null;
+    if (!idsRes.error && idsRes.data) {
+      validIdSet = new Set(idsRes.data.map(r => r.id || r.date));
+    }
 
-      data.forEach(r => {
+    const inflowMap = new Map<string, DailyInflowRecord>();
+    currentCached.forEach(d => {
+      const key = d.id || d.date;
+      if (!validIdSet || validIdSet.has(key)) {
+        inflowMap.set(key, d);
+      }
+    });
+
+    if (updatedRes.data && updatedRes.data.length > 0) {
+      updatedRes.data.forEach(r => {
         const inflow = mapSupabaseToDailyInflow(r);
-        inflowMap.set(inflow.id || inflow.date, inflow);
+        const key = inflow.id || inflow.date;
+        if (!validIdSet || validIdSet.has(key)) {
+          inflowMap.set(key, inflow);
+        }
       });
-
-      const merged = Array.from(inflowMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-      memoryDailyInflows = merged;
-      persistToStorage(CACHE_KEY_DAILY_INFLOWS, merged);
-      syncMeta.lastSyncDailyInflows = new Date().toISOString();
-      saveMetadata();
-      return merged;
-    } else {
-      syncMeta.lastSyncDailyInflows = new Date().toISOString();
-      saveMetadata();
-      return currentCached;
     }
+
+    const merged = Array.from(inflowMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+    memoryDailyInflows = merged;
+    persistToStorage(CACHE_KEY_DAILY_INFLOWS, merged);
+    syncMeta.lastSyncDailyInflows = new Date().toISOString();
+    saveMetadata();
+    return merged;
   } catch (err) {
     return currentCached;
   }
@@ -400,39 +440,51 @@ export const syncPendingItemsIncrementally = async (
   }
 
   try {
-    const { data, error } = await supabase
-      .from('pending_items')
-      .select(PENDING_COLUMNS)
-      .gt('updated_at', lastSync)
-      .order('updated_at', { ascending: true });
+    const [updatedRes, idsRes] = await Promise.all([
+      supabase
+        .from('pending_items')
+        .select(PENDING_COLUMNS)
+        .gt('updated_at', lastSync)
+        .order('updated_at', { ascending: true }),
+      supabase
+        .from('pending_items')
+        .select('id')
+    ]);
 
-    if (error) {
+    if (updatedRes.error) {
       return currentCached;
     }
 
-    if (data && data.length > 0) {
-      const itemMap = new Map<string, PendingItem>();
-      currentCached.forEach(p => itemMap.set(p.id, p));
+    let validIdSet: Set<string> | null = null;
+    if (!idsRes.error && idsRes.data) {
+      validIdSet = new Set(idsRes.data.map(r => r.id));
+    }
 
-      data.forEach(r => {
+    const itemMap = new Map<string, PendingItem>();
+    currentCached.forEach(p => {
+      if (!validIdSet || validIdSet.has(p.id)) {
+        itemMap.set(p.id, p);
+      }
+    });
+
+    if (updatedRes.data && updatedRes.data.length > 0) {
+      updatedRes.data.forEach(r => {
         const item = mapSupabaseToPendingItem(r);
-        itemMap.set(item.id, item);
+        if (!validIdSet || validIdSet.has(item.id)) {
+          itemMap.set(item.id, item);
+        }
       });
-
-      const merged = Array.from(itemMap.values()).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-
-      memoryPendingItems = merged;
-      persistToStorage(CACHE_KEY_PENDING_ITEMS, merged);
-      syncMeta.lastSyncPendingItems = new Date().toISOString();
-      saveMetadata();
-      return merged;
-    } else {
-      syncMeta.lastSyncPendingItems = new Date().toISOString();
-      saveMetadata();
-      return currentCached;
     }
+
+    const merged = Array.from(itemMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    memoryPendingItems = merged;
+    persistToStorage(CACHE_KEY_PENDING_ITEMS, merged);
+    syncMeta.lastSyncPendingItems = new Date().toISOString();
+    saveMetadata();
+    return merged;
   } catch (err) {
     return currentCached;
   }
@@ -601,6 +653,35 @@ export const updateLocalCacheItem = <T extends { id?: string }>(
     const idx = list.findIndex(p => p.id === item.id);
     if (idx >= 0) list[idx] = item as any;
     else list.unshift(item as any);
+    memoryPendingItems = list;
+    persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
+  }
+};
+
+/**
+ * Removes an item from local memory cache and persistent storage immediately on deletion
+ */
+export const removeLocalCacheItem = (
+  collectionName: 'products' | 'triage_units' | 'daily_inflows' | 'pending_items',
+  id: string
+) => {
+  const cleanId = (id || '').trim();
+  if (!cleanId) return;
+
+  if (collectionName === 'products') {
+    const list = getCachedBaseProducts().filter(p => p.id !== cleanId);
+    memoryProducts = list;
+    persistToStorage(CACHE_KEY_PRODUCTS, list);
+  } else if (collectionName === 'triage_units') {
+    const list = getCachedTriageUnits().filter(u => u.id !== cleanId);
+    memoryTriageUnits = list;
+    persistToStorage(CACHE_KEY_TRIAGE_UNITS, list);
+  } else if (collectionName === 'daily_inflows') {
+    const list = getCachedDailyInflows().filter(d => d.id !== cleanId && (d as any).date !== cleanId);
+    memoryDailyInflows = list;
+    persistToStorage(CACHE_KEY_DAILY_INFLOWS, list);
+  } else if (collectionName === 'pending_items') {
+    const list = getCachedPendingItems().filter(p => p.id !== cleanId);
     memoryPendingItems = list;
     persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
   }

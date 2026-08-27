@@ -220,6 +220,7 @@ export const fetchCurrentDatabasePayload = async (userInfo?: {
   };
 
   const enableSpreadsheetImport = localStorage.getItem('rmaflow_enable_spreadsheet_import') !== 'false';
+  const enableSpreadsheetExport = localStorage.getItem('rmaflow_enable_spreadsheet_export') !== 'false';
 
   const activeAuthUser = await getCurrentActiveAuthUser();
   const userEmailResolved = userInfo?.email || activeAuthUser?.email || 'operador@stocckrma.local';
@@ -254,7 +255,8 @@ export const fetchCurrentDatabasePayload = async (userInfo?: {
       auditLogs: logs
     },
     settings: {
-      enableSpreadsheetImport
+      enableSpreadsheetImport,
+      enableSpreadsheetExport
     }
   };
 
@@ -934,6 +936,9 @@ export const restoreDatabaseFromBackup = async (
   // Settings & Flags
   if (payload.settings?.enableSpreadsheetImport !== undefined) {
     localStorage.setItem('rmaflow_enable_spreadsheet_import', String(payload.settings.enableSpreadsheetImport));
+  }
+  if (payload.settings?.enableSpreadsheetExport !== undefined) {
+    localStorage.setItem('rmaflow_enable_spreadsheet_export', String(payload.settings.enableSpreadsheetExport));
   }
 
   localStorage.setItem('base_products_seeded', 'true');

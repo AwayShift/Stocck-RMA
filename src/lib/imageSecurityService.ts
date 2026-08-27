@@ -260,7 +260,8 @@ export const processSafeImageUrl = async (
   rawUrl: string,
   maxWidth: number = 1200,
   maxHeight: number = 1000,
-  quality: number = 0.75
+  quality: number = 0.75,
+  outputFormat: 'image/webp' | 'image/jpeg' = 'image/webp'
 ): Promise<string> => {
   const trimmed = rawUrl.trim();
 
@@ -308,7 +309,7 @@ export const processSafeImageUrl = async (
         maxWidth,
         maxHeight,
         quality,
-        outputFormat: 'image/jpeg'
+        outputFormat
       });
 
       if (sanitizedResult.isValid && sanitizedResult.sanitizedBase64) {
@@ -362,18 +363,20 @@ export const processSafeImageUrl = async (
         const canvas = document.createElement('canvas');
         canvas.width = targetWidth;
         canvas.height = targetHeight;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: outputFormat !== 'image/jpeg' });
 
         if (!ctx) {
           return reject(new Error('Falha ao inicializar o motor de sanitização gráfica.'));
         }
 
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, targetWidth, targetHeight);
+        if (outputFormat === 'image/jpeg') {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, targetWidth, targetHeight);
+        }
         ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
         try {
-          const sanitizedBase64 = canvas.toDataURL('image/jpeg', quality);
+          const sanitizedBase64 = canvas.toDataURL(outputFormat, quality);
           resolve(sanitizedBase64);
         } catch (canvasErr) {
           // If canvas is tainted by external CORS without Access-Control-Allow-Origin,

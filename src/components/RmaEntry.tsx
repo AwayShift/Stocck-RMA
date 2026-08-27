@@ -25,7 +25,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType } from '../types';
-import { uploadFileToStorage } from '../lib/dbService';
+import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 import { RichTextEditor } from './RichTextEditor';
 import { getBaseProductImages } from '../utils/productImages';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
@@ -80,6 +80,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
   
   // Fields of Entrance
   const [trackingCode, setTrackingCode] = useState('');
+  const [orderNumber, setOrderNumber] = useState('');
   const [serials, setSerials] = useState<string[]>(['']);
   const [platform, setPlatform] = useState<PlatformType>('Mercado Livre');
   const [customerReason, setCustomerReason] = useState('');
@@ -177,7 +178,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Handle URL photo addition with sanitization
+  // Handle URL photo addition with sanitization and Cloudinary upload
   const handleAddPhotoByUrl = async (category: 'product' | 'box' | 'accessories') => {
     if (!urlPhotoInput.trim()) return;
     const url = urlPhotoInput.trim();
@@ -186,20 +187,20 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
     setErrorMessage('');
 
     try {
-      const sanitizedUrlOrBase64 = await processSafeImageUrl(url, 1200, 1000, 0.75);
+      const uploadedUrl = await uploadImageUrlToStorage(url, `triage_${category}`);
       if (category === 'product') {
-        setPhotosProduct(prev => [...prev, sanitizedUrlOrBase64]);
+        setPhotosProduct(prev => [...prev, uploadedUrl]);
       } else if (category === 'box') {
-        setPhotosBox(prev => [...prev, sanitizedUrlOrBase64]);
+        setPhotosBox(prev => [...prev, uploadedUrl]);
       } else {
-        setPhotosAccessories(prev => [...prev, sanitizedUrlOrBase64]);
+        setPhotosAccessories(prev => [...prev, uploadedUrl]);
       }
       setUrlPhotoInput('');
       const catLabel = category === 'product' ? 'Produto' : category === 'box' ? 'Embalagem' : 'Acessórios';
-      setSuccessMessage(`Foto via link desinfectada e adicionada para ${catLabel}!`);
+      setSuccessMessage(`Foto via link enviada e hospedada no Cloudinary para ${catLabel}!`);
       setTimeout(() => setSuccessMessage(''), 2500);
     } catch (err: any) {
-      setUrlPhotoError(err?.message || 'Erro ao validar imagem por link.');
+      setUrlPhotoError(err?.message || 'Erro ao validar e enviar imagem por link ao Cloudinary.');
     } finally {
       setIsSanitizingUrl(false);
     }
@@ -464,6 +465,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
           id: `tr-${baseTimestamp}-${i}-${Math.random().toString(36).substring(2, 7)}`,
           trackingCode: finalTrackingCode,
           serialNumber: currentSerial,
+          orderNumber: orderNumber.trim(),
           baseProductId: refProduct.id,
           baseProductName: refProduct.name,
           baseProductSku: refProduct.sku,
@@ -501,8 +503,9 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       setPhotosAccessories([]);
       setNotes('');
       
-      // Reset tracking code & serial numbers list
+      // Reset tracking code, order number & serial numbers list
       setTrackingCode('');
+      setOrderNumber('');
       setSerials(['']);
 
       // Scroll to top
@@ -850,6 +853,25 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                       required={destinationSector === 'Openbox'}
                     />
                   </div>
+
+                  {/* Order Number (Número do Pedido - Opcional) */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <span>Número de Pedido</span>
+                        <span className="text-slate-500 font-normal lowercase">(opcional)</span>
+                      </span>
+                      <span className="text-[11px] font-normal text-slate-500">Rastreamento na plataforma</span>
+                    </label>
+                    <input 
+                      type="text"
+                      placeholder="Opcional: Ex: 2000008172648"
+                      value={orderNumber}
+                      onChange={(e) => setOrderNumber(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
+                      id="input-order-number"
+                    />
+                  </div>
                 </div>
 
                 {/* Multiple Serial Numbers Management (Same SKU, multiple physical units) */}
@@ -1084,7 +1106,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                     <Clipboard className="text-sky-400 w-5 h-5" />
                     Arquivos de Mídia
                   </h3>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-950 rounded text-[10px] text-slate-400 font-mono border border-slate-850">
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-950 rounded text-[10px] text-slate-400 font-mono border border-slate-800">
                     <span className="w-1.5 h-1.5 bg-sky-400 rounded-full"></span>
                     Ctrl+V Ativo
                   </div>

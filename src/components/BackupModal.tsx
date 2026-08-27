@@ -913,16 +913,22 @@ export default function BackupModal({
                   </div>
                 </div>
 
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={scheduleConfig.enabled}
-                    onChange={(e) => setScheduleConfig({ ...scheduleConfig, enabled: e.target.checked })}
-                    className="sr-only peer"
-                    id="toggle-master-backup-schedule"
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={scheduleConfig.enabled}
+                  onClick={() => setScheduleConfig({ ...scheduleConfig, enabled: !scheduleConfig.enabled })}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none shadow-inner ${
+                    scheduleConfig.enabled ? 'bg-sky-500' : 'bg-slate-800'
+                  }`}
+                  id="toggle-master-backup-schedule"
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      scheduleConfig.enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
                   />
-                  <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
-                </label>
+                </button>
               </div>
 
               {/* Schedule Triggers Cards */}
@@ -937,15 +943,25 @@ export default function BackupModal({
                       </div>
                       <h5 className="text-xs font-bold text-white">Backup por Hora</h5>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={scheduleConfig.hourly.enabled}
-                      onChange={(e) => setScheduleConfig({
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={scheduleConfig.hourly.enabled}
+                      onClick={() => setScheduleConfig({
                         ...scheduleConfig,
-                        hourly: { ...scheduleConfig.hourly, enabled: e.target.checked }
+                        hourly: { ...scheduleConfig.hourly, enabled: !scheduleConfig.hourly.enabled }
                       })}
-                      className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer"
-                    />
+                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        scheduleConfig.hourly.enabled ? 'bg-indigo-500' : 'bg-slate-800'
+                      }`}
+                      id="toggle-hourly-backup-schedule"
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+                          scheduleConfig.hourly.enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
 
                   <p className="text-[11px] text-slate-400">
@@ -981,15 +997,25 @@ export default function BackupModal({
                       </div>
                       <h5 className="text-xs font-bold text-white">Final do Expediente</h5>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={scheduleConfig.endOfDay.enabled}
-                      onChange={(e) => setScheduleConfig({
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={scheduleConfig.endOfDay.enabled}
+                      onClick={() => setScheduleConfig({
                         ...scheduleConfig,
-                        endOfDay: { ...scheduleConfig.endOfDay, enabled: e.target.checked }
+                        endOfDay: { ...scheduleConfig.endOfDay, enabled: !scheduleConfig.endOfDay.enabled }
                       })}
-                      className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer"
-                    />
+                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        scheduleConfig.endOfDay.enabled ? 'bg-emerald-500' : 'bg-slate-800'
+                      }`}
+                      id="toggle-endofday-backup-schedule"
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+                          scheduleConfig.endOfDay.enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
 
                   <p className="text-[11px] text-slate-400">
@@ -1020,15 +1046,25 @@ export default function BackupModal({
                       </div>
                       <h5 className="text-xs font-bold text-white">Dia da Semana</h5>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={scheduleConfig.weekly.enabled}
-                      onChange={(e) => setScheduleConfig({
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={scheduleConfig.weekly.enabled}
+                      onClick={() => setScheduleConfig({
                         ...scheduleConfig,
-                        weekly: { ...scheduleConfig.weekly, enabled: e.target.checked }
+                        weekly: { ...scheduleConfig.weekly, enabled: !scheduleConfig.weekly.enabled }
                       })}
-                      className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer"
-                    />
+                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        scheduleConfig.weekly.enabled ? 'bg-amber-500' : 'bg-slate-800'
+                      }`}
+                      id="toggle-weekly-backup-schedule"
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+                          scheduleConfig.weekly.enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
 
                   <p className="text-[11px] text-slate-400">
@@ -1077,15 +1113,25 @@ export default function BackupModal({
                       </div>
                       <h5 className="text-xs font-bold text-white">Dia do Mês</h5>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={scheduleConfig.monthly.enabled}
-                      onChange={(e) => setScheduleConfig({
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={scheduleConfig.monthly.enabled}
+                      onClick={() => setScheduleConfig({
                         ...scheduleConfig,
-                        monthly: { ...scheduleConfig.monthly, enabled: e.target.checked }
+                        monthly: { ...scheduleConfig.monthly, enabled: !scheduleConfig.monthly.enabled }
                       })}
-                      className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer"
-                    />
+                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        scheduleConfig.monthly.enabled ? 'bg-purple-500' : 'bg-slate-800'
+                      }`}
+                      id="toggle-monthly-backup-schedule"
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+                          scheduleConfig.monthly.enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
 
                   <p className="text-[11px] text-slate-400">

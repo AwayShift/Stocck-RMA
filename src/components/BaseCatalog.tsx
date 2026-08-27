@@ -28,7 +28,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { BaseProduct } from '../types';
-import { uploadFileToStorage, saveBatchBaseProducts } from '../lib/dbService';
+import { uploadFileToStorage, uploadImageUrlToStorage, saveBatchBaseProducts } from '../lib/dbService';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { RichTextEditor } from './RichTextEditor';
 import ExcelBaseCatalogImportModal from './ExcelBaseCatalogImportModal';
@@ -45,6 +45,7 @@ interface BaseCatalogProps {
   onDeleteProduct: (id: string) => Promise<void>;
   userRole?: 'admin' | 'operator' | null;
   enableSpreadsheetImport?: boolean;
+  enableSpreadsheetExport?: boolean;
 }
 
 export default function BaseCatalog({ 
@@ -56,7 +57,8 @@ export default function BaseCatalog({
   onSaveBatchProducts, 
   onDeleteProduct, 
   userRole,
-  enableSpreadsheetImport = true 
+  enableSpreadsheetImport = true,
+  enableSpreadsheetExport = true 
 }: BaseCatalogProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
@@ -156,7 +158,7 @@ export default function BaseCatalog({
     }
   };
 
-  // Handle Add Image by URL (with Magic Bytes, Scheme and Canvas Sanitization)
+  // Handle Add Image by URL (with Magic Bytes, Scheme and Canvas Sanitization, uploading to Cloudinary)
   const handleAddImageByUrl = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!imageUrlInput.trim()) return;
@@ -166,22 +168,22 @@ export default function BaseCatalog({
     setErrorMessage('');
 
     try {
-      const sanitizedUrlOrBase64 = await processSafeImageUrl(imageUrlInput.trim(), 1200, 1000, 0.75);
-      const currentCategory = activeUploadCategoryRef.current;
+      const targetCategory = activeUploadCategoryRef.current;
+      const uploadedUrl = await uploadImageUrlToStorage(imageUrlInput.trim(), `catalog_${targetCategory}`);
       
-      if (currentCategory === 'product') {
-        setImagesProduct(prev => [...prev, sanitizedUrlOrBase64]);
-      } else if (currentCategory === 'box') {
-        setImagesBox(prev => [...prev, sanitizedUrlOrBase64]);
-      } else if (currentCategory === 'accessories') {
-        setImagesAccessories(prev => [...prev, sanitizedUrlOrBase64]);
+      if (targetCategory === 'product') {
+        setImagesProduct(prev => [...prev, uploadedUrl]);
+      } else if (targetCategory === 'box') {
+        setImagesBox(prev => [...prev, uploadedUrl]);
+      } else if (targetCategory === 'accessories') {
+        setImagesAccessories(prev => [...prev, uploadedUrl]);
       }
-      setImages(prev => [...prev, sanitizedUrlOrBase64]);
+      setImages(prev => [...prev, uploadedUrl]);
       setImageUrlInput('');
-      setSuccessMessage('Imagem por link importada e desinfectada com sucesso!');
+      setSuccessMessage('Imagem por link enviada e hospedada no Cloudinary com sucesso!');
       setTimeout(() => setSuccessMessage(''), 2500);
     } catch (err: any) {
-      setUrlInputError(err?.message || 'Erro ao validar ou carregar imagem do link.');
+      setUrlInputError(err?.message || 'Erro ao validar ou enviar imagem do link para o Cloudinary.');
     } finally {
       setIsAddingUrl(false);
     }
@@ -439,16 +441,18 @@ export default function BaseCatalog({
 
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
           {/* Export Catalog to Excel */}
-          <button
-            type="button"
-            onClick={() => exportBaseCatalogToExcel(filteredProducts)}
-            className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer shadow-sm"
-            title="Exportar produtos visíveis do catálogo para arquivo Excel (.xlsx)"
-            id="btn-export-catalog-excel"
-          >
-            <Download className="w-4 h-4 text-sky-400" />
-            <span>Exportar Excel ({filteredProducts.length})</span>
-          </button>
+          {enableSpreadsheetExport && (
+            <button
+              type="button"
+              onClick={() => exportBaseCatalogToExcel(filteredProducts)}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer shadow-sm"
+              title="Exportar produtos visíveis do catálogo para arquivo Excel (.xlsx)"
+              id="btn-export-catalog-excel"
+            >
+              <Download className="w-4 h-4 text-sky-400" />
+              <span>Exportar Excel ({filteredProducts.length})</span>
+            </button>
+          )}
 
           {/* Import Excel Spreadsheet Button (Matches user requirement) */}
           {enableSpreadsheetImport && (
@@ -531,7 +535,7 @@ export default function BaseCatalog({
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs text-slate-400 pt-2 border-t border-slate-850 gap-3">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs text-slate-400 pt-2 border-t border-slate-800 gap-3">
             <div className="flex items-center gap-3">
               <span>
                 Mostrando <strong>{displayedProducts.length}</strong> de <strong>{filteredProducts.length}</strong> produtos
@@ -638,12 +642,12 @@ export default function BaseCatalog({
                               </div>
                               <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
                                 {product.brand && (
-                                  <span className="bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-750">
+                                  <span className="bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-700">
                                     Marca: <strong className="text-slate-350">{product.brand}</strong>
                                   </span>
                                 )}
                                 {product.category && (
-                                  <span className="bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-750">
+                                  <span className="bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-700">
                                     Cat: <strong className="text-slate-350">{product.category}</strong>
                                   </span>
                                 )}
@@ -665,7 +669,7 @@ export default function BaseCatalog({
                           <div className="flex justify-end items-center gap-2">
                             <button 
                               onClick={() => setViewingProduct(product)}
-                              className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-sky-450 rounded-lg border border-slate-850 transition-colors cursor-pointer"
+                              className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-sky-450 rounded-lg border border-slate-800 transition-colors cursor-pointer"
                               title="Visualizar informações completas"
                               id={`btn-view-${product.id}`}
                             >
@@ -673,7 +677,7 @@ export default function BaseCatalog({
                             </button>
                             <button 
                               onClick={() => handleEditClick(product)}
-                              className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-850 transition-colors cursor-pointer"
+                              className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-800 transition-colors cursor-pointer"
                               title="Editar produto"
                               id={`btn-edit-${product.id}`}
                             >
@@ -681,7 +685,7 @@ export default function BaseCatalog({
                             </button>
                             <button 
                               onClick={() => handleDeleteClick(product.id, product.name)}
-                              className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-850 hover:border-rose-500/30 transition-colors cursor-pointer"
+                              className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-800 hover:border-rose-500/30 transition-colors cursor-pointer"
                               title="Excluir produto"
                               id={`btn-delete-${product.id}`}
                             >
@@ -719,7 +723,7 @@ export default function BaseCatalog({
                         {/* Image Thumbnail Header */}
                         <div 
                           onClick={() => setViewingProduct(product)}
-                          className="relative aspect-[4/3] w-full bg-slate-900/90 overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-850 group-hover:border-sky-500/30 transition-colors"
+                          className="relative aspect-[4/3] w-full bg-slate-900/90 overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-800 group-hover:border-sky-500/30 transition-colors"
                         >
                           {displayPhoto ? (
                             <img 
@@ -796,7 +800,7 @@ export default function BaseCatalog({
                           </div>
 
                           {/* Card Actions Footer */}
-                          <div className="pt-3 border-t border-slate-850 flex items-center justify-between gap-2">
+                          <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
                             <button
                               type="button"
                               onClick={() => setViewingProduct(product)}
@@ -1554,10 +1558,10 @@ export default function BaseCatalog({
                     {/* Zoom Icon Overlay on Hover */}
                     {(viewingProduct.imageUrl || (viewingProduct.images && viewingProduct.images.length > 0)) && (
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/mainImg:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 text-white font-bold text-xs pointer-events-none">
-                        <div className="p-3 bg-slate-900/95 rounded-full border border-slate-750 shadow-xl text-sky-400">
+                        <div className="p-3 bg-slate-900/95 rounded-full border border-slate-700 shadow-xl text-sky-400">
                           <ZoomIn className="w-6 h-6" />
                         </div>
-                        <span className="bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-750 backdrop-blur-sm text-[11px]">Clique para dar zoom</span>
+                        <span className="bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-700 backdrop-blur-sm text-[11px]">Clique para dar zoom</span>
                       </div>
                     )}
                   </div>

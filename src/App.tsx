@@ -77,6 +77,7 @@ export default function App() {
   
   // Theme state (Dark / Light)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => getSavedTheme());
+  const isLight = themeMode === 'light';
 
   useEffect(() => {
     applyTheme(themeMode);
@@ -110,15 +111,25 @@ export default function App() {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDbSwitcherModalOpen, setIsDbSwitcherModalOpen] = useState<boolean>(false);
 
-  // System Settings: Spreadsheet Import Visibility Toggle
+  // System Settings: Spreadsheet Import & Export Visibility Toggles
   const [enableSpreadsheetImport, setEnableSpreadsheetImport] = useState<boolean>(() => {
     const saved = localStorage.getItem('rmaflow_enable_spreadsheet_import');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const [enableSpreadsheetExport, setEnableSpreadsheetExport] = useState<boolean>(() => {
+    const saved = localStorage.getItem('rmaflow_enable_spreadsheet_export');
     return saved !== null ? saved === 'true' : true;
   });
 
   const handleToggleSpreadsheetImport = (enabled: boolean) => {
     setEnableSpreadsheetImport(enabled);
     localStorage.setItem('rmaflow_enable_spreadsheet_import', String(enabled));
+  };
+
+  const handleToggleSpreadsheetExport = (enabled: boolean) => {
+    setEnableSpreadsheetExport(enabled);
+    localStorage.setItem('rmaflow_enable_spreadsheet_export', String(enabled));
   };
 
   // Listen for Authentication state with Supabase Auth
@@ -552,67 +563,18 @@ export default function App() {
               </button>
             </nav>
 
-            {/* Authenticated user profile, actions, and logout */}
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Supabase Database Status Monitor Button */}
-              <button
-                type="button"
-                onClick={() => setIsDbSwitcherModalOpen(true)}
-                className="h-9 flex items-center gap-2 px-2.5 sm:px-3 rounded-xl border bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 border-emerald-500/40 hover:border-emerald-500/70 transition-all cursor-pointer text-xs font-bold shadow-sm whitespace-nowrap"
-                title="Banco de Dados: Supabase (PostgreSQL) - Clique para ver métricas e status"
-                id="btn-open-db-switcher-header"
-              >
-                <span className="w-2 h-2 rounded-full shrink-0 bg-emerald-400 animate-pulse" />
-                <Database className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-                <span className="hidden md:inline font-bold">
-                  Supabase DB
-                </span>
-              </button>
-
-              {/* Backup & Restore Action Button */}
-              <button
-                type="button"
-                onClick={() => setIsBackupModalOpen(true)}
-                className="h-9 flex items-center gap-1.5 px-2.5 sm:px-3 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 hover:text-white rounded-xl border border-indigo-500/30 hover:border-indigo-500/50 transition-all cursor-pointer text-xs font-bold shadow-sm whitespace-nowrap"
-                title="Backup & Restauração de Dados"
-                id="btn-open-backup-header"
-              >
-                <HardDriveDownload className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                <span className="hidden md:inline">Backup</span>
-              </button>
-
-              {/* Settings Button */}
+            {/* Unified Settings & System Control */}
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsSettingsModalOpen(true)}
-                className="h-9 flex items-center gap-1.5 px-2.5 sm:px-3 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer text-xs font-bold shadow-sm group whitespace-nowrap"
-                title="Configurações do Sistema"
+                className="h-9 flex items-center gap-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl border border-slate-700 hover:border-slate-600 transition-all cursor-pointer text-xs font-bold shadow-sm group whitespace-nowrap"
+                title="Configurações do Sistema (Banco de Dados, Backup, Documentação, Sessão)"
                 id="btn-open-settings"
               >
+                <span className="w-2 h-2 rounded-full shrink-0 bg-emerald-400 animate-pulse" title="Supabase DB Conectado" />
                 <Settings className="w-3.5 h-3.5 text-sky-400 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
-                <span className="hidden md:inline">Configurações</span>
-              </button>
-
-              {/* PRD Download for QA & Testing */}
-              <a
-                href="./PRD_RMA_FLOW.md"
-                download="PRD_RMA_FLOW.md"
-                className="h-9 hidden lg:flex items-center gap-1.5 px-2.5 sm:px-3 bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 rounded-xl text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer shadow-sm whitespace-nowrap"
-                title="Baixar o arquivo PRD completo (.MD) para testes"
-              >
-                <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>PRD</span>
-              </a>
-
-              {/* Secure logout */}
-              <button 
-                onClick={handleLogout}
-                className="h-9 flex items-center gap-1.5 px-2.5 sm:px-3 bg-slate-950 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 hover:border-rose-500/30 transition-all cursor-pointer text-xs font-bold shadow-sm whitespace-nowrap"
-                title="Sair da conta atual"
-                id="btn-logout"
-              >
-                <LogOut className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Sair</span>
+                <span className="hidden sm:inline">Configurações</span>
               </button>
             </div>
           </div>
@@ -621,48 +583,6 @@ export default function App() {
 
       {/* Secondary Navigation Tabs (for screens under XL) */}
       <div className="xl:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-3 sm:px-4 flex gap-1.5 shadow-inner items-center" id="mobile-navigation">
-        <button
-          onClick={() => setIsDbSwitcherModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-          title="Status do Supabase DB"
-          id="mobile-btn-db-switcher"
-        >
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <Database className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Supabase DB</span>
-        </button>
-
-        <button
-          onClick={() => setIsBackupModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shrink-0 hover:text-white"
-          title="Backup e Restauração"
-          id="mobile-btn-backup"
-        >
-          <HardDriveDownload className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Backup</span>
-        </button>
-
-        <button
-          onClick={() => setIsSettingsModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 shrink-0 hover:text-white"
-          title="Configurações"
-          id="mobile-btn-settings"
-        >
-          <Settings className="w-3.5 h-3.5 text-sky-400" />
-          <span>Configurações</span>
-        </button>
-
-        <a
-          href="./PRD_RMA_FLOW.md"
-          download="PRD_RMA_FLOW.md"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>PRD</span>
-        </a>
-
-        <div className="w-px h-5 bg-slate-800 mx-1 shrink-0" />
-
         <button
           onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
@@ -726,14 +646,6 @@ export default function App() {
         >
           <Boxes className="w-3.5 h-3.5 text-sky-400" />
           <span>Fluxo Entradas</span>
-        </button>
-
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0 hover:bg-rose-500/20"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Sair</span>
         </button>
       </div>
 
@@ -805,6 +717,7 @@ export default function App() {
                 onDeleteProduct={handleDeleteProduct}
                 userRole={userRole}
                 enableSpreadsheetImport={enableSpreadsheetImport}
+                enableSpreadsheetExport={enableSpreadsheetExport}
               />
             )}
 
@@ -828,6 +741,8 @@ export default function App() {
                 onClearSelectedUnit={() => setSelectedTriageUnit(null)}
                 onSaveTriage={handleSaveTriage}
                 enableSpreadsheetImport={enableSpreadsheetImport}
+                enableSpreadsheetExport={enableSpreadsheetExport}
+                isLight={isLight}
               />
             )}
 
@@ -841,6 +756,7 @@ export default function App() {
                 onTransferToStock={handleTransferPendingToStock}
                 userRole={userRole}
                 onNavigateToStock={() => setActiveTab('stock')}
+                enableSpreadsheetExport={enableSpreadsheetExport}
               />
             )}
 
@@ -855,6 +771,8 @@ export default function App() {
                 onSaveTriage={handleSaveTriage}
                 userRole={userRole}
                 enableSpreadsheetImport={enableSpreadsheetImport}
+                enableSpreadsheetExport={enableSpreadsheetExport}
+                isLight={isLight}
               />
             )}
           </div>
@@ -880,6 +798,8 @@ export default function App() {
         onClose={() => setIsSettingsModalOpen(false)}
         enableSpreadsheetImport={enableSpreadsheetImport}
         onToggleSpreadsheetImport={handleToggleSpreadsheetImport}
+        enableSpreadsheetExport={enableSpreadsheetExport}
+        onToggleSpreadsheetExport={handleToggleSpreadsheetExport}
         themeMode={themeMode}
         onSelectTheme={handleSelectTheme}
         onOpenBackupModal={(tab) => {
@@ -888,6 +808,7 @@ export default function App() {
         onOpenDbSwitcherModal={() => {
           setIsDbSwitcherModalOpen(true);
         }}
+        onLogout={handleLogout}
         userRole={userRole}
         userEmail={user?.email || ''}
       />

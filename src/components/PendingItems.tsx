@@ -57,6 +57,7 @@ interface PendingItemsProps {
   ) => Promise<TriageUnit>;
   userRole?: string | null;
   onNavigateToStock?: () => void;
+  enableSpreadsheetExport?: boolean;
 }
 
 const PRESET_REASONS = [
@@ -88,7 +89,8 @@ export default function PendingItems({
   onUpdateStatus,
   onTransferToStock,
   userRole,
-  onNavigateToStock
+  onNavigateToStock,
+  enableSpreadsheetExport = true
 }: PendingItemsProps) {
   // Filters & State
   const [searchTerm, setSearchTerm] = useState('');
@@ -127,6 +129,7 @@ export default function PendingItems({
   const [formVoltage, setFormVoltage] = useState<'110V' | '220V' | 'Bivolt' | 'N/A'>('Bivolt');
   const [formSerial, setFormSerial] = useState('');
   const [formTrackingCode, setFormTrackingCode] = useState('');
+  const [formOrderNumber, setFormOrderNumber] = useState('');
   const [formPlatform, setFormPlatform] = useState<string>('Mercado Livre');
   const [formReason, setFormReason] = useState(PRESET_REASONS[0]);
   const [formCustomReason, setFormCustomReason] = useState('');
@@ -150,6 +153,7 @@ export default function PendingItems({
         (item.productName && item.productName.toLowerCase().includes(term)) ||
         (item.serialNumber && item.serialNumber.toLowerCase().includes(term)) ||
         (item.trackingCode && item.trackingCode.toLowerCase().includes(term)) ||
+        (item.orderNumber && item.orderNumber.toLowerCase().includes(term)) ||
         (item.pendingReason && item.pendingReason.toLowerCase().includes(term)) ||
         (item.detailedNotes && item.detailedNotes.toLowerCase().includes(term)) ||
         (item.platform && item.platform.toLowerCase().includes(term));
@@ -181,6 +185,7 @@ export default function PendingItems({
     setFormVoltage('Bivolt');
     setFormSerial('');
     setFormTrackingCode('');
+    setFormOrderNumber('');
     setFormPlatform('Mercado Livre');
     setFormReason(PRESET_REASONS[0]);
     setFormCustomReason('');
@@ -199,6 +204,7 @@ export default function PendingItems({
     setFormVoltage((item.voltage as any) || 'Bivolt');
     setFormSerial(item.serialNumber || '');
     setFormTrackingCode(item.trackingCode || '');
+    setFormOrderNumber(item.orderNumber || '');
     setFormPlatform(item.platform || 'Mercado Livre');
     
     if (PRESET_REASONS.includes(item.pendingReason)) {
@@ -308,6 +314,7 @@ export default function PendingItems({
         voltage: formVoltage,
         serialNumber: formSerial.trim(),
         trackingCode: formTrackingCode.trim(),
+        orderNumber: formOrderNumber.trim(),
         platform: formPlatform,
         pendingReason: finalReason,
         detailedNotes: formDetailedNotes.trim(),
@@ -449,15 +456,17 @@ export default function PendingItems({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              onClick={handleExportExcel}
-              className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-sm"
-              title="Exportar registros filtrados para planilha Excel"
-              id="btn-export-pendencias"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span>Exportar Excel</span>
-            </button>
+            {enableSpreadsheetExport && (
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Exportar registros filtrados para planilha Excel"
+                id="btn-export-pendencias"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <span>Exportar Excel</span>
+              </button>
+            )}
 
             <button
               onClick={handleOpenNewModal}
@@ -863,11 +872,16 @@ export default function PendingItems({
                         )}
                       </td>
 
-                      {/* STI / Serial */}
+                      {/* STI / Serial / Pedido */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {item.trackingCode && (
                           <div className="font-mono text-slate-300 font-semibold text-xs">
                             STI: {item.trackingCode}
+                          </div>
+                        )}
+                        {item.orderNumber && (
+                          <div className="font-mono text-sky-400 text-[11px] truncate max-w-[150px]">
+                            Ped: {item.orderNumber}
                           </div>
                         )}
                         {item.serialNumber && (
@@ -875,7 +889,7 @@ export default function PendingItems({
                             S/N: {item.serialNumber}
                           </div>
                         )}
-                        {!item.trackingCode && !item.serialNumber && (
+                        {!item.trackingCode && !item.orderNumber && !item.serialNumber && (
                           <span className="text-slate-500 italic">-</span>
                         )}
                       </td>
@@ -978,7 +992,7 @@ export default function PendingItems({
             </div>
 
             {/* Item Details Box */}
-            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80 space-y-1.5">
+            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
                   {deleteConfirmItem.sku}
@@ -990,8 +1004,9 @@ export default function PendingItems({
               <div className="text-xs font-semibold text-white truncate">
                 {deleteConfirmItem.productName}
               </div>
-              <div className="text-[11px] text-amber-300/90 font-medium">
-                Motivo: {deleteConfirmItem.pendingReason}
+              <div className="flex items-start gap-1.5 text-xs bg-amber-500/10 border border-amber-500/25 px-2.5 py-1.5 rounded-lg text-amber-300">
+                <span className="font-bold text-amber-500 shrink-0">Motivo:</span>
+                <span className="font-semibold text-amber-200 break-words">{deleteConfirmItem.pendingReason}</span>
               </div>
             </div>
 
@@ -1155,20 +1170,34 @@ export default function PendingItems({
                 </div>
               </div>
 
-              {/* Row 3: Código STI / Rastreio + Serial Number (S/N) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Row 3: Código STI / Rastreio + Serial Number (S/N) + Número de Pedido */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Código STI / Rastreio / Caso
+                    Código STI / Rastreio
                   </label>
                   <input
                     type="text"
                     value={formTrackingCode}
                     onChange={(e) => setFormTrackingCode(e.target.value)}
-                    placeholder="Ex: STI-99201 ou BR12345678"
+                    placeholder="Ex: STI-99201"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
                   />
                   <p className="text-[10px] text-slate-500 mt-1">Opcional para pendências.</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Número de Pedido
+                  </label>
+                  <input
+                    type="text"
+                    value={formOrderNumber}
+                    onChange={(e) => setFormOrderNumber(e.target.value)}
+                    placeholder="Ex: 20000081726"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Opcional.</p>
                 </div>
 
                 <div>

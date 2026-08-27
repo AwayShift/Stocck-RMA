@@ -40,10 +40,12 @@ import {
   syncPendingItemsIncrementally,
   handleRealtimePendingItemEvent,
   updateLocalCacheItem,
-  updateWholeCollectionCache
+  removeLocalCacheItem,
+  updateWholeCollectionCache,
+  invalidateAllSyncCaches
 } from './syncCacheService';
 import { getCurrentActiveAuthUser } from './supabaseAuth';
-import { uploadImageToCloudStorage } from './storageService';
+import { uploadImageToCloudStorage, uploadImageUrlToCloudStorage } from './storageService';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -163,16 +165,21 @@ export const purgeExistingAuditLogs = async (): Promise<void> => {
   }
 };
 
-// Image Upload with 3MB limit, WebP conversion, security validation and Supabase Storage bucket integration
-export const uploadFileToStorage = async (file: File, folder: string = 'media'): Promise<string> => {
+// Image Upload with 3MB limit, WebP conversion, security validation and Supabase/Cloudinary Storage integration
+export const uploadFileToStorage = async (file: File | Blob, folder: string = 'media'): Promise<string> => {
   return await uploadImageToCloudStorage(file, folder);
+};
+
+// URL Image Upload with 3MB limit, WebP conversion, security validation and Supabase/Cloudinary Storage integration
+export const uploadImageUrlToStorage = async (url: string, folder: string = 'media'): Promise<string> => {
+  return await uploadImageUrlToCloudStorage(url, folder);
 };
 
 // Column selections for egress optimization (PRD Rule 2)
 const PRODUCT_COLUMNS = 'id, name, sku, voltage, description, image_url, images, images_product, images_box, images_accessories, accessories, brand, category, created_at, updated_at';
-const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date';
+const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date';
 const INFLOW_COLUMNS = 'id, date, rma, estoque, openbox, es, total_dia, notes, source, created_at, updated_at';
-const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
+const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
 const AUDIT_LOG_COLUMNS = 'id, user_id, user_email, action, details, timestamp';
 const CASE_COLUMNS = 'id, code, platform, created_at, reason, resolution, status, notes, value';
 const USER_COLUMNS = 'uid, email, name, role, created_at, last_login, updated_at';
@@ -440,6 +447,7 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
     voltage: item.voltage || 'Bivolt',
     serialNumber: (item.serialNumber || '').trim(),
     trackingCode: (item.trackingCode || '').trim(),
+    orderNumber: (item.orderNumber || '').trim(),
     platform: item.platform || 'Mercado Livre',
     pendingReason: (item.pendingReason || '').trim(),
     detailedNotes: (item.detailedNotes || '').trim(),
@@ -477,6 +485,9 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
 export const deletePendingItem = async (id: string, sku?: string, name?: string): Promise<void> => {
   const cleanId = (id || '').trim();
   if (!cleanId) return;
+
+  // Immediately remove from local memory and storage cache
+  removeLocalCacheItem('pending_items', cleanId);
 
   const supabase = getSupabaseClient();
   if (supabase) {
@@ -523,6 +534,7 @@ export const transferPendingItemToStock = async (
     id: newTriageId,
     trackingCode: pendingItem.trackingCode || '',
     serialNumber: pendingItem.serialNumber || '',
+    orderNumber: pendingItem.orderNumber || '',
     baseProductId: `bp-custom-${(pendingItem.sku || 'ITEM').toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
     baseProductName: pendingItem.productName || 'Produto Transferido de Pendências',
     baseProductSku: pendingItem.sku || 'SEM-SKU',
@@ -704,6 +716,9 @@ export const saveBatchDailyInflows = async (records: DailyInflowRecord[]): Promi
 export const deleteDailyInflow = async (id: string): Promise<void> => {
   const cleanId = (id || '').trim();
   if (!cleanId) return;
+
+  // Immediately remove from local memory and storage cache
+  removeLocalCacheItem('daily_inflows', cleanId);
 
   const supabase = getSupabaseClient();
   if (supabase) {
@@ -1079,6 +1094,9 @@ export const deleteBaseProduct = async (id: string, sku?: string, name?: string)
   const cleanId = (id || '').trim();
   if (!cleanId) return;
 
+  // Immediately remove from local memory and storage cache
+  removeLocalCacheItem('products', cleanId);
+
   const supabase = getSupabaseClient();
   if (supabase) {
     const { error } = await supabase.from('products').delete().eq('id', cleanId);
@@ -1117,6 +1135,9 @@ export const deleteTriageUnit = async (id: string, trackingCode?: string, name?:
   const cleanId = (id || '').trim();
   if (!cleanId) return;
 
+  // Immediately remove from local memory and storage cache
+  removeLocalCacheItem('triage_units', cleanId);
+
   const supabase = getSupabaseClient();
   if (supabase) {
     const { error } = await supabase.from('triage_units').delete().eq('id', cleanId);
@@ -1143,6 +1164,7 @@ export const checkoutTriageUnit = async (id: string, trackingCode?: string, dest
 };
 
 export const resetCatalogProducts = async (): Promise<number> => {
+  updateWholeCollectionCache('products', []);
   const supabase = getSupabaseClient();
   if (supabase) {
     const { count } = await supabase.from('products').delete({ count: 'exact' }).neq('id', '___all___');
@@ -1158,6 +1180,7 @@ export const resetCatalogProducts = async (): Promise<number> => {
 };
 
 export const resetPhysicalStockUnits = async (): Promise<number> => {
+  updateWholeCollectionCache('triage_units', []);
   const supabase = getSupabaseClient();
   if (supabase) {
     const { count } = await supabase.from('triage_units').delete({ count: 'exact' }).neq('id', '___all___');
@@ -1173,6 +1196,7 @@ export const resetPhysicalStockUnits = async (): Promise<number> => {
 };
 
 export const resetDailyInflowsRecords = async (): Promise<number> => {
+  updateWholeCollectionCache('daily_inflows', []);
   const supabase = getSupabaseClient();
   if (supabase) {
     const { count } = await supabase.from('daily_inflows').delete({ count: 'exact' }).neq('id', '___all___');
@@ -1202,6 +1226,7 @@ export const resetAuditLogsRecords = async (): Promise<number> => {
 };
 
 export const resetDatabaseToDefaults = async (): Promise<void> => {
+  invalidateAllSyncCaches();
   const supabase = getSupabaseClient();
   if (supabase) {
     await supabase.from('products').delete().neq('id', '___all___');

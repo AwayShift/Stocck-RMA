@@ -48,6 +48,7 @@ export interface PendingItem {
   voltage?: '110V' | '220V' | 'Bivolt' | 'N/A' | string;
   serialNumber?: string; // S/N (opcional / flexível)
   trackingCode?: string; // Código STI / Rastreio / Nº de Caso
+  orderNumber?: string; // Número do pedido na plataforma (opcional)
   platform?: PlatformType | 'Outro' | string; // Plataforma Origem
   pendingReason: string; // Motivo da pendência (ex: "Sem nota fiscal", "Sem identificação", "Aguardando peças", etc.)
   detailedNotes?: string; // Observações / Laudo preliminar / Detalhes
@@ -70,6 +71,7 @@ export interface TriageUnit {
   id: string;
   trackingCode: string; // Código de rastreamento / número do caso
   serialNumber?: string; // Número de série do produto
+  orderNumber?: string; // Número do pedido na plataforma (opcional)
   baseProductId: string;
   baseProductName: string;
   baseProductSku: string;
@@ -275,6 +277,7 @@ export interface SystemBackupPayload {
   };
   settings?: {
     enableSpreadsheetImport?: boolean;
+    enableSpreadsheetExport?: boolean;
     autoBackupSchedule?: AutoBackupScheduleConfig;
     [key: string]: any;
   };

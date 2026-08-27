@@ -379,6 +379,7 @@ CREATE TABLE IF NOT EXISTS triage_units (
   id TEXT PRIMARY KEY,
   tracking_code TEXT NOT NULL,
   serial_number TEXT,
+  order_number TEXT,
   base_product_id TEXT,
   base_product_name TEXT,
   base_product_sku TEXT,
@@ -403,6 +404,7 @@ CREATE TABLE IF NOT EXISTS triage_units (
 CREATE INDEX IF NOT EXISTS idx_triage_units_status ON triage_units(status);
 CREATE INDEX IF NOT EXISTS idx_triage_units_sector ON triage_units(destination_sector);
 CREATE INDEX IF NOT EXISTS idx_triage_units_tracking ON triage_units(tracking_code);
+CREATE INDEX IF NOT EXISTS idx_triage_units_order ON triage_units(order_number);
 CREATE INDEX IF NOT EXISTS idx_triage_units_sku ON triage_units(base_product_sku);
 
 -- 3. Histórico de Entradas / Fluxo Diário
@@ -429,6 +431,7 @@ CREATE TABLE IF NOT EXISTS pending_items (
   voltage TEXT,
   serial_number TEXT,
   tracking_code TEXT,
+  order_number TEXT,
   platform TEXT,
   pending_reason TEXT,
   detailed_notes TEXT,
@@ -649,6 +652,7 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => ({
   id: u.id,
   tracking_code: u.trackingCode,
   serial_number: u.serialNumber || '',
+  order_number: u.orderNumber || '',
   base_product_id: u.baseProductId || '',
   base_product_name: u.baseProductName || '',
   base_product_sku: u.baseProductSku || '',
@@ -675,6 +679,7 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => ({
   id: r.id,
   trackingCode: r.tracking_code || r.trackingCode || '',
   serialNumber: r.serial_number || r.serialNumber || '',
+  orderNumber: r.order_number || r.orderNumber || '',
   baseProductId: r.base_product_id || r.baseProductId || '',
   baseProductName: r.base_product_name || r.baseProductName || '',
   baseProductSku: r.base_product_sku || r.baseProductSku || '',
@@ -731,6 +736,7 @@ export const mapPendingItemToSupabase = (p: PendingItem) => ({
   voltage: p.voltage || 'Bivolt',
   serial_number: p.serialNumber || '',
   tracking_code: p.trackingCode || '',
+  order_number: p.orderNumber || '',
   platform: p.platform || '',
   pending_reason: compressText(p.pendingReason || ''),
   detailed_notes: compressText(p.detailedNotes || ''),
@@ -752,6 +758,7 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => ({
   voltage: r.voltage || 'Bivolt',
   serialNumber: r.serial_number || r.serialNumber || '',
   trackingCode: r.tracking_code || r.trackingCode || '',
+  orderNumber: r.order_number || r.orderNumber || '',
   platform: r.platform || '',
   pendingReason: decompressText(r.pending_reason || r.pendingReason || ''),
   detailedNotes: decompressText(r.detailed_notes || r.detailedNotes || ''),
