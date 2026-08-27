@@ -168,7 +168,7 @@ export default function App() {
   const [isLoadingMoreProducts, setIsLoadingMoreProducts] = useState<boolean>(false);
   const lastLoadedUserIdRef = React.useRef<string | null>(null);
 
-  // Initial Data Fetching from Database
+  // Initial Data Fetching from Database with safety timeout
   const loadInitialData = async () => {
     try {
       setSyncError(null);
@@ -176,12 +176,55 @@ export default function App() {
       // Clean up legacy logs in background
       purgeExistingAuditLogs().catch(() => {});
 
-      const [prodRes, triageRes, pendingList, inflowList] = await Promise.all([
+      // Use a 4-second race timeout so the UI never hangs indefinitely on cold starts
+      const fetchPromise = Promise.all([
         getInitialBaseProducts(2500),
         getInitialTriageUnits(2500),
         getInitialPendingItems(1000),
         getInitialDailyInflows(1000)
       ]);
+
+      const timeoutPromise = new Promise<'TIMEOUT'>((resolve) => 
+        setTimeout(() => resolve('TIMEOUT'), 4000)
+      );
+
+      const result = await Promise.race([fetchPromise, timeoutPromise]);
+
+      if (result === 'TIMEOUT') {
+        console.warn('Initial data fetch timed out after 4s, falling back to local cache & background sync.');
+        const cachedProds = getCachedBaseProducts();
+        const cachedTriages = getCachedTriageUnits();
+        const cachedPending = getCachedPendingItems();
+        const cachedInflows = getCachedDailyInflows();
+        if (cachedProds.length > 0) setProducts(cachedProds);
+        if (cachedTriages.length > 0) setTriageUnits(cachedTriages);
+        if (cachedPending.length > 0) setPendingItems(cachedPending);
+        if (cachedInflows.length > 0) setDailyInflows(cachedInflows);
+        setIsLoading(false);
+
+        // Continue background completion
+        fetchPromise.then(([prodRes, triageRes, pendingList, inflowList]) => {
+          if (prodRes && Array.isArray(prodRes.data)) {
+            setProducts(prodRes.data);
+            setProductsLastDoc(prodRes.lastDoc);
+            setHasMoreProducts(prodRes.hasMore);
+          }
+          if (triageRes && Array.isArray(triageRes.data)) {
+            setTriageUnits(triageRes.data);
+          }
+          if (Array.isArray(pendingList)) {
+            setPendingItems(pendingList);
+          }
+          if (Array.isArray(inflowList)) {
+            setDailyInflows(inflowList);
+          }
+        }).catch((e) => {
+          console.warn('Background data sync completion note:', e);
+        });
+        return;
+      }
+
+      const [prodRes, triageRes, pendingList, inflowList] = result;
 
       if (prodRes && Array.isArray(prodRes.data)) {
         setProducts(prodRes.data);

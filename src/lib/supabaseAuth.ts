@@ -319,7 +319,7 @@ export const syncUserProfileInDb = async (
 };
 
 /**
- * Subscribe to Supabase Auth State Changes
+ * Subscribe to Supabase Auth State Changes with instant recovery and timeout safeguards
  */
 export const subscribeToSupabaseAuth = (
   onUserChanged: (user: User | null, profile: UserAccount | null) => void
@@ -330,40 +330,107 @@ export const subscribeToSupabaseAuth = (
     return () => {};
   }
 
+  let hasEmittedInitialState = false;
   let lastEmittedUserId: string | null = null;
   let cachedProfile: UserAccount | null = null;
 
+  // 1. Fallback timer: guarantee the loading screen resolves within 2.5 seconds maximum
+  const authTimeout = setTimeout(() => {
+    if (!hasEmittedInitialState) {
+      hasEmittedInitialState = true;
+      onUserChanged(null, null);
+    }
+  }, 2500);
+
+  // 2. Direct session probe for immediate 0ms resolution
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (hasEmittedInitialState) return;
+    clearTimeout(authTimeout);
+    
+    if (session?.user) {
+      const u = session.user;
+      const quickProfile: UserAccount = {
+        uid: u.id,
+        email: u.email || '',
+        name: (u.user_metadata?.name as string) || u.email?.split('@')[0] || 'Operador',
+        role: (u.email === 'alessandro.away6@gmail.com' ? 'admin' : ((u.user_metadata?.role as any) || 'operator')),
+        createdAt: u.created_at || new Date().toISOString()
+      };
+      lastEmittedUserId = u.id;
+      cachedProfile = quickProfile;
+      setCachedAuthUser({ uid: u.id, email: u.email || '', name: quickProfile.name });
+      hasEmittedInitialState = true;
+      onUserChanged(u, quickProfile);
+
+      // Background profile sync
+      syncUserProfileInDb(u).then((dbProfile) => {
+        if (dbProfile) {
+          cachedProfile = dbProfile;
+          setCachedAuthUser({ uid: u.id, email: u.email || '', name: dbProfile.name });
+          onUserChanged(u, dbProfile);
+        }
+      }).catch(() => {});
+    } else {
+      hasEmittedInitialState = true;
+      onUserChanged(null, null);
+    }
+  }).catch(() => {
+    if (!hasEmittedInitialState) {
+      hasEmittedInitialState = true;
+      clearTimeout(authTimeout);
+      onUserChanged(null, null);
+    }
+  });
+
+  // 3. Realtime listener for subsequent auth transitions (sign in, sign out, token refresh)
   const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    clearTimeout(authTimeout);
     const currentUser = session?.user || null;
 
     if (currentUser) {
+      const quickProfile: UserAccount = {
+        uid: currentUser.id,
+        email: currentUser.email || '',
+        name: (currentUser.user_metadata?.name as string) || currentUser.email?.split('@')[0] || 'Operador',
+        role: (currentUser.email === 'alessandro.away6@gmail.com' ? 'admin' : ((currentUser.user_metadata?.role as any) || 'operator')),
+        createdAt: currentUser.created_at || new Date().toISOString()
+      };
+
       setCachedAuthUser({
         uid: currentUser.id,
         email: currentUser.email || '',
-        name: (currentUser.user_metadata?.name as string) || currentUser.email?.split('@')[0] || 'Operador'
+        name: quickProfile.name
       });
 
-      // If same user and token was just refreshed upon switching back to tab, do not re-sync or re-emit
-      if (lastEmittedUserId === currentUser.id && cachedProfile && (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+      // Immediate UI update
+      if (!hasEmittedInitialState || lastEmittedUserId !== currentUser.id) {
+        hasEmittedInitialState = true;
+        lastEmittedUserId = currentUser.id;
+        onUserChanged(currentUser, cachedProfile || quickProfile);
+      }
+
+      // If token refreshed and profile is already loaded, skip re-querying
+      if (event === 'TOKEN_REFRESHED' && cachedProfile) {
         return;
       }
 
-      // Only perform database sync on initial sign in or actual user change
-      if (lastEmittedUserId !== currentUser.id || !cachedProfile) {
-        cachedProfile = await syncUserProfileInDb(currentUser);
-        lastEmittedUserId = currentUser.id;
+      // Perform background profile sync from database without blocking UI
+      try {
+        const dbProfile = await syncUserProfileInDb(currentUser);
+        if (dbProfile) {
+          cachedProfile = dbProfile;
+          setCachedAuthUser({
+            uid: currentUser.id,
+            email: currentUser.email || '',
+            name: dbProfile.name
+          });
+          onUserChanged(currentUser, dbProfile);
+        }
+      } catch (err) {
+        console.warn('Background user profile sync note:', err);
       }
-
-      if (cachedProfile) {
-        setCachedAuthUser({
-          uid: currentUser.id,
-          email: currentUser.email || '',
-          name: cachedProfile.name
-        });
-      }
-
-      onUserChanged(currentUser, cachedProfile);
     } else {
+      hasEmittedInitialState = true;
       setCachedAuthUser(null);
       lastEmittedUserId = null;
       cachedProfile = null;
@@ -372,6 +439,7 @@ export const subscribeToSupabaseAuth = (
   });
 
   return () => {
+    clearTimeout(authTimeout);
     subscription.unsubscribe();
   };
 };
