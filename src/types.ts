@@ -87,6 +87,7 @@ export interface TriageUnit {
   photosBox: string[]; // Base64 compressed strings
   photosAccessories: string[]; // Base64 compressed strings
   createdAt: string; // ISO String
+  updatedAt?: string;
   status: 'Estoque' | 'Baixado';
   checkoutDate?: string | null;
   source?: 'manual' | 'excel' | 'migration';

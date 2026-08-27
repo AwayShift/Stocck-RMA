@@ -14,7 +14,8 @@ import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTrack
 import { recordDbOperation } from './quotaTracker';
 import { 
   getActiveDbProvider, 
-  getSupabaseClient, 
+  getSupabaseClient,
+  generateUUID,
   mapProductToSupabase, 
   mapSupabaseToProduct,
   mapTriageUnitToSupabase,
@@ -794,11 +795,23 @@ export const getInitialBaseProducts = async (pageSize: number = 2500): Promise<P
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('products')
         .select(PRODUCT_COLUMNS)
         .order('created_at', { ascending: false })
         .limit(pageSize);
+
+      if (error) {
+        console.warn('Column projection failed for products, falling back to select(*):', error);
+        const fallback = await supabase
+          .from('products')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(pageSize);
+        data = fallback.data;
+        error = fallback.error;
+      }
+
       if (!error && data) {
         const list = data.map(mapSupabaseToProduct);
         updateWholeCollectionCache('products', list);
@@ -834,11 +847,23 @@ export const getPaginatedBaseProducts = async (page: number = 1, pageSize: numbe
     try {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
-      const { data, count, error } = await supabase
+      let { data, count, error } = await supabase
         .from('products')
         .select(PRODUCT_COLUMNS, { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
+
+      if (error) {
+        const fallback = await supabase
+          .from('products')
+          .select('*', { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        data = fallback.data;
+        count = fallback.count;
+        error = fallback.error;
+      }
+
       if (!error && data) {
         return {
           data: data.map(mapSupabaseToProduct),
@@ -861,11 +886,23 @@ export const getInitialTriageUnits = async (pageSize: number = 2500): Promise<Pa
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('triage_units')
         .select(TRIAGE_COLUMNS)
         .order('created_at', { ascending: false })
         .limit(pageSize);
+
+      if (error) {
+        console.warn('Column projection failed for triage_units, falling back to select(*):', error);
+        const fallback = await supabase
+          .from('triage_units')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(pageSize);
+        data = fallback.data;
+        error = fallback.error;
+      }
+
       if (!error && data) {
         const list = data.map(mapSupabaseToTriageUnit);
         updateWholeCollectionCache('triage_units', list);
@@ -894,11 +931,23 @@ export const getPaginatedTriageUnits = async (page: number = 1, pageSize: number
     try {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
-      const { data, count, error } = await supabase
+      let { data, count, error } = await supabase
         .from('triage_units')
         .select(TRIAGE_COLUMNS, { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
+
+      if (error) {
+        const fallback = await supabase
+          .from('triage_units')
+          .select('*', { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        data = fallback.data;
+        count = fallback.count;
+        error = fallback.error;
+      }
+
       if (!error && data) {
         return {
           data: data.map(mapSupabaseToTriageUnit),
@@ -928,11 +977,23 @@ export const getInitialPendingItems = async (pageSize: number = 1000): Promise<P
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('pending_items')
         .select(PENDING_COLUMNS)
         .order('created_at', { ascending: false })
         .limit(pageSize);
+
+      if (error) {
+        console.warn('Column projection failed for pending_items, falling back to select(*):', error);
+        const fallback = await supabase
+          .from('pending_items')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(pageSize);
+        data = fallback.data;
+        error = fallback.error;
+      }
+
       if (!error && data) {
         const list = data.map(mapSupabaseToPendingItem);
         updateWholeCollectionCache('pending_items', list);
@@ -949,11 +1010,23 @@ export const getInitialDailyInflows = async (limitCount: number = 1000): Promise
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('daily_inflows')
         .select(INFLOW_COLUMNS)
         .order('date', { ascending: true })
         .limit(limitCount);
+
+      if (error) {
+        console.warn('Column projection failed for daily_inflows, falling back to select(*):', error);
+        const fallback = await supabase
+          .from('daily_inflows')
+          .select('*')
+          .order('date', { ascending: true })
+          .limit(limitCount);
+        data = fallback.data;
+        error = fallback.error;
+      }
+
       if (!error && data) {
         const list = data.map(mapSupabaseToDailyInflow);
         updateWholeCollectionCache('daily_inflows', list);
@@ -1012,6 +1085,7 @@ export const saveBaseProduct = async (product: BaseProduct): Promise<BaseProduct
   const now = new Date().toISOString();
   const savedItem: BaseProduct = {
     ...product,
+    id: (product.id && product.id.trim()) ? product.id.trim() : generateUUID(),
     createdAt: product.createdAt || now,
     updatedAt: now,
     images: product.images || (product.imageUrl ? [product.imageUrl] : []),
@@ -1024,9 +1098,34 @@ export const saveBaseProduct = async (product: BaseProduct): Promise<BaseProduct
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('products').upsert(mapProductToSupabase(savedItem));
+    const row = mapProductToSupabase(savedItem);
+    const { error } = await supabase.from('products').upsert(row);
+    if (error) {
+      console.warn('Supabase save product error, attempting minimal payload fallback:', error);
+      const minimalRow = {
+        id: row.id,
+        name: row.name,
+        sku: row.sku,
+        voltage: row.voltage,
+        description: row.description,
+        image_url: row.image_url,
+        brand: row.brand,
+        category: row.category,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+      const fallbackRes = await supabase.from('products').upsert(minimalRow);
+      if (fallbackRes.error) {
+        console.error('Supabase fallback save product error:', fallbackRes.error);
+        throw new Error(`Falha ao salvar produto no Supabase: ${fallbackRes.error.message}`);
+      }
+    }
     recordDbOperation('write', 1);
-    createAuditLog('SAVE_PRODUCT', `Salvou produto master (Supabase) SKU: ${product.sku} - ${product.name}`);
+    try {
+      await createAuditLog('SAVE_PRODUCT', `Salvou produto master (Supabase) SKU: ${product.sku} - ${product.name}`);
+    } catch (e) {
+      console.warn('Audit log write error:', e);
+    }
   }
 
   return savedItem;
@@ -1044,10 +1143,10 @@ export const saveBatchBaseProducts = async (
   for (const item of productsToSave) {
     const cleanSku = item.sku.trim().toUpperCase();
     const existing = existingProducts.find(
-      p => p.sku.trim().toUpperCase() === cleanSku || p.id === item.id
+      p => p.sku.trim().toUpperCase() === cleanSku || (item.id && p.id === item.id)
     );
 
-    const docId = existing ? existing.id : (item.id || `bp-${cleanSku.replace(/[^A-Z0-9_-]/gi, '_')}-${Date.now()}`);
+    const docId = existing ? existing.id : (item.id && item.id.trim() ? item.id.trim() : generateUUID());
 
     const payload: BaseProduct = {
       id: docId,
@@ -1079,13 +1178,26 @@ export const saveBatchBaseProducts = async (
   const supabase = getSupabaseClient();
   if (supabase) {
     const rows = savedProducts.map(mapProductToSupabase);
-    await supabase.from('products').upsert(rows);
+    const { error } = await supabase.from('products').upsert(rows);
+    if (error) {
+      console.warn('Batch upsert error, attempting individual upserts:', error);
+      for (const row of rows) {
+        await supabase.from('products').upsert(row);
+      }
+    }
     recordDbOperation('write', savedProducts.length);
-    createAuditLog(
-      'IMPORT_EXCEL_CATALOG',
-      `Importou planilha no Catálogo de Base (Supabase): ${added} novo(s) e ${updated} atualizado(s).`
-    );
+    try {
+      await createAuditLog(
+        'IMPORT_EXCEL_CATALOG',
+        `Importou planilha no Catálogo de Base (Supabase): ${added} novo(s) e ${updated} atualizado(s).`
+      );
+    } catch (e) {
+      console.warn('Audit log write error:', e);
+    }
   }
+
+  // Update local memory & storage
+  savedProducts.forEach(prod => updateLocalCacheItem('products', prod));
 
   return { added, updated, savedProducts };
 };
@@ -1105,7 +1217,11 @@ export const deleteBaseProduct = async (id: string, sku?: string, name?: string)
       throw new Error(`Falha ao excluir produto no Supabase: ${error.message}`);
     }
     recordDbOperation('delete', 1);
-    createAuditLog('DELETE_PRODUCT', `Deletou o produto master (Supabase) SKU: ${sku || cleanId} ${name ? `- ${name}` : ''}`);
+    try {
+      await createAuditLog('DELETE_PRODUCT', `Deletou o produto master (Supabase) SKU: ${sku || cleanId} ${name ? `- ${name}` : ''}`);
+    } catch (e) {
+      console.warn('Audit log write error:', e);
+    }
   }
 };
 
@@ -1113,19 +1229,54 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
   const now = new Date().toISOString();
   const savedUnit: TriageUnit = {
     ...unit,
-    createdAt: unit.createdAt || now
+    id: (unit.id && unit.id.trim()) ? unit.id.trim() : generateUUID(),
+    createdAt: unit.createdAt || now,
+    updatedAt: now
   };
 
   updateLocalCacheItem('triage_units', savedUnit);
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('triage_units').upsert(mapTriageUnitToSupabase(savedUnit));
+    const row = mapTriageUnitToSupabase(savedUnit);
+    const { error } = await supabase.from('triage_units').upsert(row);
+    if (error) {
+      console.warn('Supabase upsert triage_units error, attempting minimal fallback payload:', error);
+      const minimalRow = {
+        id: row.id,
+        tracking_code: row.tracking_code,
+        serial_number: row.serial_number,
+        order_number: row.order_number,
+        base_product_id: row.base_product_id,
+        base_product_name: row.base_product_name,
+        base_product_sku: row.base_product_sku,
+        base_product_voltage: row.base_product_voltage,
+        platform: row.platform,
+        customer_reason: row.customer_reason,
+        device_status: row.device_status,
+        package_status: row.package_status,
+        accessories_inclusion: row.accessories_inclusion,
+        destination_sector: row.destination_sector,
+        notes: row.notes,
+        status: row.status,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+      const fallbackRes = await supabase.from('triage_units').upsert(minimalRow);
+      if (fallbackRes.error) {
+        console.error('Supabase fallback triage save error:', fallbackRes.error);
+        throw new Error(`Falha ao salvar triagem no Supabase: ${fallbackRes.error.message}`);
+      }
+    }
     recordDbOperation('write', 1);
-    createAuditLog(
-      'SAVE_TRIAGE',
-      `Salvou entrada de RMA (Supabase) de ${unit.platform}. Rastreamento: ${unit.trackingCode} (${unit.baseProductName})`
-    );
+    try {
+      await createAuditLog(
+        'SAVE_TRIAGE',
+        `Salvou entrada de RMA (Supabase) de ${unit.platform}. Rastreamento: ${unit.trackingCode} (${unit.baseProductName})`
+      );
+    } catch (e) {
+      console.warn('Audit log write error:', e);
+    }
   }
 
   return savedUnit;
@@ -1146,7 +1297,11 @@ export const deleteTriageUnit = async (id: string, trackingCode?: string, name?:
       throw new Error(`Falha ao excluir triagem no Supabase: ${error.message}`);
     }
     recordDbOperation('delete', 1);
-    createAuditLog('DELETE_TRIAGE', `Excluiu triagem do registro de RMA (Supabase): ${trackingCode || cleanId} ${name ? `(${name})` : ''}`);
+    try {
+      await createAuditLog('DELETE_TRIAGE', `Excluiu triagem do registro de RMA (Supabase): ${trackingCode || cleanId} ${name ? `(${name})` : ''}`);
+    } catch (e) {
+      console.warn('Audit log write error:', e);
+    }
   }
 };
 

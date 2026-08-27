@@ -93,9 +93,9 @@ const persistToStorage = <T>(key: string, data: T[]) => {
 
 // Surgical Column Projections to reduce bandwidth & Egress (eliminating select * overload)
 const PRODUCT_COLUMNS = 'id, name, sku, voltage, description, image_url, images, images_product, images_box, images_accessories, accessories, brand, category, created_at, updated_at';
-const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date';
+const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration';
 const INFLOW_COLUMNS = 'id, date, rma, estoque, openbox, es, total_dia, notes, source, created_at, updated_at';
-const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
+const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
 
 // ============================================================================
 // 1. BASE PRODUCTS INCREMENTAL SYNC
@@ -122,10 +122,20 @@ export const syncBaseProductsIncrementally = async (
 
   // If no cache or forced full sync, perform initial bulk fetch
   if (forceFull || currentCached.length === 0 || !lastSync) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('products')
       .select(PRODUCT_COLUMNS)
       .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Fallback: products select with columns failed, trying select(*):', error);
+      const fallback = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       console.error('Error fetching full products:', error);
@@ -157,13 +167,25 @@ export const syncBaseProductsIncrementally = async (
     ]);
 
     if (updatedRes.error) {
-      console.warn('Incremental product sync error, using cache:', updatedRes.error);
-      return currentCached;
+      console.warn('Incremental product sync error, trying select(*):', updatedRes.error);
+      const fallbackUpdated = await supabase
+        .from('products')
+        .select('*')
+        .gt('updated_at', lastSync)
+        .order('updated_at', { ascending: true });
+      if (!fallbackUpdated.error && fallbackUpdated.data) {
+        updatedRes.data = fallbackUpdated.data;
+        updatedRes.error = null;
+      } else {
+        return currentCached;
+      }
     }
 
     let validIdSet: Set<string> | null = null;
-    if (!idsRes.error && idsRes.data) {
-      validIdSet = new Set(idsRes.data.map(r => r.id));
+    if (!idsRes.error && Array.isArray(idsRes.data)) {
+      if (idsRes.data.length > 0 || currentCached.length <= 2) {
+        validIdSet = new Set(idsRes.data.map(r => r.id));
+      }
     }
 
     const updatedMap = new Map<string, BaseProduct>();
@@ -224,10 +246,20 @@ export const syncTriageUnitsIncrementally = async (
   const lastSync = syncMeta.lastSyncTriageUnits;
 
   if (forceFull || currentCached.length === 0 || !lastSync) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('triage_units')
       .select(TRIAGE_COLUMNS)
       .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Fallback: triage_units select with columns failed, trying select(*):', error);
+      const fallback = await supabase
+        .from('triage_units')
+        .select('*')
+        .order('created_at', { ascending: false });
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       console.error('Error fetching full triage units:', error);
@@ -259,13 +291,25 @@ export const syncTriageUnitsIncrementally = async (
     ]);
 
     if (updatedRes.error) {
-      console.warn('Incremental triage sync error, using cache:', updatedRes.error);
-      return currentCached;
+      console.warn('Incremental triage sync error, trying select(*):', updatedRes.error);
+      const fallbackUpdated = await supabase
+        .from('triage_units')
+        .select('*')
+        .gt('updated_at', lastSync)
+        .order('updated_at', { ascending: true });
+      if (!fallbackUpdated.error && fallbackUpdated.data) {
+        updatedRes.data = fallbackUpdated.data;
+        updatedRes.error = null;
+      } else {
+        return currentCached;
+      }
     }
 
     let validIdSet: Set<string> | null = null;
-    if (!idsRes.error && idsRes.data) {
-      validIdSet = new Set(idsRes.data.map(r => r.id));
+    if (!idsRes.error && Array.isArray(idsRes.data)) {
+      if (idsRes.data.length > 0 || currentCached.length <= 2) {
+        validIdSet = new Set(idsRes.data.map(r => r.id));
+      }
     }
 
     const unitMap = new Map<string, TriageUnit>();

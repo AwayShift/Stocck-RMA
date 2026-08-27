@@ -27,9 +27,12 @@ import {
   ImageIcon,
   UserCheck,
   Download,
-  LogOut
+  LogOut,
+  Code,
+  Copy
 } from 'lucide-react';
 import { ThemeMode } from '../lib/theme';
+import { SUPABASE_SQL_SCHEMA } from '../lib/supabase';
 import { 
   getCloudinaryConfig, 
   saveCloudinaryConfig, 
@@ -88,6 +91,15 @@ export default function SettingsModal({
   const [cloudinaryTestResult, setCloudinaryTestResult] = useState<{ success: boolean; message: string; testUrl?: string } | null>(null);
   const [cloudinarySaveSuccess, setCloudinarySaveSuccess] = useState<boolean>(false);
   const [cloudinaryMetrics, setCloudinaryMetrics] = useState<CloudinaryMetricsSummary | null>(() => getLocalCachedCloudinaryMetrics());
+
+  const [showSqlCode, setShowSqlCode] = useState<boolean>(false);
+  const [copiedSql, setCopiedSql] = useState<boolean>(false);
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3000);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -643,6 +655,61 @@ export default function SettingsModal({
                   <Download className="w-3.5 h-3.5" />
                   <span>Baixar PRD</span>
                 </a>
+              </div>
+
+              {/* SQL Schema Script Card */}
+              <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                      <Code className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span>Script SQL do Supabase (Schema)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">Estrutura completa das tabelas, índices e RPC</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCopySql}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                    id="btn-settings-copy-sql"
+                  >
+                    {copiedSql ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-white" />
+                        <span>Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar SQL</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowSqlCode(!showSqlCode)}
+                    className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1 cursor-pointer font-medium"
+                    id="btn-settings-toggle-sql-view"
+                  >
+                    <span>{showSqlCode ? 'Ocultar código SQL' : 'Visualizar código SQL completo'}</span>
+                    {showSqlCode ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                  <span className="text-[10px] text-slate-500 font-mono">10 tabelas / views / RPC</span>
+                </div>
+
+                {showSqlCode && (
+                  <pre className="mt-2 p-3 bg-slate-900 border border-slate-800 rounded-lg text-[10px] font-mono text-slate-300 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed animate-in fade-in select-all">
+                    {SUPABASE_SQL_SCHEMA}
+                  </pre>
+                )}
               </div>
             </div>
           )}

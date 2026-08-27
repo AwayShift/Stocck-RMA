@@ -349,7 +349,7 @@ export const testSupabaseConnection = async (config?: SupabaseConfig): Promise<{
 export const SUPABASE_SQL_SCHEMA = `-- ========================================================
 -- STOCCKRMA PRO FLOW - ESQUEMA DE BANCO DE DADOS POSTGRESQL
 -- Cole este script no "SQL Editor" do seu painel Supabase
--- e clique em "RUN" para criar todas as tabelas em 1 segundo.
+-- e clique em "RUN" para criar ou atualizar todas as tabelas.
 -- ========================================================
 
 -- 1. Catálogo Base de Produtos
@@ -370,6 +370,19 @@ CREATE TABLE IF NOT EXISTS products (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Garantir colunas adicionais para products caso a tabela já exista
+ALTER TABLE products ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS images_product JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS images_box JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS images_accessories JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS accessories TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS brand TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS voltage TEXT DEFAULT 'Bivolt';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
@@ -377,7 +390,7 @@ CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 -- 2. Estoque Físico e Triagens de RMA
 CREATE TABLE IF NOT EXISTS triage_units (
   id TEXT PRIMARY KEY,
-  tracking_code TEXT NOT NULL,
+  tracking_code TEXT,
   serial_number TEXT,
   order_number TEXT,
   base_product_id TEXT,
@@ -401,6 +414,31 @@ CREATE TABLE IF NOT EXISTS triage_units (
   is_migration BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Garantir compatibilidade e colunas adicionais em triage_units já existentes ANTES de criar índices
+ALTER TABLE triage_units ALTER COLUMN tracking_code DROP NOT NULL;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS serial_number TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS order_number TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS base_product_id TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS base_product_name TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS base_product_sku TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS base_product_voltage TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS platform TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS customer_reason TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS device_status TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS package_status TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS accessories_inclusion TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS destination_sector TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS photos_product JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS photos_box JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS photos_accessories JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Estoque';
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS checkout_date TIMESTAMPTZ;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual';
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS is_migration BOOLEAN DEFAULT FALSE;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 CREATE INDEX IF NOT EXISTS idx_triage_units_status ON triage_units(status);
 CREATE INDEX IF NOT EXISTS idx_triage_units_sector ON triage_units(destination_sector);
 CREATE INDEX IF NOT EXISTS idx_triage_units_tracking ON triage_units(tracking_code);
@@ -421,6 +459,16 @@ CREATE TABLE IF NOT EXISTS daily_inflows (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE daily_inflows ADD COLUMN IF NOT EXISTS rma INT DEFAULT 0;
+ALTER TABLE daily_inflows ADD COLUMN IF NOT EXISTS estoque INT DEFAULT 0;
+ALTER TABLE daily_inflows ADD COLUMN IF NOT EXISTS openbox INT DEFAULT 0;
+ALTER TABLE daily_inflows ADD COLUMN IF NOT EXISTS es INT DEFAULT 0;
+ALTER TABLE daily_inflows ADD COLUMN IF NOT EXISTS total_dia INT DEFAULT 0;
+ALTER TABLE daily_inflows ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE daily_inflows ADD COLUMN IF NOT EXISTS source TEXT;
+ALTER TABLE daily_inflows ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 CREATE INDEX IF NOT EXISTS idx_daily_inflows_date ON daily_inflows(date);
 
 -- 4. Entradas Pendentes
@@ -446,6 +494,29 @@ CREATE TABLE IF NOT EXISTS pending_items (
   destination_sector_suggested TEXT
 );
 
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS sku TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS product_name TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS voltage TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS serial_number TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS tracking_code TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS order_number TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS platform TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS pending_reason TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS detailed_notes TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pendente';
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS created_by JSONB;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_to_stock BOOLEAN DEFAULT FALSE;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_unit_id TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS destination_sector_suggested TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+CREATE INDEX IF NOT EXISTS idx_pending_items_sku ON pending_items(sku);
+CREATE INDEX IF NOT EXISTS idx_pending_items_status ON pending_items(status);
+CREATE INDEX IF NOT EXISTS idx_pending_items_tracking ON pending_items(tracking_code);
+CREATE INDEX IF NOT EXISTS idx_pending_items_order ON pending_items(order_number);
+
 -- 5. Casos e Rastreamento
 CREATE TABLE IF NOT EXISTS cases (
   id TEXT PRIMARY KEY,
@@ -459,6 +530,13 @@ CREATE TABLE IF NOT EXISTS cases (
   notes TEXT
 );
 
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS platform TEXT;
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS reason TEXT;
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS resolution TEXT;
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pendente';
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS value NUMERIC;
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS notes TEXT;
+
 -- 6. Auditoria de Ações
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -468,6 +546,11 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   details TEXT,
   timestamp TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_email TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timestamp TIMESTAMPTZ DEFAULT NOW();
 
 -- 7. Snapshots e Histórico de Backup
 CREATE TABLE IF NOT EXISTS backup_snapshots (
@@ -512,6 +595,12 @@ CREATE TABLE IF NOT EXISTS users (
   last_login TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'operator';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
@@ -609,26 +698,45 @@ DROP POLICY IF EXISTS "Public storage delete product-images" ON storage.objects;
 CREATE POLICY "Public storage delete product-images" ON storage.objects FOR DELETE USING (bucket_id = 'product-images');
 `;
 
+/**
+ * Generates a valid UUID v4 compliant string
+ * Ensures universal compatibility with both UUID and TEXT columns in PostgreSQL
+ */
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 // Helper conversion functions between StocckRMA App Types and Supabase Postgres Rows
 // Long text fields are transparently compressed/decompressed with LZ-String to save Egress.
 
-export const mapProductToSupabase = (p: BaseProduct) => ({
-  id: p.id,
-  name: p.name,
-  sku: p.sku,
-  voltage: p.voltage || 'Bivolt',
-  description: compressText(p.description || ''),
-  image_url: p.imageUrl || '',
-  images: p.images || [],
-  images_product: p.imagesProduct || [],
-  images_box: p.imagesBox || [],
-  images_accessories: p.imagesAccessories || [],
-  accessories: compressText(p.accessories || ''),
-  brand: p.brand || '',
-  category: p.category || '',
-  created_at: p.createdAt || new Date().toISOString(),
-  updated_at: p.updatedAt || new Date().toISOString()
-});
+export const mapProductToSupabase = (p: BaseProduct) => {
+  const cleanId = (p.id && p.id.trim()) ? p.id.trim() : generateUUID();
+  const now = new Date().toISOString();
+  return {
+    id: cleanId,
+    name: p.name || 'Produto Sem Nome',
+    sku: (p.sku || '').trim().toUpperCase(),
+    voltage: p.voltage || 'Bivolt',
+    description: compressText(p.description || ''),
+    image_url: p.imageUrl || '',
+    images: Array.isArray(p.images) ? p.images : (p.imageUrl ? [p.imageUrl] : []),
+    images_product: Array.isArray(p.imagesProduct) ? p.imagesProduct : [],
+    images_box: Array.isArray(p.imagesBox) ? p.imagesBox : [],
+    images_accessories: Array.isArray(p.imagesAccessories) ? p.imagesAccessories : [],
+    accessories: compressText(p.accessories || ''),
+    brand: p.brand || '',
+    category: p.category || '',
+    created_at: p.createdAt || now,
+    updated_at: p.updatedAt || now
+  };
+};
 
 export const mapSupabaseToProduct = (r: any): BaseProduct => ({
   id: r.id,
@@ -637,10 +745,10 @@ export const mapSupabaseToProduct = (r: any): BaseProduct => ({
   voltage: r.voltage || 'Bivolt',
   description: decompressText(r.description || ''),
   imageUrl: r.image_url || r.imageUrl || '',
-  images: r.images || [],
-  imagesProduct: r.images_product || r.imagesProduct || [],
-  imagesBox: r.images_box || r.imagesBox || [],
-  imagesAccessories: r.images_accessories || r.imagesAccessories || [],
+  images: Array.isArray(r.images) ? r.images : [],
+  imagesProduct: Array.isArray(r.images_product || r.imagesProduct) ? (r.images_product || r.imagesProduct) : [],
+  imagesBox: Array.isArray(r.images_box || r.imagesBox) ? (r.images_box || r.imagesBox) : [],
+  imagesAccessories: Array.isArray(r.images_accessories || r.imagesAccessories) ? (r.images_accessories || r.imagesAccessories) : [],
   accessories: decompressText(r.accessories || ''),
   brand: r.brand || '',
   category: r.category || '',
@@ -648,72 +756,89 @@ export const mapSupabaseToProduct = (r: any): BaseProduct => ({
   updatedAt: r.updated_at || r.updatedAt
 });
 
-export const mapTriageUnitToSupabase = (u: TriageUnit) => ({
-  id: u.id,
-  tracking_code: u.trackingCode,
-  serial_number: u.serialNumber || '',
-  order_number: u.orderNumber || '',
-  base_product_id: u.baseProductId || '',
-  base_product_name: u.baseProductName || '',
-  base_product_sku: u.baseProductSku || '',
-  base_product_voltage: u.baseProductVoltage || '',
-  platform: u.platform,
-  customer_reason: compressText(u.customerReason || ''),
-  device_status: u.deviceStatus || '',
-  package_status: u.packageStatus || '',
-  accessories_inclusion: compressText(u.accessoriesInclusion || ''),
-  destination_sector: u.destinationSector || 'RMA',
-  notes: compressText(u.notes || ''),
-  photos_product: u.photosProduct || [],
-  photos_box: u.photosBox || [],
-  photos_accessories: u.photosAccessories || [],
-  created_at: u.createdAt || new Date().toISOString(),
-  status: u.status || 'Estoque',
-  checkout_date: u.checkoutDate || null,
-  source: u.source || 'manual',
-  is_migration: Boolean(u.isMigration),
-  updated_at: new Date().toISOString()
-});
+export const mapTriageUnitToSupabase = (u: TriageUnit) => {
+  const cleanId = (u.id && u.id.trim()) ? u.id.trim() : generateUUID();
+  const now = new Date().toISOString();
+  let validCreatedAt = u.createdAt;
+  if (!validCreatedAt || isNaN(Date.parse(validCreatedAt))) {
+    validCreatedAt = now;
+  }
+  let validCheckoutDate: string | null = null;
+  if (u.checkoutDate && !isNaN(Date.parse(u.checkoutDate))) {
+    validCheckoutDate = new Date(u.checkoutDate).toISOString();
+  }
+
+  return {
+    id: cleanId,
+    tracking_code: u.trackingCode ?? '',
+    serial_number: u.serialNumber ?? '',
+    order_number: u.orderNumber ?? '',
+    base_product_id: u.baseProductId ?? '',
+    base_product_name: u.baseProductName ?? '',
+    base_product_sku: u.baseProductSku ?? '',
+    base_product_voltage: u.baseProductVoltage || 'Bivolt',
+    platform: u.platform || 'Mercado Livre',
+    customer_reason: compressText(u.customerReason || ''),
+    device_status: u.deviceStatus || 'Usado',
+    package_status: u.packageStatus || 'Danificada',
+    accessories_inclusion: compressText(u.accessoriesInclusion || ''),
+    destination_sector: u.destinationSector || 'RMA',
+    notes: compressText(u.notes || ''),
+    photos_product: Array.isArray(u.photosProduct) ? u.photosProduct : [],
+    photos_box: Array.isArray(u.photosBox) ? u.photosBox : [],
+    photos_accessories: Array.isArray(u.photosAccessories) ? u.photosAccessories : [],
+    created_at: validCreatedAt,
+    status: u.status || 'Estoque',
+    checkout_date: validCheckoutDate,
+    source: u.source || 'manual',
+    is_migration: Boolean(u.isMigration),
+    updated_at: now
+  };
+};
 
 export const mapSupabaseToTriageUnit = (r: any): TriageUnit => ({
   id: r.id,
-  trackingCode: r.tracking_code || r.trackingCode || '',
-  serialNumber: r.serial_number || r.serialNumber || '',
-  orderNumber: r.order_number || r.orderNumber || '',
-  baseProductId: r.base_product_id || r.baseProductId || '',
-  baseProductName: r.base_product_name || r.baseProductName || '',
-  baseProductSku: r.base_product_sku || r.baseProductSku || '',
-  baseProductVoltage: r.base_product_voltage || r.baseProductVoltage || '',
-  platform: r.platform,
+  trackingCode: r.tracking_code ?? r.trackingCode ?? '',
+  serialNumber: r.serial_number ?? r.serialNumber ?? '',
+  orderNumber: r.order_number ?? r.orderNumber ?? '',
+  baseProductId: r.base_product_id ?? r.baseProductId ?? '',
+  baseProductName: r.base_product_name ?? r.baseProductName ?? '',
+  baseProductSku: r.base_product_sku ?? r.baseProductSku ?? '',
+  baseProductVoltage: r.base_product_voltage ?? r.baseProductVoltage ?? 'Bivolt',
+  platform: r.platform || 'Mercado Livre',
   customerReason: decompressText(r.customer_reason || r.customerReason || ''),
   deviceStatus: r.device_status || r.deviceStatus || '',
   packageStatus: r.package_status || r.packageStatus || '',
   accessoriesInclusion: decompressText(r.accessories_inclusion || r.accessoriesInclusion || ''),
   destinationSector: r.destination_sector || r.destinationSector || 'RMA',
   notes: decompressText(r.notes || ''),
-  photosProduct: r.photos_product || r.photosProduct || [],
-  photosBox: r.photos_box || r.photosBox || [],
-  photosAccessories: r.photos_accessories || r.photosAccessories || [],
-  createdAt: r.created_at || r.createdAt,
+  photosProduct: Array.isArray(r.photos_product || r.photosProduct) ? (r.photos_product || r.photosProduct) : [],
+  photosBox: Array.isArray(r.photos_box || r.photosBox) ? (r.photos_box || r.photosBox) : [],
+  photosAccessories: Array.isArray(r.photos_accessories || r.photosAccessories) ? (r.photos_accessories || r.photosAccessories) : [],
+  createdAt: r.created_at || r.createdAt || new Date().toISOString(),
   status: r.status || 'Estoque',
   checkoutDate: r.checkout_date || r.checkoutDate || null,
   source: r.source || 'manual',
   isMigration: Boolean(r.is_migration ?? r.isMigration)
 });
 
-export const mapDailyInflowToSupabase = (d: DailyInflowRecord) => ({
-  id: d.id,
-  date: d.date,
-  rma: d.rma || 0,
-  estoque: d.estoque || 0,
-  openbox: d.openbox || 0,
-  es: d.es || 0,
-  total_dia: d.totalDia || 0,
-  notes: compressText(d.notes || ''),
-  source: d.source || 'manual',
-  created_at: d.createdAt || new Date().toISOString(),
-  updated_at: d.updatedAt || new Date().toISOString()
-});
+export const mapDailyInflowToSupabase = (d: DailyInflowRecord) => {
+  const cleanId = (d.id && d.id.trim()) ? d.id.trim() : generateUUID();
+  const now = new Date().toISOString();
+  return {
+    id: cleanId,
+    date: d.date,
+    rma: d.rma || 0,
+    estoque: d.estoque || 0,
+    openbox: d.openbox || 0,
+    es: d.es || 0,
+    total_dia: d.totalDia || (Number(d.rma || 0) + Number(d.estoque || 0) + Number(d.openbox || 0) + Number(d.es || 0)),
+    notes: compressText(d.notes || ''),
+    source: d.source || 'manual',
+    created_at: d.createdAt || now,
+    updated_at: d.updatedAt || now
+  };
+};
 
 export const mapSupabaseToDailyInflow = (r: any): DailyInflowRecord => ({
   id: r.id,
@@ -729,27 +854,31 @@ export const mapSupabaseToDailyInflow = (r: any): DailyInflowRecord => ({
   updatedAt: r.updated_at || r.updatedAt
 });
 
-export const mapPendingItemToSupabase = (p: PendingItem) => ({
-  id: p.id,
-  sku: p.sku || '',
-  product_name: p.productName || '',
-  voltage: p.voltage || 'Bivolt',
-  serial_number: p.serialNumber || '',
-  tracking_code: p.trackingCode || '',
-  order_number: p.orderNumber || '',
-  platform: p.platform || '',
-  pending_reason: compressText(p.pendingReason || ''),
-  detailed_notes: compressText(p.detailedNotes || ''),
-  status: p.status || 'Pendente',
-  photos: p.photos || [],
-  created_at: p.createdAt || new Date().toISOString(),
-  updated_at: p.updatedAt || new Date().toISOString(),
-  created_by: p.createdBy || null,
-  resolved_at: p.resolvedAt || null,
-  transferred_to_stock: Boolean(p.transferredToStock),
-  transferred_unit_id: p.transferredUnitId || null,
-  destination_sector_suggested: p.destinationSectorSuggested || 'RMA'
-});
+export const mapPendingItemToSupabase = (p: PendingItem) => {
+  const cleanId = (p.id && p.id.trim()) ? p.id.trim() : generateUUID();
+  const now = new Date().toISOString();
+  return {
+    id: cleanId,
+    sku: p.sku || '',
+    product_name: p.productName || '',
+    voltage: p.voltage || 'Bivolt',
+    serial_number: p.serialNumber || '',
+    tracking_code: p.trackingCode || '',
+    order_number: p.orderNumber || '',
+    platform: p.platform || 'Mercado Livre',
+    pending_reason: compressText(p.pendingReason || ''),
+    detailed_notes: compressText(p.detailedNotes || ''),
+    status: p.status || 'Pendente',
+    photos: Array.isArray(p.photos) ? p.photos : [],
+    created_at: p.createdAt || now,
+    updated_at: p.updatedAt || now,
+    created_by: p.createdBy || null,
+    resolved_at: p.resolvedAt || null,
+    transferred_to_stock: Boolean(p.transferredToStock),
+    transferred_unit_id: p.transferredUnitId || null,
+    destination_sector_suggested: p.destinationSectorSuggested || 'RMA'
+  };
+};
 
 export const mapSupabaseToPendingItem = (r: any): PendingItem => ({
   id: r.id,
@@ -759,11 +888,11 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => ({
   serialNumber: r.serial_number || r.serialNumber || '',
   trackingCode: r.tracking_code || r.trackingCode || '',
   orderNumber: r.order_number || r.orderNumber || '',
-  platform: r.platform || '',
+  platform: r.platform || 'Mercado Livre',
   pendingReason: decompressText(r.pending_reason || r.pendingReason || ''),
   detailedNotes: decompressText(r.detailed_notes || r.detailedNotes || ''),
   status: r.status || 'Pendente',
-  photos: r.photos || [],
+  photos: Array.isArray(r.photos) ? r.photos : [],
   createdAt: r.created_at || r.createdAt,
   updatedAt: r.updated_at || r.updatedAt,
   createdBy: r.created_by || r.createdBy,
