@@ -46,14 +46,21 @@ import {
   deletePendingItem,
   updatePendingItemStatus,
   transferPendingItemToStock,
-  // Removido imports obsoletos (createAuditLog, ensureUserProfileExists, resetDatabaseToDefaults)
-  purgeExistingAuditLogs
+  purgeExistingAuditLogs,
+  subscribeBaseProducts,
+  subscribeTriageUnits,
+  subscribeDailyInflows,
+  subscribePendingItems
 } from './lib/dbService';
 import {
   getCachedBaseProducts,
   getCachedTriageUnits,
   getCachedDailyInflows,
-  getCachedPendingItems
+  getCachedPendingItems,
+  syncBaseProductsIncrementally,
+  syncTriageUnitsIncrementally,
+  syncDailyInflowsIncrementally,
+  syncPendingItemsIncrementally
 } from './lib/syncCacheService';
 
 import Dashboard from './components/Dashboard';
@@ -262,12 +269,92 @@ export default function App() {
       lastLoadedUserIdRef.current = null;
       return;
     }
-    // Only load initial data when user first logs in or user ID actually changes, not on window focus/tab switch
+    // Only load initial full data when user first logs in or user ID actually changes
     if (lastLoadedUserIdRef.current !== user.id) {
       lastLoadedUserIdRef.current = user.id;
       loadInitialData();
     }
   }, [user?.id]);
+
+  // Silent incremental delta sync across devices & tabs
+  const refreshIncrementalData = React.useCallback(async () => {
+    if (!user) return;
+    try {
+      const [prodList, triageList, inflowList, pendingList] = await Promise.all([
+        syncBaseProductsIncrementally(),
+        syncTriageUnitsIncrementally(),
+        syncDailyInflowsIncrementally(),
+        syncPendingItemsIncrementally()
+      ]);
+      if (Array.isArray(prodList) && prodList.length > 0) setProducts(prodList);
+      if (Array.isArray(triageList) && triageList.length > 0) setTriageUnits(triageList);
+      if (Array.isArray(inflowList) && inflowList.length > 0) setDailyInflows(inflowList);
+      if (Array.isArray(pendingList) && pendingList.length > 0) setPendingItems(pendingList);
+    } catch (e) {
+      // Silent background delta sync
+    }
+  }, [user]);
+
+  // 1. Live Realtime Subscriptions for Products, Triage Units, Daily Inflows, and Pending Items
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubProducts = subscribeBaseProducts((updatedList) => {
+      if (Array.isArray(updatedList)) setProducts(updatedList);
+    });
+
+    const unsubTriage = subscribeTriageUnits((updatedList) => {
+      if (Array.isArray(updatedList)) setTriageUnits(updatedList);
+    });
+
+    const unsubInflows = subscribeDailyInflows((updatedList) => {
+      if (Array.isArray(updatedList)) setDailyInflows(updatedList);
+    });
+
+    const unsubPending = subscribePendingItems((updatedList) => {
+      if (Array.isArray(updatedList)) setPendingItems(updatedList);
+    });
+
+    return () => {
+      unsubProducts();
+      unsubTriage();
+      unsubInflows();
+      unsubPending();
+    };
+  }, [user?.id]);
+
+  // 2. Refresh incremental delta sync on internal tab switch
+  useEffect(() => {
+    if (!user) return;
+    refreshIncrementalData();
+  }, [activeTab, refreshIncrementalData, user]);
+
+  // 3. Refresh incremental delta sync when browser tab gains focus or returns from background
+  useEffect(() => {
+    if (!user) return;
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        refreshIncrementalData();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    // Periodic gentle delta sync every 20s as fallback if mobile browser paused WebSockets
+    const syncInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refreshIncrementalData();
+      }
+    }, 20000);
+
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      clearInterval(syncInterval);
+    };
+  }, [refreshIncrementalData, user]);
 
   // Load More Base Products via startAfter() pagination
   const handleLoadMoreProducts = async () => {
