@@ -203,6 +203,11 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
       <div 
         ref={containerRef}
         onWheel={handleWheel}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && scale === 1) {
+            onClose();
+          }
+        }}
         className="w-full flex-1 flex items-center justify-center overflow-hidden relative p-3 sm:p-6"
         style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
       >

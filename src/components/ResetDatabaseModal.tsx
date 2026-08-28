@@ -171,8 +171,22 @@ export default function ResetDatabaseModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" id="reset-database-modal">
-      <div className="w-full max-w-lg bg-slate-900 border border-rose-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto animate-in zoom-in-95 duration-200">
+    <div 
+      className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" 
+      id="reset-database-modal"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isLoading) {
+          setPassword('');
+          setErrorMessage('');
+          setSuccessMessage('');
+          onClose();
+        }
+      }}
+    >
+      <div 
+        className="w-full max-w-lg bg-slate-900 border border-rose-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-950/80 border-b border-slate-800">

@@ -566,14 +566,14 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Side Column: Fields (7 cols) */}
-            <div className="lg:col-span-7 space-y-6">
-              {/* Step 1: Destination Decision (FIRST ITEM IN ORDER - COMPACT) */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-md" id="rma-step-destination">
-                <div className="flex items-center justify-between gap-2 mb-2.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+            <div className="lg:col-span-7 space-y-4">
+              {/* Step 1: Destino, Origem e Identificação do Pacote (Ultra-compact Unified Card) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-destination-origin">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                  <div className="flex items-center gap-2">
                     <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">1</span>
-                    <span>Decisão de Direcionamento (Destino)</span>
-                  </label>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Destino & Origem do Pacote</span>
+                  </div>
                   <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border"
                     style={{
                       backgroundColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.1)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
@@ -585,72 +585,135 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" id="destination-sector-cards">
-                  {/* Card 1: Estoque Principal */}
+                {/* 3 Quick Destination Cards */}
+                <div className="grid grid-cols-3 gap-2" id="destination-sector-cards">
                   <button
                     type="button"
                     onClick={() => handleSelectDestinationSector('Principal')}
-                    className={`py-2 px-3 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'Principal'
-                        ? 'bg-emerald-500/15 border-emerald-500 shadow-sm shadow-emerald-500/10 ring-1 ring-emerald-500/40 text-emerald-300 font-bold'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-emerald-500/30 hover:bg-slate-950 text-slate-300'
+                        ? 'bg-emerald-500/15 border-emerald-500 ring-1 ring-emerald-500/40 text-emerald-300 font-bold shadow-sm'
+                        : 'bg-slate-950/70 border-slate-800 hover:border-emerald-500/30 text-slate-300'
                     }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-                      <span className="text-xs truncate">Estoque Principal</span>
+                      <span className="text-xs truncate">Principal</span>
                     </div>
                     {destinationSector === 'Principal' && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
                   </button>
 
-                  {/* Card 2: Openbox */}
                   <button
                     type="button"
                     onClick={() => handleSelectDestinationSector('Openbox')}
-                    className={`py-2 px-3 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'Openbox'
-                        ? 'bg-amber-500/15 border-amber-500 shadow-sm shadow-amber-500/10 ring-1 ring-amber-500/40 text-amber-300 font-bold'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-amber-500/30 hover:bg-slate-950 text-slate-300'
+                        ? 'bg-amber-500/15 border-amber-500 ring-1 ring-amber-500/40 text-amber-300 font-bold shadow-sm'
+                        : 'bg-slate-950/70 border-slate-800 hover:border-amber-500/30 text-slate-300'
                     }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
                       <span className="text-xs truncate">Openbox</span>
                     </div>
                     {destinationSector === 'Openbox' && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
                   </button>
 
-                  {/* Card 3: RMA */}
                   <button
                     type="button"
                     onClick={() => handleSelectDestinationSector('RMA')}
-                    className={`py-2 px-3 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'RMA'
-                        ? 'bg-rose-500/15 border-rose-500 shadow-sm shadow-rose-500/10 ring-1 ring-rose-500/40 text-rose-300 font-bold'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-rose-500/30 hover:bg-slate-950 text-slate-300'
+                        ? 'bg-rose-500/15 border-rose-500 ring-1 ring-rose-500/40 text-rose-300 font-bold shadow-sm'
+                        : 'bg-slate-950/70 border-slate-800 hover:border-rose-500/30 text-slate-300'
                     }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0"></span>
                       <span className="text-xs truncate">RMA</span>
                     </div>
                     {destinationSector === 'RMA' && <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
                   </button>
                 </div>
+
+                {/* Origin details row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  {/* Platform */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Plataforma</label>
+                    <select 
+                      value={platform}
+                      onChange={(e) => setPlatform(e.target.value as PlatformType)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                      id="select-platform-origin"
+                    >
+                      <option value="Mercado Livre">Mercado Livre</option>
+                      <option value="Shopee">Shopee</option>
+                      <option value="Amazon">Amazon</option>
+                      <option value="Amazon Ta Novo">Amazon Ta Novo</option>
+                      <option value="Kabum">Kabum</option>
+                    </select>
+                  </div>
+
+                  {/* Código STI */}
+                  <div className="space-y-1">
+                    <label className={`text-[11px] font-bold uppercase tracking-wider flex items-center justify-between ${
+                      destinationSector === 'Openbox' ? 'text-amber-400' : 'text-slate-400'
+                    }`}>
+                      <span>Código STI {destinationSector === 'Openbox' ? '*' : ''}</span>
+                      {destinationSector === 'Openbox' && (
+                        <span className="text-[9px] font-bold px-1 bg-amber-500/20 text-amber-300 rounded">Obrigatório</span>
+                      )}
+                    </label>
+                    <input 
+                      type="text"
+                      placeholder={destinationSector === 'Openbox' ? "STI-40912 ou 13509873" : "Opcional"}
+                      value={trackingCode}
+                      onChange={(e) => setTrackingCode(e.target.value)}
+                      className={`w-full px-3 py-2 bg-slate-950 rounded-lg text-xs font-mono transition-all ${
+                        destinationSector === 'Openbox'
+                          ? 'border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400/40'
+                          : 'border border-slate-800 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500'
+                      }`}
+                      id="input-tracking-code"
+                      required={destinationSector === 'Openbox'}
+                    />
+                  </div>
+
+                  {/* Order Number */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Nº Pedido (Opcional)</label>
+                    <input 
+                      type="text"
+                      placeholder="Ex: 2000008172648"
+                      value={orderNumber}
+                      onChange={(e) => setOrderNumber(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                      id="input-order-number"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Step 2: Base Identification */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-2">
-                <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">2</span>
-                  Recepção e Origem do Pacote
-                </h3>
+              {/* Step 2: Produto do Catálogo & Números de Série (Agile Focus) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-product-serials">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">2</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Produto & Números de Série (S/N)</span>
+                  </div>
+                  {selectedProduct && (
+                    <span className="text-[11px] font-mono font-bold text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/40">
+                      SKU: {selectedProduct.sku}
+                    </span>
+                  )}
+                </div>
 
                 {/* SKU & Product Search Input / AutoComplete */}
-                <div className="space-y-1.5" ref={productDropdownRef}>
+                <div className="space-y-1" ref={productDropdownRef}>
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <span>Produto do Catálogo (Nome ou SKU)</span>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                      <span>Selecionar Produto</span>
                       <span className="text-sky-400 font-bold">*</span>
                     </label>
                     {selectedProduct && (
@@ -660,24 +723,23 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                         className="text-[11px] text-slate-400 hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
                       >
                         <X className="w-3 h-3" />
-                        <span>Trocar produto</span>
+                        <span>Trocar</span>
                       </button>
                     )}
                   </div>
 
                   <div className="relative">
-                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
-                      <Search className="w-4 h-4" />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
+                      <Search className="w-3.5 h-3.5" />
                     </div>
 
                     <input
                       type="text"
-                      placeholder="Digite o SKU ou Nome do produto (Ex: AIR-FRYER, Batedeira...)"
+                      placeholder="Bipar ou digitar SKU / Nome (Ex: AIR-FRYER, Batedeira...)"
                       value={productSearchTerm}
                       onChange={(e) => {
                         setProductSearchTerm(e.target.value);
                         setIsProductDropdownOpen(true);
-                        // If exact match exists, sync it
                         const exact = products.find(p => p.sku.toLowerCase() === e.target.value.trim().toLowerCase());
                         if (exact) {
                           setSelectedProductId(exact.id);
@@ -694,89 +756,81 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                           setIsProductDropdownOpen(false);
                         }
                       }}
-                      className={`w-full pl-10 pr-10 py-2.5 bg-slate-950 border rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition-all font-sans ${
+                      className={`w-full pl-9 pr-9 py-2 bg-slate-950 border rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition-all font-sans ${
                         selectedProduct 
-                          ? 'border-sky-500/60 bg-sky-950/10 text-sky-100 font-medium' 
+                          ? 'border-sky-500/60 bg-sky-950/20 text-sky-100 font-medium' 
                           : 'border-slate-800 focus:border-sky-500'
                       }`}
                       id="input-product-search-sku"
                       autoComplete="off"
                     />
 
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                       {productSearchTerm && (
                         <button
                           type="button"
                           onClick={handleClearSelectedProduct}
-                          className="p-1 text-slate-500 hover:text-white rounded-md transition-colors cursor-pointer"
+                          className="p-1 text-slate-500 hover:text-white rounded transition-colors cursor-pointer"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <X className="w-3 h-3" />
                         </button>
                       )}
                       <button
                         type="button"
                         onClick={() => setIsProductDropdownOpen(prev => !prev)}
-                        className="p-1 text-slate-400 hover:text-white rounded-md transition-colors cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
                       >
-                        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isProductDropdownOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isProductDropdownOpen ? 'rotate-180' : ''}`} />
                       </button>
                     </div>
 
                     {/* Autocomplete Dropdown */}
                     {isProductDropdownOpen && (
-                      <div className="product-search-dropdown absolute left-0 right-0 top-full mt-1.5 bg-slate-950 border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin scrollbar-thumb-slate-850">
-                        <div className="product-search-header p-2.5 bg-slate-900/90 text-[11px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10 backdrop-blur-sm">
-                          <span className="flex items-center gap-1.5 font-bold text-slate-300">
-                            <span className="w-2 h-2 rounded-full bg-sky-400"></span>
-                            {filteredProducts.length} {filteredProducts.length === 1 ? 'produto' : 'produtos'} {productSearchTerm ? 'encontrados' : 'ordenados por frequência de entrada'}
+                      <div className="product-search-dropdown absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/60">
+                        <div className="product-search-header p-2 bg-slate-900/95 text-[10px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10 backdrop-blur-sm">
+                          <span className="font-bold text-slate-300">
+                            {filteredProducts.length} {filteredProducts.length === 1 ? 'produto' : 'produtos'}
                           </span>
-                          <span className="text-[10px] text-slate-500">Top 10 mais frequentes primeiro</span>
+                          <span className="text-[10px] text-slate-500">Mais frequentes primeiro</span>
                         </div>
 
                         {filteredProducts.length === 0 ? (
-                          <div className="p-4 text-center text-xs text-slate-500">
+                          <div className="p-3 text-center text-xs text-slate-500">
                             Nenhum produto cadastrado com este SKU ou Nome.
                           </div>
                         ) : (
                           filteredProducts.map((p, idx) => {
                             const isSelected = p.id === selectedProductId;
                             const entryCount = getProductEntryCount(p);
-                            const isTop10 = idx < 10;
                             return (
                               <button
                                 key={p.id}
                                 type="button"
                                 onClick={() => handleSelectProduct(p)}
-                                className={`product-search-item w-full text-left p-2.5 hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-3 cursor-pointer ${
-                                  isSelected ? 'bg-sky-500/10 product-search-item-selected' : ''
+                                className={`product-search-item w-full text-left p-2 hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-2.5 cursor-pointer ${
+                                  isSelected ? 'bg-sky-500/15 product-search-item-selected' : ''
                                 }`}
                               >
                                 <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="product-search-sku font-mono text-xs font-bold text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="product-search-sku font-mono text-[11px] font-bold text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                                       {p.sku}
                                     </span>
-                                    <span className="product-search-voltage text-[11px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
+                                    <span className="product-search-voltage text-[10px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
                                       {p.voltage}
                                     </span>
                                     {entryCount > 0 && (
-                                      <span className={`product-search-freq text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                                        isTop10 && !productSearchTerm 
-                                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' 
-                                          : 'bg-slate-800 text-slate-400'
-                                      }`}>
-                                        <span>#{idx + 1}</span>
-                                        <span>•</span>
-                                        <span>{entryCount} {entryCount === 1 ? 'entrada' : 'entradas'}</span>
+                                      <span className="text-[9px] font-mono bg-slate-800 text-slate-400 px-1 rounded">
+                                        {entryCount} un
                                       </span>
                                     )}
                                   </div>
-                                  <p className="product-search-title text-xs font-medium text-slate-200 mt-1 truncate">
+                                  <p className="product-search-title text-[11px] font-medium text-slate-200 mt-0.5 truncate">
                                     {p.name}
                                   </p>
                                 </div>
                                 {isSelected && (
-                                  <Check className="w-4 h-4 text-sky-400 shrink-0" />
+                                  <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                                 )}
                               </button>
                             );
@@ -785,130 +839,43 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                       </div>
                     )}
                   </div>
-
-                  {/* Selected product tag preview */}
-                  {selectedProduct && (
-                    <div className="flex items-center gap-2 pt-1">
-                      <div className="flex items-center gap-2 px-2.5 py-1 bg-sky-950/40 border border-sky-800/40 rounded-lg text-xs text-sky-300">
-                        <CheckCircle className="w-3.5 h-3.5 text-sky-400" />
-                        <span className="font-mono font-bold text-white">{selectedProduct.sku}</span>
-                        <span className="text-slate-400">•</span>
-                        <span className="truncate max-w-xs">{selectedProduct.name}</span>
-                        <span className="text-slate-400 font-mono text-[10px]">({selectedProduct.voltage})</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Platform Selection */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Plataforma Origem</label>
-                    <select 
-                      value={platform}
-                      onChange={(e) => setPlatform(e.target.value as PlatformType)}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500"
-                      id="select-platform-origin"
-                    >
-                      <option value="Mercado Livre">Mercado Livre</option>
-                      <option value="Shopee">Shopee</option>
-                      <option value="Amazon">Amazon</option>
-                      <option value="Amazon Ta Novo">Amazon Ta Novo</option>
-                      <option value="Kabum">Kabum</option>
-                    </select>
-                  </div>
-
-                  {/* Tracking / Case Code (Código STI) */}
-                  <div className="space-y-1.5">
-                    <label className={`text-xs font-bold uppercase tracking-wider flex items-center justify-between ${
-                      destinationSector === 'Openbox' ? 'text-amber-400' : 'text-slate-400'
-                    }`}>
-                      <span className="flex items-center gap-1">
-                        <span>Código STI</span>
-                        {destinationSector === 'Openbox' ? (
-                          <span className="text-rose-400 font-bold text-sm">*</span>
-                        ) : (
-                          <span className="text-slate-500 font-normal lowercase">(opcional)</span>
-                        )}
+                {/* Multiple Serial Numbers Management (Compact Barcode Focus) */}
+                <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-3 space-y-2" id="rma-multi-serial-container">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-sky-400" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                        Seriais (S/N)
                       </span>
-                      {destinationSector === 'Openbox' ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded border border-amber-500/30">
-                          Obrigatório para Openbox
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-normal text-slate-500">Rastreio</span>
-                      )}
-                    </label>
-                    <input 
-                      type="text"
-                      placeholder={destinationSector === 'Openbox' ? "Obrigatório: Ex: STI-40912 ou 13509873" : "Opcional: Ex: STI-40912"}
-                      value={trackingCode}
-                      onChange={(e) => setTrackingCode(e.target.value)}
-                      className={`w-full px-4 py-2.5 bg-slate-950 rounded-xl text-sm font-mono transition-all ${
-                        destinationSector === 'Openbox'
-                          ? 'border border-amber-500/50 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30'
-                          : 'border border-slate-800 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500'
-                      }`}
-                      id="input-tracking-code"
-                      required={destinationSector === 'Openbox'}
-                    />
-                  </div>
-
-                  {/* Order Number (Número do Pedido - Opcional) */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <span>Número de Pedido</span>
-                        <span className="text-slate-500 font-normal lowercase">(opcional)</span>
-                      </span>
-                      <span className="text-[11px] font-normal text-slate-500">Rastreamento na plataforma</span>
-                    </label>
-                    <input 
-                      type="text"
-                      placeholder="Opcional: Ex: 2000008172648"
-                      value={orderNumber}
-                      onChange={(e) => setOrderNumber(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
-                      id="input-order-number"
-                    />
-                  </div>
-                </div>
-
-                {/* Multiple Serial Numbers Management (Same SKU, multiple physical units) */}
-                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 space-y-3" id="rma-multi-serial-container">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/60 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-sky-400" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                        Números de Série (S/N) — Entrada por Unidade
-                      </span>
-                      <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                        {serials.length} {serials.length === 1 ? 'unidade' : 'unidades'} deste SKU
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                        {serials.length} un
                       </span>
                     </div>
 
                     <button
                       type="button"
                       onClick={handleAddSerialLine}
-                      className="px-3 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 hover:text-sky-200 border border-sky-500/30 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-2.5 py-1 bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 rounded text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
                       id="btn-add-serial-line"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Adicionar outro Serial / Unidade</span>
+                      <Plus className="w-3 h-3" />
+                      <span>+ Serial / Unidade</span>
                     </button>
                   </div>
 
-                  {/* Serials inputs list */}
-                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {/* Serials list */}
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5">
                     {serials.map((serialVal, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <span className="w-7 h-8 bg-slate-900 border border-slate-800 text-slate-400 font-mono text-xs font-bold rounded-lg flex items-center justify-center shrink-0">
+                      <div key={idx} className="flex items-center gap-1.5">
+                        <span className="w-6 h-7 bg-slate-900 border border-slate-800 text-slate-400 font-mono text-[10px] font-bold rounded flex items-center justify-center shrink-0">
                           #{idx + 1}
                         </span>
 
                         <input 
                           type="text"
-                          placeholder={`Serial (S/N) da unidade #${idx + 1} (Bipar leitor ou colar)`}
+                          placeholder={`Serial da unidade #${idx + 1} (Bipar leitor ou colar)`}
                           value={serialVal}
                           onChange={(e) => handleUpdateSerial(idx, e.target.value)}
                           onKeyDown={(e) => {
@@ -919,318 +886,213 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                               }
                             }
                           }}
-                          className="flex-1 px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                          className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
                           id={`input-serial-${idx}`}
                         />
 
-                        {serials.length > 1 ? (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSerialLine(idx)}
-                            className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0"
-                            title="Remover este serial"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSerialLine(idx)}
-                            className="p-2 text-slate-600 hover:text-slate-400 rounded-lg transition-colors cursor-pointer shrink-0"
-                            title="Limpar serial"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSerialLine(idx)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 rounded transition-colors cursor-pointer shrink-0"
+                          title={serials.length > 1 ? "Remover" : "Limpar"}
+                        >
+                          {serials.length > 1 ? <Trash2 className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                        </button>
                       </div>
                     ))}
                   </div>
 
-                  {serials.length > 1 && (
-                    <div className="p-2.5 bg-sky-950/40 border border-sky-800/40 rounded-lg text-[11px] text-sky-300 flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-sky-400 shrink-0" />
-                      <span>
-                        Serão geradas <strong>{serials.length} unidades independentes</strong> no estoque físico, com todas as informações e fotos duplicadas e contagem individual para cada serial único.
-                      </span>
-                    </div>
-                  )}
-
                   <p className="text-[10px] text-slate-500">
-                    💡 Dica: Pressione <strong>Enter</strong> ou bipe com leitor de código de barras para criar automaticamente a próxima linha. Você também pode colar múltiplos seriais de uma vez.
+                    💡 Pressione <strong>Enter</strong> ou bipe com leitor para criar a próxima unidade. Cole vários seriais de uma vez se necessário.
                   </p>
                 </div>
-
-                {/* Customer Reason text */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Reclamação / Motivo do Cliente</label>
-                  <textarea 
-                    rows={2}
-                    placeholder="Cole ou digite aqui a justificativa oficial do cliente para a devolução..."
-                    value={customerReason}
-                    onChange={(e) => setCustomerReason(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
-                    id="textarea-customer-reason"
-                  />
-                </div>
               </div>
 
-              {/* Step 3: Analysis and State */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-3">
-                <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">3</span>
-                  Avaliação Visual e Triagem Técnica
-                </h3>
+              {/* Step 3: Avaliação Técnica e Condições (Quick Pills & Compact Fields) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-inspection">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">3</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Avaliação Técnica & Condição Visual</span>
+                  </div>
+                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Device Status */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Estado do Aparelho with Quick Pills */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Estado do Aparelho</label>
-                    <select 
-                      value={deviceStatus}
-                      onChange={(e) => {
-                        const val = e.target.value as DeviceStatusType;
-                        setDeviceStatus(val);
-                        if (val === 'Descrever') {
-                          setIsCustomDeviceStatus(true);
-                        } else {
-                          setIsCustomDeviceStatus(false);
-                          setCustomDeviceStatusText('');
-                        }
-                      }}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
-                      id="select-device-status"
-                    >
-                      <option value="Novo">Novo (Sem marcas de uso)</option>
-                      <option value="Usado">Usado (Marcas normais / leves)</option>
-                      <option value="Danificado">Danificado / Quebrado</option>
-                      <option value="Descrever">Descrever</option>
-                    </select>
-                    
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado do Aparelho</label>
+                    <div className="grid grid-cols-4 gap-1">
+                      {(['Novo', 'Usado', 'Danificado', 'Descrever'] as const).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => {
+                            setDeviceStatus(st as DeviceStatusType);
+                            if (st === 'Descrever') {
+                              setIsCustomDeviceStatus(true);
+                            } else {
+                              setIsCustomDeviceStatus(false);
+                              setCustomDeviceStatusText('');
+                            }
+                          }}
+                          className={`py-1.5 px-1 rounded text-[11px] font-semibold border transition-all text-center cursor-pointer truncate ${
+                            deviceStatus === st
+                              ? 'bg-sky-500/20 border-sky-500 text-sky-300 font-bold shadow-sm'
+                              : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+
                     {(deviceStatus === 'Descrever' || isCustomDeviceStatus) && (
-                      <div className="space-y-1 pt-1 animate-in fade-in duration-200">
-                        <input 
-                          type="text"
-                          placeholder="Descreva o estado do aparelho (ex: Riscado na tampa, botão travado...)"
-                          value={customDeviceStatusText}
-                          onChange={(e) => setCustomDeviceStatusText(e.target.value)}
-                          className="w-full px-4 py-2.5 bg-slate-950 border border-sky-500/50 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400"
-                          id="input-custom-device-status"
-                          autoFocus
-                        />
-                      </div>
+                      <input 
+                        type="text"
+                        placeholder="Descreva o estado do aparelho..."
+                        value={customDeviceStatusText}
+                        onChange={(e) => setCustomDeviceStatusText(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-slate-950 border border-sky-500/50 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
+                        id="input-custom-device-status"
+                        autoFocus
+                      />
                     )}
                   </div>
 
-                  {/* Packaging Status */}
+                  {/* Estado da Embalagem with Quick Pills */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Estado da Caixa/Embalagem</label>
-                    <select 
-                      value={packageStatus}
-                      onChange={(e) => {
-                        const val = e.target.value as PackageStatusType;
-                        setPackageStatus(val);
-                        if (val === 'Descrever') {
-                          setIsCustomPackageStatus(true);
-                        } else {
-                          setIsCustomPackageStatus(false);
-                          setCustomPackageStatusText('');
-                        }
-                      }}
-                      className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
-                      id="select-package-status"
-                    >
-                      <option value="Perfeita">Perfeita / Intacta</option>
-                      <option value="Danificada">Caixa danificada / amassada</option>
-                      <option value="Sem Embalagem">Sem caixa de varejo original</option>
-                      <option value="Descrever">Descrever</option>
-                    </select>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado da Caixa / Embalagem</label>
+                    <div className="grid grid-cols-4 gap-1">
+                      {(['Perfeita', 'Danificada', 'Sem Embalagem', 'Descrever'] as const).map((pkg) => (
+                        <button
+                          key={pkg}
+                          type="button"
+                          onClick={() => {
+                            setPackageStatus(pkg as PackageStatusType);
+                            if (pkg === 'Descrever') {
+                              setIsCustomPackageStatus(true);
+                            } else {
+                              setIsCustomPackageStatus(false);
+                              setCustomPackageStatusText('');
+                            }
+                          }}
+                          className={`py-1.5 px-1 rounded text-[11px] font-semibold border transition-all text-center cursor-pointer truncate ${
+                            packageStatus === pkg
+                              ? 'bg-sky-500/20 border-sky-500 text-sky-300 font-bold shadow-sm'
+                              : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                          }`}
+                          title={pkg}
+                        >
+                          {pkg === 'Sem Embalagem' ? 'Sem Caixa' : pkg}
+                        </button>
+                      ))}
+                    </div>
 
                     {(packageStatus === 'Descrever' || isCustomPackageStatus) && (
-                      <div className="space-y-1 pt-1 animate-in fade-in duration-200">
-                        <input 
-                          type="text"
-                          placeholder="Descreva o estado da caixa (ex: Caixa parda rasgada, sem berço...)"
-                          value={customPackageStatusText}
-                          onChange={(e) => setCustomPackageStatusText(e.target.value)}
-                          className="w-full px-4 py-2.5 bg-slate-950 border border-sky-500/50 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-400"
-                          id="input-custom-package-status"
-                          autoFocus
-                        />
-                      </div>
+                      <input 
+                        type="text"
+                        placeholder="Descreva o estado da caixa..."
+                        value={customPackageStatusText}
+                        onChange={(e) => setCustomPackageStatusText(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-slate-950 border border-sky-500/50 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
+                        id="input-custom-package-status"
+                        autoFocus
+                      />
                     )}
                   </div>
                 </div>
 
-                {/* Accessories included check */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Acessórios Inclusos</label>
-                  <input 
-                    type="text"
-                    placeholder="Ex: Grade de metal, manual, carregador, cabo HDMI..."
-                    value={accessoriesInclusion}
-                    onChange={(e) => setAccessoriesInclusion(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none"
-                    id="input-accessories-inclusion"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Reclamação / Motivo do Cliente */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Motivo / Reclamação do Cliente</label>
+                    <input 
+                      type="text"
+                      placeholder="Ex: Devolução por desistência, não ligou..."
+                      value={customerReason}
+                      onChange={(e) => setCustomerReason(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                      id="textarea-customer-reason"
+                    />
+                  </div>
+
+                  {/* Acessórios inclusos */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Acessórios Inclusos</label>
+                    <input 
+                      type="text"
+                      placeholder="Ex: Completo com cabo e manual..."
+                      value={accessoriesInclusion}
+                      onChange={(e) => setAccessoriesInclusion(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                      id="input-accessories-inclusion"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Step 4: Technical observations */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4" id="rma-step-4">
-                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <span className="w-6 h-6 bg-sky-500/10 text-sky-400 text-xs font-bold flex items-center justify-center rounded-lg">4</span>
-                    Laudo Técnico & Observações
-                  </h3>
+              {/* Step 4: Laudo Técnico & Observações (Compact Editor) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-2.5" id="rma-step-notes">
+                <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2">
+                  <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">4</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Laudo Técnico & Parecer do Triador</span>
                 </div>
                 
-                {/* Editor Container */}
                 <RichTextEditor
                   value={notes}
                   onChange={setNotes}
-                  label="Observações e Parecer do Triador"
-                  placeholder="Insira o laudo técnico completo, observações sobre o circuito, avarias, etc..."
-                  minHeight="160px"
-                  maxHeight="320px"
+                  placeholder="Insira o laudo técnico, testes realizados ou observações complementares..."
+                  minHeight="90px"
+                  maxHeight="200px"
                   id="technical-notes-editor"
                 />
               </div>
             </div>
 
-            {/* Right Side Column: Photos & Submission (5 cols) */}
-            <div className="lg:col-span-5 space-y-6">
-              {/* Photo categories upload */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5" id="rma-step-photos">
-                <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <Clipboard className="text-sky-400 w-5 h-5" />
-                    Arquivos de Mídia
+            {/* Right Side Column: Media Station & Fast Submission (5 cols) */}
+            <div className="lg:col-span-5 space-y-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5 sticky top-4" id="rma-step-photos">
+                <div className="border-b border-slate-800/80 pb-2.5 flex justify-between items-center">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                    <Clipboard className="text-sky-400 w-4 h-4" />
+                    <span>Fotos & Mídia</span>
                   </h3>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-950 rounded text-[10px] text-slate-400 font-mono border border-slate-800">
-                    <span className="w-1.5 h-1.5 bg-sky-400 rounded-full"></span>
-                    Ctrl+V Ativo
+                  <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-950 rounded text-[10px] text-sky-400 font-mono border border-slate-800">
+                    <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-pulse"></span>
+                    <span>Ctrl+V Ativo</span>
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Arraste arquivos de fotos para cada zona correspondente ou <strong>selecione um setor e aperte Ctrl+V</strong> com sua imagem copiada. As fotos serão comprimidas na hora.
-                </p>
-
+                {/* Estoque Principal Instant Copy */}
                 {(() => {
                   const refProduct = products.find(p => p.id === selectedProductId);
                   const hasCatalogImages = !!(refProduct && ((refProduct.images && refProduct.images.length > 0) || refProduct.imageUrl));
                   
                   if (destinationSector === 'Principal' && selectedProductId) {
                     return (
-                      <div className="p-3.5 bg-sky-500/10 border border-sky-500/20 rounded-xl text-xs space-y-2.5" id="catalog-images-import-panel">
-                        <div className="flex items-center gap-1.5 font-bold text-sky-400">
-                          <Zap className="w-4 h-4 text-sky-400 shrink-0" />
-                          <span>Usar Imagens do Catálogo (Produto Novo)</span>
+                      <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between gap-2" id="catalog-images-import-panel">
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-300 font-medium">
+                          <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span>Usar imagens oficiais do catálogo</span>
                         </div>
-                        <p className="text-slate-400 text-[11px] leading-relaxed font-sans">
-                          Como o destino é o <strong>Estoque Principal</strong>, você pode preencher as fotos automaticamente usando as imagens oficiais cadastradas no catálogo.
-                        </p>
-                        {hasCatalogImages ? (
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (refProduct.imagesProduct && refProduct.imagesProduct.length > 0) {
-                                  setPhotosProduct(refProduct.imagesProduct);
-                                } else {
-                                  const hasSeparated = !!(
-                                    (refProduct.imagesProduct && refProduct.imagesProduct.length > 0) ||
-                                    (refProduct.imagesBox && refProduct.imagesBox.length > 0) ||
-                                    (refProduct.imagesAccessories && refProduct.imagesAccessories.length > 0)
-                                  );
-                                  if (!hasSeparated) {
-                                    if (refProduct.images && refProduct.images.length > 0) {
-                                      setPhotosProduct(refProduct.images);
-                                    } else if (refProduct.imageUrl) {
-                                      setPhotosProduct([refProduct.imageUrl]);
-                                    }
-                                  } else {
-                                    setPhotosProduct([]);
-                                  }
-                                }
-                              }}
-                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 rounded-lg text-slate-300 hover:text-white font-semibold transition-all cursor-pointer text-[11px]"
-                            >
-                              Copiar para Produto
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (refProduct.imagesBox && refProduct.imagesBox.length > 0) {
-                                  setPhotosBox(refProduct.imagesBox);
-                                } else {
-                                  setPhotosBox([]);
-                                }
-                              }}
-                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 rounded-lg text-slate-300 hover:text-white font-semibold transition-all cursor-pointer text-[11px]"
-                            >
-                              Copiar para Caixa
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (refProduct.imagesAccessories && refProduct.imagesAccessories.length > 0) {
-                                  setPhotosAccessories(refProduct.imagesAccessories);
-                                } else {
-                                  setPhotosAccessories([]);
-                                }
-                              }}
-                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 rounded-lg text-slate-300 hover:text-white font-semibold transition-all cursor-pointer text-[11px]"
-                            >
-                              Copiar para Acessórios
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // Product
-                                if (refProduct.imagesProduct && refProduct.imagesProduct.length > 0) {
-                                  setPhotosProduct(refProduct.imagesProduct);
-                                } else {
-                                  const hasSeparated = !!(
-                                    (refProduct.imagesProduct && refProduct.imagesProduct.length > 0) ||
-                                    (refProduct.imagesBox && refProduct.imagesBox.length > 0) ||
-                                    (refProduct.imagesAccessories && refProduct.imagesAccessories.length > 0)
-                                  );
-                                  if (!hasSeparated) {
-                                    if (refProduct.images && refProduct.images.length > 0) {
-                                      setPhotosProduct(refProduct.images);
-                                    } else if (refProduct.imageUrl) {
-                                      setPhotosProduct([refProduct.imageUrl]);
-                                    }
-                                  } else {
-                                    setPhotosProduct([]);
-                                  }
-                                }
-
-                                // Box
-                                if (refProduct.imagesBox && refProduct.imagesBox.length > 0) {
-                                  setPhotosBox(refProduct.imagesBox);
-                                } else {
-                                  setPhotosBox([]);
-                                }
-
-                                // Accessories
-                                if (refProduct.imagesAccessories && refProduct.imagesAccessories.length > 0) {
-                                  setPhotosAccessories(refProduct.imagesAccessories);
-                                } else {
-                                  setPhotosAccessories([]);
-                                }
-                              }}
-                              className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white rounded-lg font-bold transition-all cursor-pointer text-[11px] shadow-sm hover:shadow-md"
-                            >
-                              Copiar para Todos
-                            </button>
-                          </div>
-                        ) : (
-                          <p className="text-amber-500 text-[11px] font-semibold flex items-center gap-1 font-sans">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            O produto selecionado não possui imagens cadastradas no catálogo.
-                          </p>
+                        {hasCatalogImages && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (refProduct.imagesProduct && refProduct.imagesProduct.length > 0) {
+                                setPhotosProduct(refProduct.imagesProduct);
+                              } else if (refProduct.images && refProduct.images.length > 0) {
+                                setPhotosProduct(refProduct.images);
+                              } else if (refProduct.imageUrl) {
+                                setPhotosProduct([refProduct.imageUrl]);
+                              }
+                              if (refProduct.imagesBox && refProduct.imagesBox.length > 0) setPhotosBox(refProduct.imagesBox);
+                              if (refProduct.imagesAccessories && refProduct.imagesAccessories.length > 0) setPhotosAccessories(refProduct.imagesAccessories);
+                            }}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-bold transition-all cursor-pointer shadow-sm"
+                          >
+                            Copiar Fotos
+                          </button>
                         )}
                       </div>
                     );
@@ -1238,45 +1100,71 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   return null;
                 })()}
 
-                {/* Upload Section Selector for Ctrl+V */}
-                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 border border-slate-855 rounded-xl text-center text-xs text-slate-400" id="ctrl-v-category-selector">
+                {/* Category Selector Tabs */}
+                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg text-center text-xs" id="ctrl-v-category-selector">
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('product')}
-                    className={`py-2 rounded-lg font-bold cursor-pointer transition-all ${activeUploadCategory === 'product' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/10' : 'hover:bg-slate-850 hover:text-white text-slate-405'}`}
+                    className={`py-1.5 px-1 rounded font-bold cursor-pointer transition-all truncate ${
+                      activeUploadCategory === 'product' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
                   >
                     Produto ({photosProduct.length})
                   </button>
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('box')}
-                    className={`py-2 rounded-lg font-bold cursor-pointer transition-all ${activeUploadCategory === 'box' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/10' : 'hover:bg-slate-850 hover:text-white text-slate-405'}`}
+                    className={`py-1.5 px-1 rounded font-bold cursor-pointer transition-all truncate ${
+                      activeUploadCategory === 'box' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
                   >
                     Caixa ({photosBox.length})
                   </button>
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('accessories')}
-                    className={`py-2 rounded-lg font-bold cursor-pointer transition-all ${activeUploadCategory === 'accessories' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/10' : 'hover:bg-slate-850 hover:text-white text-slate-405'}`}
+                    className={`py-1.5 px-1 rounded font-bold cursor-pointer transition-all truncate ${
+                      activeUploadCategory === 'accessories' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
                   >
                     Acessórios ({photosAccessories.length})
                   </button>
                 </div>
 
-                {/* Inserir Foto por Link (URL) com Sanitização */}
-                <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-300 font-medium flex items-center gap-1.5">
-                      <LinkIcon className="w-3.5 h-3.5 text-sky-400" />
-                      <span>Inserir foto de {activeUploadCategory === 'product' ? 'Produto' : activeUploadCategory === 'box' ? 'Caixa' : 'Acessórios'} via Link (URL):</span>
-                    </span>
-                    <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" />
-                      Sanitização Ativa
-                    </span>
+                {/* Active Category Dropzone & Ctrl+V Zone */}
+                <div className="space-y-2">
+                  <div 
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, activeUploadCategory)}
+                    onPaste={(e) => handleLocalPaste(e, activeUploadCategory)}
+                    tabIndex={0}
+                    className="border-2 border-dashed border-sky-500/70 bg-sky-500/5 hover:bg-sky-500/10 rounded-xl p-4 text-center cursor-pointer transition-all outline-none"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      document.getElementById(`file-upload-${activeUploadCategory}`)?.click();
+                    }}
+                  >
+                    <Upload className="w-5 h-5 mx-auto text-sky-400 mb-1.5" />
+                    <p className="text-xs text-slate-200 font-bold">
+                      📸 Clique para selecionar ou aperte <span className="text-sky-400 font-mono">Ctrl+V</span> para colar
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Destino atual: <strong className="text-sky-300">
+                        {activeUploadCategory === 'product' ? 'Fotos do Produto' : activeUploadCategory === 'box' ? 'Fotos da Caixa' : 'Fotos dos Acessórios'}
+                      </strong>
+                    </p>
+                    <input 
+                      type="file" 
+                      id={`file-upload-${activeUploadCategory}`}
+                      multiple 
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" 
+                      onChange={(e) => handlePhotoUpload(e.target.files, activeUploadCategory)} 
+                      className="hidden" 
+                    />
                   </div>
 
-                  <div className="flex gap-2">
+                  {/* URL Photo Compact Input */}
+                  <div className="flex gap-1.5 pt-1">
                     <input
                       type="url"
                       value={urlPhotoInput}
@@ -1287,246 +1175,107 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                           handleAddPhotoByUrl(activeUploadCategory);
                         }
                       }}
-                      placeholder="https://exemplo.com/foto-produto.jpg"
-                      className="flex-1 px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 placeholder:text-slate-600"
+                      placeholder="Ou cole o link direto da imagem..."
+                      className="flex-1 px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-200 focus:outline-none focus:border-sky-500"
                     />
                     <button
                       type="button"
                       onClick={() => handleAddPhotoByUrl(activeUploadCategory)}
                       disabled={isSanitizingUrl || !urlPhotoInput.trim()}
-                      className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer"
                     >
-                      {isSanitizingUrl ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Sanitizando...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Adicionar Link</span>
-                        </>
-                      )}
+                      {isSanitizingUrl ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                      <span>Link</span>
                     </button>
                   </div>
-
                   {urlPhotoError && (
-                    <div className="flex items-center gap-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1.5 rounded-lg">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      <span>{urlPhotoError}</span>
-                    </div>
+                    <p className="text-[10px] text-rose-400">{urlPhotoError}</p>
                   )}
                 </div>
 
-                {/* Category 1: Photos of Product */}
-                <div className="space-y-2">
-                  <span className="text-xs font-bold text-slate-300 flex justify-between items-center">
-                    <span>1. Fotos do Produto ({photosProduct.length})</span>
-                    {activeUploadCategory === 'product' && <span className="text-[10px] text-sky-400 font-mono">[Ctrl+V Alvo]</span>}
-                  </span>
-                  
-                  {/* Drop zone */}
-                  <div 
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, 'product')}
-                    onPaste={(e) => handleLocalPaste(e, 'product')}
-                    onFocus={() => setActiveUploadCategory('product')}
-                    tabIndex={0}
-                    className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all outline-none ${
-                      activeUploadCategory === 'product' ? 'border-sky-500 bg-sky-500/10 shadow-[0_0_15px_rgba(14,165,233,0.25)]' : 'border-slate-800 hover:border-slate-700 bg-slate-950 focus:border-sky-500/50'
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.currentTarget.focus();
-                      if (activeUploadCategory !== 'product') {
-                        setActiveUploadCategory('product');
-                      } else {
-                        document.getElementById('file-upload-product')?.click();
-                      }
-                    }}
-                  >
-                    <Upload className="w-6 h-6 mx-auto text-slate-400 mb-2" />
-                    <p className="text-[12px] text-slate-200 font-bold">
-                      {activeUploadCategory === 'product' 
-                        ? '👉 Área ativa! Pressione Ctrl+V para colar ou clique de novo para escolher arquivos' 
-                        : 'Clique para selecionar e ativar colar (Ctrl+V)'}
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-normal mt-1">Ou arraste fotos do produto diretamente aqui</p>
-                    <input 
-                      type="file" 
-                      id="file-upload-product" 
-                      multiple 
-                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" 
-                      onChange={(e) => handlePhotoUpload(e.target.files, 'product')} 
-                      className="hidden" 
-                    />
-                  </div>
-
-                  {/* Thumbnail gallery */}
+                {/* Thumbnails Gallery of All 3 Categories */}
+                <div className="space-y-2 pt-1">
+                  {/* Category 1: Produto */}
                   {photosProduct.length > 0 && (
-                    <div className="grid grid-cols-4 gap-2 pt-1">
-                      {photosProduct.map((p, i) => (
-                        <div key={i} className="relative w-full aspect-video rounded-lg border border-slate-800 overflow-hidden group">
-                          <img src={p} className="w-full h-full object-cover" />
-                          <button 
-                            type="button" 
-                            onClick={(e) => { e.stopPropagation(); handleRemovePhoto(i, 'product'); }}
-                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400">Fotos do Produto ({photosProduct.length}):</span>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {photosProduct.map((p, i) => (
+                          <div key={i} className="relative aspect-square rounded-lg border border-slate-800 overflow-hidden group">
+                            <img src={p} className="w-full h-full object-cover" />
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemovePhoto(i, 'product')}
+                              className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                </div>
 
-                {/* Category 2: Photos of Box */}
-                <div className="space-y-2">
-                  <span className="text-xs font-bold text-slate-300 flex justify-between items-center">
-                    <span>2. Fotos da Embalagem / Caixa ({photosBox.length})</span>
-                    {activeUploadCategory === 'box' && <span className="text-[10px] text-sky-400 font-mono">[Ctrl+V Alvo]</span>}
-                  </span>
-                  
-                  {/* Drop zone */}
-                  <div 
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, 'box')}
-                    onPaste={(e) => handleLocalPaste(e, 'box')}
-                    onFocus={() => setActiveUploadCategory('box')}
-                    tabIndex={0}
-                    className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all outline-none ${
-                      activeUploadCategory === 'box' ? 'border-sky-500 bg-sky-500/10 shadow-[0_0_15px_rgba(14,165,233,0.25)]' : 'border-slate-800 hover:border-slate-700 bg-slate-950 focus:border-sky-500/50'
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.currentTarget.focus();
-                      if (activeUploadCategory !== 'box') {
-                        setActiveUploadCategory('box');
-                      } else {
-                        document.getElementById('file-upload-box')?.click();
-                      }
-                    }}
-                  >
-                    <Upload className="w-6 h-6 mx-auto text-slate-400 mb-2" />
-                    <p className="text-[12px] text-slate-200 font-bold">
-                      {activeUploadCategory === 'box' 
-                        ? '👉 Área ativa! Pressione Ctrl+V para colar ou clique de novo para escolher arquivos' 
-                        : 'Clique para selecionar e ativar colar (Ctrl+V)'}
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-normal mt-1">Ou arraste fotos da caixa diretamente aqui</p>
-                    <input 
-                      type="file" 
-                      id="file-upload-box" 
-                      multiple 
-                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" 
-                      onChange={(e) => handlePhotoUpload(e.target.files, 'box')} 
-                      className="hidden" 
-                    />
-                  </div>
-
-                  {/* Thumbnail gallery */}
+                  {/* Category 2: Caixa */}
                   {photosBox.length > 0 && (
-                    <div className="grid grid-cols-4 gap-2 pt-1">
-                      {photosBox.map((p, i) => (
-                        <div key={i} className="relative w-full aspect-video rounded-lg border border-slate-800 overflow-hidden group">
-                          <img src={p} className="w-full h-full object-cover" />
-                          <button 
-                            type="button" 
-                            onClick={(e) => { e.stopPropagation(); handleRemovePhoto(i, 'box'); }}
-                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400">Fotos da Caixa ({photosBox.length}):</span>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {photosBox.map((p, i) => (
+                          <div key={i} className="relative aspect-square rounded-lg border border-slate-800 overflow-hidden group">
+                            <img src={p} className="w-full h-full object-cover" />
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemovePhoto(i, 'box')}
+                              className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                </div>
 
-                {/* Category 3: Photos of Accessories */}
-                <div className="space-y-2">
-                  <span className="text-xs font-bold text-slate-300 flex justify-between items-center">
-                    <span>3. Fotos dos Acessórios ({photosAccessories.length})</span>
-                    {activeUploadCategory === 'accessories' && <span className="text-[10px] text-sky-400 font-mono">[Ctrl+V Alvo]</span>}
-                  </span>
-                  
-                  {/* Drop zone */}
-                  <div 
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, 'accessories')}
-                    onPaste={(e) => handleLocalPaste(e, 'accessories')}
-                    onFocus={() => setActiveUploadCategory('accessories')}
-                    tabIndex={0}
-                    className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all outline-none ${
-                      activeUploadCategory === 'accessories' ? 'border-sky-500 bg-sky-500/10 shadow-[0_0_15px_rgba(14,165,233,0.25)]' : 'border-slate-800 hover:border-slate-700 bg-slate-950 focus:border-sky-500/50'
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.currentTarget.focus();
-                      if (activeUploadCategory !== 'accessories') {
-                        setActiveUploadCategory('accessories');
-                      } else {
-                        document.getElementById('file-upload-accessories')?.click();
-                      }
-                    }}
-                  >
-                    <Upload className="w-6 h-6 mx-auto text-slate-400 mb-2" />
-                    <p className="text-[12px] text-slate-200 font-bold">
-                      {activeUploadCategory === 'accessories' 
-                        ? '👉 Área ativa! Pressione Ctrl+V para colar ou clique de novo para escolher arquivos' 
-                        : 'Clique para selecionar e ativar colar (Ctrl+V)'}
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-normal mt-1">Ou arraste fotos dos acessórios diretamente aqui</p>
-                    <input 
-                      type="file" 
-                      id="file-upload-accessories" 
-                      multiple 
-                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" 
-                      onChange={(e) => handlePhotoUpload(e.target.files, 'accessories')} 
-                      className="hidden" 
-                    />
-                  </div>
-
-                  {/* Thumbnail gallery */}
+                  {/* Category 3: Acessórios */}
                   {photosAccessories.length > 0 && (
-                    <div className="grid grid-cols-4 gap-2 pt-1">
-                      {photosAccessories.map((p, i) => (
-                        <div key={i} className="relative w-full aspect-video rounded-lg border border-slate-800 overflow-hidden group">
-                          <img src={p} className="w-full h-full object-cover" />
-                          <button 
-                            type="button" 
-                            onClick={(e) => { e.stopPropagation(); handleRemovePhoto(i, 'accessories'); }}
-                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400">Fotos de Acessórios ({photosAccessories.length}):</span>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {photosAccessories.map((p, i) => (
+                          <div key={i} className="relative aspect-square rounded-lg border border-slate-800 overflow-hidden group">
+                            <img src={p} className="w-full h-full object-cover" />
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemovePhoto(i, 'accessories')}
+                              className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {/* Form Buttons */}
-                <div className="pt-4">
+                {/* Prominent Action Button */}
+                <div className="pt-2 border-t border-slate-800/80">
                   <button 
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full py-3.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-bold shadow-lg shadow-sky-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    className="w-full py-3 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer"
                     id="btn-save-triage"
                   >
                     {isSubmitting ? (
                       <>
-                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        Gravando triagem...
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Gravando triagem...</span>
                       </>
                     ) : (
                       <>
                         <CheckCircle className="w-4 h-4" />
-                        Finalizar e Salvar Triagem
+                        <span>Finalizar e Salvar ({serials.filter(s => s.trim()).length || 1} {serials.filter(s => s.trim()).length > 1 ? 'unidades' : 'unidade'})</span>
                       </>
                     )}
                   </button>

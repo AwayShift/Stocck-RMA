@@ -194,6 +194,7 @@ export default function SettingsModal({
       <div 
         className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
         id="settings-modal"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header Compacto */}
         <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">

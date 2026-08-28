@@ -420,10 +420,14 @@ export default function BackupModal({
     <div 
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
       id="backup-modal-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isRestoring && !isCreatingSnapshot) onClose();
+      }}
     >
       <div 
         className="bg-slate-900 border border-slate-800 w-full max-w-4xl max-h-[92vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100 animate-in zoom-in-95 duration-200"
         id="backup-modal"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60">
@@ -1397,8 +1401,14 @@ export default function BackupModal({
         <div 
           className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150"
           id="delete-snapshot-dialog"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingSnapshot) setSnapshotToDelete(null);
+          }}
         >
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+          <div 
+            className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3 text-rose-400">
               <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30">
                 <Trash2 className="w-5 h-5" />

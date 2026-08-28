@@ -898,7 +898,13 @@ export default function BaseCatalog({
 
        {/* Add / Edit Product Modal */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto py-10" id="catalog-form-modal">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto py-10" 
+          id="catalog-form-modal"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsFormOpen(false);
+          }}
+        >
           <style>{`
             #catalog-form-modal .ql-toolbar.ql-snow {
               background-color: #0f172a !important;
@@ -1109,7 +1115,10 @@ export default function BaseCatalog({
             }
           `}</style>
           
-          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 my-auto">
+          <div 
+            className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 bg-slate-950">
               <h3 className="text-base font-black text-white">
@@ -1438,8 +1447,16 @@ export default function BaseCatalog({
       )}
       {/* Custom Confirmation Modal */}
       {confirmConfig && (
-        <div className="fixed inset-0 z-[110] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150">
+        <div 
+          className="fixed inset-0 z-[110] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmConfig(null);
+          }}
+        >
+          <div 
+            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start gap-3">
               <div className="p-2.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-xl shrink-0">
                 <Trash2 className="w-5 h-5" />
@@ -1475,8 +1492,17 @@ export default function BaseCatalog({
 
       {/* Product Details Viewer Modal */}
       {viewingProduct && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200" id="product-details-modal">
-          <div className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-8 animate-in zoom-in-95 duration-200">
+        <div 
+          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200" 
+          id="product-details-modal"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setViewingProduct(null);
+          }}
+        >
+          <div 
+            className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-8 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2.5">

@@ -222,8 +222,17 @@ export default function ExcelBaseCatalogImportModal({
   const updateCount = parsedItems.filter(r => r.selected && r.isExisting).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn" id="excel-catalog-import-modal">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn" 
+      id="excel-catalog-import-modal"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSaving && !isProcessing) onClose();
+      }}
+    >
+      <div 
+        className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Modal Header */}
         <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 sticky top-0 z-10">

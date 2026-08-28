@@ -433,6 +433,7 @@ export default function DatabaseSwitcherModal({
       <div 
         className="w-full max-w-4xl bg-[#121212] border border-[#2a2a2a] rounded-2xl shadow-2xl overflow-hidden flex flex-col my-4 text-[#e0e0e0] font-sans animate-in zoom-in-95 duration-200"
         id="db-switcher-modal"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header / Supabase Project Usage Bar */}
         <div className="px-5 py-4 bg-[#181818] border-b border-[#262626] flex items-center justify-between">
