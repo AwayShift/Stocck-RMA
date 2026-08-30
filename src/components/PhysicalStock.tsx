@@ -36,7 +36,8 @@ import {
   Sliders,
   Zap,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  RotateCcw
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
 import ExcelImportModal from './ExcelImportModal';
@@ -51,6 +52,7 @@ interface PhysicalStockProps {
   onUpdateUnit: (unit: TriageUnit) => Promise<void>;
   onDeleteUnit: (id: string) => Promise<void>;
   onCheckoutUnit: (id: string) => Promise<void>;
+  onRevertCheckoutUnit?: (id: string) => Promise<void>;
   initialSelectedUnit?: TriageUnit | null;
   onClearSelectedUnit?: () => void;
   onSaveTriage?: (unit: TriageUnit) => Promise<void>;
@@ -65,6 +67,7 @@ export default function PhysicalStock({
   onUpdateUnit, 
   onDeleteUnit, 
   onCheckoutUnit,
+  onRevertCheckoutUnit,
   initialSelectedUnit,
   onClearSelectedUnit,
   onSaveTriage,
@@ -772,6 +775,29 @@ export default function PhysicalStock({
     });
   };
 
+  // Action: Reverter Baixa (with custom confirmation)
+  const handleRevertCheckout = (id: string) => {
+    setConfirmConfig({
+      title: 'Reverter Baixa de Estoque',
+      message: 'Deseja reverter a baixa deste produto e retornar a unidade para o estoque ativo?',
+      type: 'warning',
+      onConfirm: async () => {
+        try {
+          if (onRevertCheckoutUnit) {
+            await onRevertCheckoutUnit(id);
+          }
+          setActionSuccess('Baixa revertida com sucesso! O produto retornou ao estoque ativo.');
+          setTimeout(() => setActionSuccess(null), 3000);
+          handleCloseDetails();
+        } catch (err) {
+          console.error(err);
+          setActionError('Erro ao reverter baixa.');
+          setTimeout(() => setActionError(null), 3000);
+        }
+      }
+    });
+  };
+
   // Action: Move Sector (with custom confirmation and photo strategy options for Principal)
   const handleMoveSector = (unit: TriageUnit, newSector: DestinationSectorType) => {
     if (unit.destinationSector === newSector) return;
@@ -957,15 +983,39 @@ export default function PhysicalStock({
     <div className="space-y-6 relative" id="stock-manager-container">
       {/* Floating Notifications */}
       {actionSuccess && (
-        <div className="fixed top-20 right-6 z-[60] bg-emerald-950 border border-emerald-500 text-emerald-200 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-top-4 duration-300">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span className="text-xs font-semibold">{actionSuccess}</span>
+        <div 
+          className="fixed top-20 right-6 z-[60] px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 app-toast-success bg-slate-900 border border-emerald-500/50 text-emerald-300"
+          id="stock-toast-success"
+        >
+          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+            <CheckCircle2 className="w-4.5 h-4.5" />
+          </div>
+          <span className="text-xs font-bold text-slate-100">{actionSuccess}</span>
+          <button 
+            type="button" 
+            onClick={() => setActionSuccess(null)}
+            className="ml-2 text-slate-400 hover:text-slate-200 p-1 rounded-md transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
       {actionError && (
-        <div className="fixed top-20 right-6 z-[60] bg-rose-950 border border-rose-500 text-rose-200 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-top-4 duration-300">
-          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-          <span className="text-xs font-semibold">{actionError}</span>
+        <div 
+          className="fixed top-20 right-6 z-[60] px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 app-toast-error bg-slate-900 border border-rose-500/50 text-rose-300"
+          id="stock-toast-error"
+        >
+          <div className="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+            <AlertTriangle className="w-4.5 h-4.5" />
+          </div>
+          <span className="text-xs font-bold text-slate-100">{actionError}</span>
+          <button 
+            type="button" 
+            onClick={() => setActionError(null)}
+            className="ml-2 text-slate-400 hover:text-slate-200 p-1 rounded-md transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -3049,7 +3099,7 @@ export default function PhysicalStock({
                       Excluir Registro
                     </button>
 
-                    {currentUnit.status === 'Estoque' && (
+                    {currentUnit.status === 'Estoque' ? (
                       <button 
                         onClick={() => handleCheckout(currentUnit.id)}
                         className="px-4.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
@@ -3057,6 +3107,16 @@ export default function PhysicalStock({
                       >
                         <CheckCircle2 className="w-4 h-4" />
                         Dar Baixa de Estoque
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => handleRevertCheckout(currentUnit.id)}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-black shadow-lg shadow-amber-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                        id="btn-stock-revert-checkout"
+                        title="Reverter a baixa e retornar este produto para o estoque ativo"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Reverter Baixa
                       </button>
                     )}
                   </>

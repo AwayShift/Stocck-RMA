@@ -1305,17 +1305,163 @@ export const deleteTriageUnit = async (id: string, trackingCode?: string, name?:
   }
 };
 
-export const checkoutTriageUnit = async (id: string, trackingCode?: string, destination?: string): Promise<void> => {
+export const checkoutTriageUnit = async (id: string, trackingCode?: string, destination?: string): Promise<TriageUnit | null> => {
+  const cleanId = (id || '').trim();
+  if (!cleanId) return null;
+
   const checkoutDate = new Date().toISOString();
+  const now = new Date().toISOString();
+
+  // 1. Immediately update local cache so any subsequent cache read/sync/render has the Baixado status
+  const cachedList = getCachedTriageUnits();
+  const existing = cachedList.find(u => u.id === cleanId);
+  let updatedUnit: TriageUnit;
+  if (existing) {
+    updatedUnit = {
+      ...existing,
+      status: 'Baixado',
+      checkoutDate: checkoutDate,
+      updatedAt: now
+    };
+  } else {
+    updatedUnit = {
+      id: cleanId,
+      trackingCode: trackingCode || '',
+      baseProductId: '',
+      baseProductName: '',
+      baseProductSku: '',
+      baseProductVoltage: '',
+      status: 'Baixado',
+      destinationSector: (destination as any) || 'RMA',
+      platform: 'Mercado Livre',
+      customerReason: '',
+      deviceStatus: '',
+      packageStatus: '',
+      accessoriesInclusion: '',
+      notes: '',
+      photosProduct: [],
+      photosBox: [],
+      photosAccessories: [],
+      createdAt: now,
+      checkoutDate: checkoutDate,
+      updatedAt: now
+    };
+  }
+
+  updateLocalCacheItem('triage_units', updatedUnit);
+
+  // 2. Persist update in Supabase with updated_at timestamp so delta sync and Realtime track it
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('triage_units').update({
+    const { error } = await supabase.from('triage_units').update({
       status: 'Baixado',
-      checkout_date: checkoutDate
-    }).eq('id', id);
+      checkout_date: checkoutDate,
+      updated_at: now
+    }).eq('id', cleanId);
+
+    if (error) {
+      console.error('Supabase checkout triage error:', error);
+      throw new Error(`Falha ao dar baixa no Supabase: ${error.message}`);
+    }
+
     recordDbOperation('write', 1);
-    createAuditLog('CHECKOUT_TRIAGE', `Baixou do estoque o RMA (Supabase): ${trackingCode || id}. Destinado para: ${destination || 'Destino padrão'}`);
+    try {
+      await createAuditLog('CHECKOUT_TRIAGE', `Baixou do estoque o RMA (Supabase): ${trackingCode || cleanId}. Destinado para: ${destination || 'Destino padrão'}`);
+    } catch (e) {
+      console.warn('Audit log write error:', e);
+    }
   }
+
+  return updatedUnit;
+};
+
+export const checkoutTriageUnitsBatch = async (ids: string[]): Promise<void> => {
+  if (!ids || ids.length === 0) return;
+  const cleanIds = ids.map(id => (id || '').trim()).filter(Boolean);
+  if (cleanIds.length === 0) return;
+
+  const checkoutDate = new Date().toISOString();
+  const now = new Date().toISOString();
+
+  // Update in local cache
+  const currentCached = getCachedTriageUnits();
+  const idSet = new Set(cleanIds);
+  currentCached.forEach(u => {
+    if (idSet.has(u.id)) {
+      const updated: TriageUnit = {
+        ...u,
+        status: 'Baixado',
+        checkoutDate: checkoutDate,
+        updatedAt: now
+      };
+      updateLocalCacheItem('triage_units', updated);
+    }
+  });
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const { error } = await supabase.from('triage_units').update({
+      status: 'Baixado',
+      checkout_date: checkoutDate,
+      updated_at: now
+    }).in('id', cleanIds);
+
+    if (error) {
+      console.error('Supabase batch checkout error:', error);
+      throw new Error(`Falha ao dar baixa em lote no Supabase: ${error.message}`);
+    }
+
+    recordDbOperation('write', cleanIds.length);
+    try {
+      await createAuditLog('CHECKOUT_TRIAGE_BATCH', `Baixa em lote efetuada para ${cleanIds.length} itens do estoque.`);
+    } catch (e) {
+      console.warn('Audit log write error:', e);
+    }
+  }
+};
+
+export const revertCheckoutTriageUnit = async (id: string, trackingCode?: string): Promise<TriageUnit | null> => {
+  const cleanId = (id || '').trim();
+  if (!cleanId) return null;
+
+  const now = new Date().toISOString();
+
+  // Update in local cache
+  const currentCached = getCachedTriageUnits();
+  const existing = currentCached.find(u => u.id === cleanId);
+  if (!existing) return null;
+
+  const updatedUnit: TriageUnit = {
+    ...existing,
+    status: 'Estoque',
+    checkoutDate: null,
+    updatedAt: now
+  };
+
+  updateLocalCacheItem('triage_units', updatedUnit);
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const { error } = await supabase.from('triage_units').update({
+      status: 'Estoque',
+      checkout_date: null,
+      updated_at: now
+    }).eq('id', cleanId);
+
+    if (error) {
+      console.error('Supabase revert checkout error:', error);
+      throw new Error(`Falha ao reverter baixa no Supabase: ${error.message}`);
+    }
+
+    recordDbOperation('write', 1);
+    try {
+      await createAuditLog('REVERT_CHECKOUT', `Reverteu baixa e retornou ao estoque o RMA (Supabase): ${trackingCode || cleanId}`);
+    } catch (e) {
+      console.warn('Audit log write error:', e);
+    }
+  }
+
+  return updatedUnit;
 };
 
 export const resetCatalogProducts = async (): Promise<number> => {

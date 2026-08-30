@@ -138,6 +138,18 @@ export default function PendingItems({
   const [formPhotos, setFormPhotos] = useState<string[]>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // In-App Feedback & Notifications
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [transferSuccessData, setTransferSuccessData] = useState<{
+    productName: string;
+    sku: string;
+    destination: DestinationSectorType;
+    trackingCode?: string;
+    voltage?: string;
+  } | null>(null);
 
   // Suggestions for SKU
   const [skuSuggestions, setSkuSuggestions] = useState<BaseProduct[]>([]);
@@ -192,6 +204,7 @@ export default function PendingItems({
     setFormDetailedNotes('');
     setFormStatus('Pendente');
     setFormPhotos([]);
+    setFormError(null);
     setShowSkuDropdown(false);
     setIsFormModalOpen(true);
   };
@@ -218,6 +231,7 @@ export default function PendingItems({
     setFormDetailedNotes(item.detailedNotes || '');
     setFormStatus(item.status || 'Pendente');
     setFormPhotos(item.photos || []);
+    setFormError(null);
     setShowSkuDropdown(false);
     setIsFormModalOpen(true);
   };
@@ -251,6 +265,7 @@ export default function PendingItems({
     if (!files || files.length === 0) return;
 
     setIsUploadingPhoto(true);
+    setFormError(null);
     try {
       const newPhotos: string[] = [];
       for (let i = 0; i < files.length; i++) {
@@ -261,7 +276,7 @@ export default function PendingItems({
       setFormPhotos(prev => [...prev, ...newPhotos]);
     } catch (err: any) {
       console.error('Erro ao processar upload de imagem:', err);
-      alert(err?.message || 'Falha ao processar a imagem. Certifique-se de que é um formato válido (JPG, PNG, WEBP) e menor que 3MB.');
+      setFormError(err?.message || 'Falha ao processar a imagem. Certifique-se de que é um formato válido (JPG, PNG, WEBP) e menor que 3MB.');
     } finally {
       setIsUploadingPhoto(false);
       e.target.value = '';
@@ -285,6 +300,8 @@ export default function PendingItems({
     try {
       await onDeletePending(deleteConfirmItem.id);
       setDeleteConfirmItem(null);
+      setActionSuccess('Registro de pendência excluído com sucesso.');
+      setTimeout(() => setActionSuccess(null), 4000);
     } catch (err: any) {
       console.error('Erro ao excluir pendência:', err);
       setDeleteError(err?.message || 'Falha ao excluir registro de pendência. Verifique sua conexão e tente novamente.');
@@ -296,8 +313,9 @@ export default function PendingItems({
   // Save Pending Item
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     if (!formSku.trim() && !formProductName.trim()) {
-      alert('Por favor, informe ao menos o SKU ou o Nome do Produto.');
+      setFormError('Por favor, informe ao menos o SKU ou o Nome do Produto.');
       return;
     }
 
@@ -326,9 +344,11 @@ export default function PendingItems({
 
       await onSavePending(itemToSave);
       setIsFormModalOpen(false);
+      setActionSuccess(editingItem ? 'Registro de pendência atualizado com sucesso!' : 'Novo item de pendência cadastrado com sucesso!');
+      setTimeout(() => setActionSuccess(null), 4000);
     } catch (err) {
       console.error('Erro ao salvar pendência:', err);
-      alert('Ocorreu um erro ao salvar o registro no banco de dados.');
+      setFormError('Ocorreu um erro ao salvar o registro no banco de dados.');
     } finally {
       setIsSaving(false);
     }
@@ -372,11 +392,21 @@ export default function PendingItems({
       });
 
       setIsTransferModalOpen(false);
+
+      // Open styled in-app confirmation modal & toast
+      setTransferSuccessData({
+        productName: updatedItem.productName,
+        sku: updatedItem.sku,
+        destination: transferDestination,
+        trackingCode: updatedItem.trackingCode,
+        voltage: updatedItem.voltage || 'Bivolt'
+      });
       setItemToTransfer(null);
-      alert(`Sucesso! O produto "${itemToTransfer.productName}" foi liberado e transferido para o setor [${transferDestination}] do Estoque Físico.`);
+      setActionSuccess(`Sucesso! O produto "${updatedItem.productName}" foi transferido para o setor [${transferDestination}] do Estoque Físico.`);
+      setTimeout(() => setActionSuccess(null), 5000);
     } catch (err) {
       console.error('Erro ao transferir item para o estoque:', err);
-      alert('Falha ao transferir o item para o estoque. Verifique sua conexão e tente novamente.');
+      setTransferError('Falha ao transferir o item para o estoque. Verifique sua conexão e tente novamente.');
     } finally {
       setIsTransferring(false);
     }
@@ -385,7 +415,8 @@ export default function PendingItems({
   // Export to Excel
   const handleExportExcel = () => {
     if (filteredItems.length === 0) {
-      alert('Não há itens na lista para exportar.');
+      setActionError('Não há itens na lista para exportar.');
+      setTimeout(() => setActionError(null), 3500);
       return;
     }
 
@@ -431,7 +462,45 @@ export default function PendingItems({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200" id="pendencias-container">
+    <div className="space-y-6 animate-in fade-in duration-200 relative" id="pendencias-container">
+      {/* Floating Notifications */}
+      {actionSuccess && (
+        <div 
+          className="fixed top-20 right-6 z-[60] px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 app-toast-success bg-slate-900 border border-emerald-500/50 text-emerald-300"
+          id="pending-toast-success"
+        >
+          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+            <CheckCircle2 className="w-4.5 h-4.5" />
+          </div>
+          <span className="text-xs font-bold text-slate-100">{actionSuccess}</span>
+          <button 
+            type="button" 
+            onClick={() => setActionSuccess(null)}
+            className="ml-2 text-slate-400 hover:text-slate-200 p-1 rounded-md transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+      {actionError && (
+        <div 
+          className="fixed top-20 right-6 z-[60] px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 app-toast-error bg-slate-900 border border-rose-500/50 text-rose-300"
+          id="pending-toast-error"
+        >
+          <div className="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+            <AlertTriangle className="w-4.5 h-4.5" />
+          </div>
+          <span className="text-xs font-bold text-slate-100">{actionError}</span>
+          <button 
+            type="button" 
+            onClick={() => setActionError(null)}
+            className="ml-2 text-slate-400 hover:text-slate-200 p-1 rounded-md transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Header Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1105,6 +1174,13 @@ export default function PendingItems({
 
             {/* Modal Body Form */}
             <form onSubmit={handleSaveForm} className="p-6 space-y-4 flex-1">
+              {formError && (
+                <div className="p-3.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-semibold flex items-center gap-2.5 animate-in fade-in duration-150" id="form-error-banner">
+                  <AlertTriangle className="w-4.5 h-4.5 text-rose-400 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               {/* Row 1: SKU with autocomplete + Nome do Produto */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* SKU */}
@@ -1605,6 +1681,86 @@ export default function PendingItems({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TRANSFER SUCCESS CONFIRMATION MODAL */}
+      {transferSuccessData && (
+        <div 
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setTransferSuccessData(null)}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+            id="modal-transfer-success-confirmation"
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-2xl shrink-0">
+                <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-white">Item Transferido com Sucesso!</h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  O produto foi liberado da fila de pendências e promovido para o <strong>Estoque Físico</strong>.
+                </p>
+              </div>
+            </div>
+
+            {/* Product Card Details */}
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-2.5 py-1 rounded-lg border border-sky-500/20">
+                  SKU: {transferSuccessData.sku}
+                </span>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                  transferSuccessData.destination === 'Openbox'
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    : transferSuccessData.destination === 'Principal'
+                    ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                    : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                }`}>
+                  Setor: {transferSuccessData.destination}
+                </span>
+              </div>
+
+              <div className="text-xs font-semibold text-white">
+                {transferSuccessData.productName}
+              </div>
+
+              {transferSuccessData.trackingCode && (
+                <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5 pt-1 border-t border-slate-900">
+                  <span className="text-slate-500">Rastreio/STI:</span>
+                  <span className="text-emerald-400 font-bold">{transferSuccessData.trackingCode}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setTransferSuccessData(null)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Continuar nas Pendências
+              </button>
+              {onNavigateToStock && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTransferSuccessData(null);
+                    onNavigateToStock();
+                  }}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-emerald-900/30 flex items-center gap-2"
+                  id="btn-goto-stock-after-transfer"
+                >
+                  <span>Ver no Estoque</span>
+                  <MoveRight className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>

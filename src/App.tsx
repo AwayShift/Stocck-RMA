@@ -39,6 +39,7 @@ import {
   saveTriageUnit,
   deleteTriageUnit,
   checkoutTriageUnit,
+  revertCheckoutTriageUnit,
   saveDailyInflow,
   saveBatchDailyInflows,
   deleteDailyInflow,
@@ -556,8 +557,14 @@ export default function App() {
 
   const handleCheckoutTriage = async (id: string) => {
     const target = triageUnits.find(u => u.id === id);
-    await checkoutTriageUnit(id, target?.trackingCode, target?.destinationSector);
-    setTriageUnits(prev => prev.map(u => u.id === id ? { ...u, status: 'Baixado', checkoutDate: new Date().toISOString() } : u));
+    const updated = await checkoutTriageUnit(id, target?.trackingCode, target?.destinationSector);
+    setTriageUnits(prev => prev.map(u => u.id === id ? (updated || { ...u, status: 'Baixado', checkoutDate: new Date().toISOString() }) : u));
+  };
+
+  const handleRevertCheckoutTriage = async (id: string) => {
+    const target = triageUnits.find(u => u.id === id);
+    const updated = await revertCheckoutTriageUnit(id, target?.trackingCode);
+    setTriageUnits(prev => prev.map(u => u.id === id ? (updated || { ...u, status: 'Estoque', checkoutDate: undefined }) : u));
   };
 
   const handleLogout = async () => {
@@ -868,6 +875,7 @@ export default function App() {
                 onUpdateUnit={handleSaveTriage}
                 onDeleteUnit={handleDeleteTriage}
                 onCheckoutUnit={handleCheckoutTriage}
+                onRevertCheckoutUnit={handleRevertCheckoutTriage}
                 initialSelectedUnit={selectedTriageUnit}
                 onClearSelectedUnit={() => setSelectedTriageUnit(null)}
                 onSaveTriage={handleSaveTriage}
