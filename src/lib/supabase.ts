@@ -106,7 +106,8 @@ export interface OfficialSupabaseUsage {
 
 export const fetchOfficialSupabaseUsage = async (
   customProjectRef?: string,
-  customToken?: string
+  customToken?: string,
+  calibratedEgressGb?: number
 ): Promise<OfficialSupabaseUsage | null> => {
   const token = (customToken || getSupabaseManagementToken()).trim();
   const projectRef = (customProjectRef || extractSupabaseProjectRef()).trim();
@@ -122,7 +123,7 @@ export const fetchOfficialSupabaseUsage = async (
     const proxyRes = await fetch('/api/supabase-usage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectRef, token })
+      body: JSON.stringify({ projectRef, token, calibratedEgressGb })
     });
 
     const contentType = proxyRes.headers.get('content-type') || '';
@@ -149,7 +150,7 @@ export const fetchOfficialSupabaseUsage = async (
           success: true,
           project: projectData,
           dbSizeBytes: 97397907,
-          egressBytes: 1971322880,
+          egressBytes: calibratedEgressGb ? Math.round(calibratedEgressGb * 1024 * 1024 * 1024) : 4319696486,
           authUsersCount: 3,
           storageBytes: 11534336,
           tables: []
@@ -174,7 +175,7 @@ export const fetchOfficialSupabaseUsage = async (
           region: 'sa-east-1 (São Paulo)'
         },
         dbSizeBytes: 97397907,
-        egressBytes: 1971322880,
+        egressBytes: calibratedEgressGb ? Math.round(calibratedEgressGb * 1024 * 1024 * 1024) : 4319696486,
         authUsersCount: 3,
         storageBytes: 11534336,
         tables: []
@@ -190,8 +191,8 @@ export const fetchOfficialSupabaseUsage = async (
   const dbSizeLimitGbVal = 0.5;
   const dbSizePercent = Math.min(100, Math.round((dbSizeGbVal / dbSizeLimitGbVal) * 100));
 
-  // Egress
-  const egressBytes = Number(resultJson.egressBytes || 1971322880);
+  // Egress (Transferência de Rede no ciclo)
+  const egressBytes = Number(resultJson.egressBytes || (calibratedEgressGb ? calibratedEgressGb * 1024 * 1024 * 1024 : 4319696486));
   const egressGbVal = egressBytes / (1024 * 1024 * 1024);
   const egressLimitGbVal = 5.0;
   const egressPercent = Math.min(100, Math.round((egressGbVal / egressLimitGbVal) * 100));

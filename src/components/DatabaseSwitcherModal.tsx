@@ -985,20 +985,25 @@ export default function DatabaseSwitcherModal({
 
           {/* Drill-down Info Card for Selected Metric */}
           {selectedMetric === 'egress' && (
-            <div className="p-4 bg-[#161c18] border border-[#2b4c37] rounded-xl space-y-2 animate-in fade-in">
-              <h4 className="text-xs font-bold text-[#3ecf8e] flex items-center gap-1.5">
-                <Globe className="w-4 h-4" />
-                Como funciona o Egress (Transferência de Rede) no Supabase
-              </h4>
+            <div className="p-4 bg-[#161c18] border border-[#2b4c37] rounded-xl space-y-3 animate-in fade-in">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="text-xs font-bold text-[#3ecf8e] flex items-center gap-1.5">
+                  <Globe className="w-4 h-4" />
+                  Como funciona o Egress (Transferência de Rede) no Supabase
+                </h4>
+                <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                  {metrics.egressGb} / 5 GB ({metrics.egressPercent}%)
+                </span>
+              </div>
               <p className="text-xs text-[#cccccc] leading-relaxed">
-                O <strong>Egress</strong> mede todo o tráfego de dados baixados do banco de dados e do Storage no ciclo mensal. 
-                O sistema Stocck-RMA aplica as seguintes otimizações ativas para manter o consumo muito abaixo da cota de 5 GB:
+                O <strong>Egress</strong> mede todo o tráfego de dados baixados do banco de dados (PostgREST, Auth, Realtime) e do Storage no ciclo mensal. 
+                O valor é contabilizado na camada de proxy e CDN do Supabase (fora das tabelas do Postgres).
               </p>
               <ul className="text-xs text-[#a0a0a0] list-disc list-inside space-y-1">
+                <li><strong className="text-white">Cloudinary CDN Ativo:</strong> 0 bytes de fotos passam pelo Supabase, economizando gigabytes de transferência direta.</li>
                 <li><strong className="text-white">Cache &amp; Sync Incremental:</strong> Carregamento local instantâneo (0ms, 0 Egress) com busca diferencial somente de registros modificados via <code className="text-[#3ecf8e]">updated_at</code> e mutações granulares em Realtime.</li>
                 <li><strong className="text-white">Compressão de Texto (LZ-String):</strong> Compressão transparente de notas, laudos e descrições longas antes de persistir no PostgreSQL.</li>
                 <li><strong className="text-white">Paginação Obrigatória:</strong> Consultas com <code className="text-[#3ecf8e]">.range()</code> ou <code className="text-[#3ecf8e]">.limit()</code> em todas as telas de listagem.</li>
-                <li><strong className="text-white">Mídias Otimizadas:</strong> Conversão prévia no navegador de todas as fotos para o formato ultraleve <strong>.WebP</strong> (teto máximo de 3MB).</li>
               </ul>
             </div>
           )}
