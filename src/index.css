@@ -1055,6 +1055,47 @@ html.light .unit-month-total-badge {
   font-weight: 800 !important;
 }
 
+/* Dashboard Platform Breakdown in Light Mode */
+html.light #platforms-card {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light #platforms-breakdown .text-slate-300 {
+  color: #1e293b !important;
+  font-weight: 700 !important;
+}
+
+html.light #platforms-breakdown .text-slate-400 {
+  color: #64748b !important;
+  font-weight: 600 !important;
+}
+
+html.light #platforms-breakdown .bg-slate-950 {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light #platforms-breakdown .bg-emerald-500 {
+  background-color: #059669 !important;
+}
+
+html.light #platforms-breakdown .bg-yellow-400 {
+  background-color: #d97706 !important;
+}
+
+html.light #platforms-breakdown .bg-orange-400 {
+  background-color: #ea580c !important;
+}
+
+html.light #platforms-breakdown .bg-blue-400 {
+  background-color: #2563eb !important;
+}
+
+html.light #platforms-breakdown .bg-indigo-400 {
+  background-color: #6366f1 !important;
+}
+
 /* Light mode custom scroll container overrides */
 html.light .overflow-y-auto,
 html.light .overflow-x-auto,

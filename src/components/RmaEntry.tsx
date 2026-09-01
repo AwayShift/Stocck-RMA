@@ -567,139 +567,11 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Side Column: Fields (7 cols) */}
             <div className="lg:col-span-7 space-y-4">
-              {/* Step 1: Destino, Origem e Identificação do Pacote (Ultra-compact Unified Card) */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-destination-origin">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">1</span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Destino & Origem do Pacote</span>
-                  </div>
-                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border"
-                    style={{
-                      backgroundColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.1)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                      borderColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.3)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)',
-                      color: destinationSector === 'Principal' ? '#34D399' : destinationSector === 'Openbox' ? '#FBBF24' : '#F87171'
-                    }}
-                  >
-                    {destinationSector === 'Principal' ? '🟢 Estoque Principal' : destinationSector === 'Openbox' ? '🟠 Openbox' : '🔴 RMA'}
-                  </span>
-                </div>
-
-                {/* 3 Quick Destination Cards */}
-                <div className="grid grid-cols-3 gap-2" id="destination-sector-cards">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDestinationSector('Principal')}
-                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
-                      destinationSector === 'Principal'
-                        ? 'bg-emerald-500/15 border-emerald-500 ring-1 ring-emerald-500/40 text-emerald-300 font-bold shadow-sm'
-                        : 'bg-slate-950/70 border-slate-800 hover:border-emerald-500/30 text-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-                      <span className="text-xs truncate">Principal</span>
-                    </div>
-                    {destinationSector === 'Principal' && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDestinationSector('Openbox')}
-                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
-                      destinationSector === 'Openbox'
-                        ? 'bg-amber-500/15 border-amber-500 ring-1 ring-amber-500/40 text-amber-300 font-bold shadow-sm'
-                        : 'bg-slate-950/70 border-slate-800 hover:border-amber-500/30 text-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
-                      <span className="text-xs truncate">Openbox</span>
-                    </div>
-                    {destinationSector === 'Openbox' && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDestinationSector('RMA')}
-                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
-                      destinationSector === 'RMA'
-                        ? 'bg-rose-500/15 border-rose-500 ring-1 ring-rose-500/40 text-rose-300 font-bold shadow-sm'
-                        : 'bg-slate-950/70 border-slate-800 hover:border-rose-500/30 text-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0"></span>
-                      <span className="text-xs truncate">RMA</span>
-                    </div>
-                    {destinationSector === 'RMA' && <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
-                  </button>
-                </div>
-
-                {/* Origin details row */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                  {/* Platform */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Plataforma</label>
-                    <select 
-                      value={platform}
-                      onChange={(e) => setPlatform(e.target.value as PlatformType)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-                      id="select-platform-origin"
-                    >
-                      <option value="Mercado Livre">Mercado Livre</option>
-                      <option value="Shopee">Shopee</option>
-                      <option value="Amazon">Amazon</option>
-                      <option value="Amazon Ta Novo">Amazon Ta Novo</option>
-                      <option value="Kabum">Kabum</option>
-                    </select>
-                  </div>
-
-                  {/* Código STI */}
-                  <div className="space-y-1">
-                    <label className={`text-[11px] font-bold uppercase tracking-wider flex items-center justify-between ${
-                      destinationSector === 'Openbox' ? 'text-amber-400' : 'text-slate-400'
-                    }`}>
-                      <span>Código STI {destinationSector === 'Openbox' ? '*' : ''}</span>
-                      {destinationSector === 'Openbox' && (
-                        <span className="text-[9px] font-bold px-1 bg-amber-500/20 text-amber-300 rounded">Obrigatório</span>
-                      )}
-                    </label>
-                    <input 
-                      type="text"
-                      placeholder={destinationSector === 'Openbox' ? "STI-40912 ou 13509873" : "Opcional"}
-                      value={trackingCode}
-                      onChange={(e) => setTrackingCode(e.target.value)}
-                      className={`w-full px-3 py-2 bg-slate-950 rounded-lg text-xs font-mono transition-all ${
-                        destinationSector === 'Openbox'
-                          ? 'border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400/40'
-                          : 'border border-slate-800 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500'
-                      }`}
-                      id="input-tracking-code"
-                      required={destinationSector === 'Openbox'}
-                    />
-                  </div>
-
-                  {/* Order Number */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Nº Pedido (Opcional)</label>
-                    <input 
-                      type="text"
-                      placeholder="Ex: 2000008172648"
-                      value={orderNumber}
-                      onChange={(e) => setOrderNumber(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
-                      id="input-order-number"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 2: Produto do Catálogo & Números de Série (Agile Focus) */}
+              {/* Step 1: Produto do Catálogo & Números de Série (Agile Focus) */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-product-serials">
                 <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">2</span>
+                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">1</span>
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Produto & Números de Série (S/N)</span>
                   </div>
                   {selectedProduct && (
@@ -881,9 +753,6 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              if (idx === serials.length - 1) {
-                                handleAddSerialLine();
-                              }
                             }
                           }}
                           className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
@@ -903,8 +772,136 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   </div>
 
                   <p className="text-[10px] text-slate-500">
-                    💡 Pressione <strong>Enter</strong> ou bipe com leitor para criar a próxima unidade. Cole vários seriais de uma vez se necessário.
+                    💡 O serial bipado é registrado no campo selecionado. Para adicionar mais unidades/seriais nesta entrada, clique no botão <strong>+ Serial / Unidade</strong> acima.
                   </p>
+                </div>
+              </div>
+
+              {/* Step 2: Destino, Origem e Identificação do Pacote (Ultra-compact Unified Card) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-destination-origin">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">2</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Destino & Origem do Pacote</span>
+                  </div>
+                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border"
+                    style={{
+                      backgroundColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.1)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                      borderColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.3)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)',
+                      color: destinationSector === 'Principal' ? '#34D399' : destinationSector === 'Openbox' ? '#FBBF24' : '#F87171'
+                    }}
+                  >
+                    {destinationSector === 'Principal' ? '🟢 Estoque Principal' : destinationSector === 'Openbox' ? '🟠 Openbox' : '🔴 RMA'}
+                  </span>
+                </div>
+
+                {/* 3 Quick Destination Cards */}
+                <div className="grid grid-cols-3 gap-2" id="destination-sector-cards">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectDestinationSector('Principal')}
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      destinationSector === 'Principal'
+                        ? 'bg-emerald-500/15 border-emerald-500 ring-1 ring-emerald-500/40 text-emerald-300 font-bold shadow-sm'
+                        : 'bg-slate-950/70 border-slate-800 hover:border-emerald-500/30 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                      <span className="text-xs truncate">Principal</span>
+                    </div>
+                    {destinationSector === 'Principal' && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectDestinationSector('Openbox')}
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      destinationSector === 'Openbox'
+                        ? 'bg-amber-500/15 border-amber-500 ring-1 ring-amber-500/40 text-amber-300 font-bold shadow-sm'
+                        : 'bg-slate-950/70 border-slate-800 hover:border-amber-500/30 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                      <span className="text-xs truncate">Openbox</span>
+                    </div>
+                    {destinationSector === 'Openbox' && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectDestinationSector('RMA')}
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      destinationSector === 'RMA'
+                        ? 'bg-rose-500/15 border-rose-500 ring-1 ring-rose-500/40 text-rose-300 font-bold shadow-sm'
+                        : 'bg-slate-950/70 border-slate-800 hover:border-rose-500/30 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0"></span>
+                      <span className="text-xs truncate">RMA</span>
+                    </div>
+                    {destinationSector === 'RMA' && <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
+                  </button>
+                </div>
+
+                {/* Origin details row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  {/* Platform */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Plataforma</label>
+                    <select 
+                      value={platform}
+                      onChange={(e) => setPlatform(e.target.value as PlatformType)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                      id="select-platform-origin"
+                    >
+                      <option value="Mercado Livre">Mercado Livre</option>
+                      <option value="Shopee">Shopee</option>
+                      <option value="Amazon">Amazon</option>
+                      <option value="Amazon Ta Novo">Amazon Ta Novo</option>
+                      <option value="Kabum">Kabum</option>
+                    </select>
+                  </div>
+
+                  {/* Código STI */}
+                  <div className="space-y-1">
+                    <label className={`text-[11px] font-bold uppercase tracking-wider flex items-center justify-between ${
+                      destinationSector === 'Openbox' ? 'text-amber-400' : 'text-slate-400'
+                    }`}>
+                      <span>Código STI {destinationSector === 'Openbox' ? '*' : ''}</span>
+                      {destinationSector === 'Openbox' && (
+                        <span className="text-[9px] font-bold px-1 bg-amber-500/20 text-amber-300 rounded">Obrigatório</span>
+                      )}
+                    </label>
+                    <input 
+                      type="text"
+                      placeholder={destinationSector === 'Openbox' ? "STI-40912 ou 13509873" : "Opcional"}
+                      value={trackingCode}
+                      onChange={(e) => setTrackingCode(e.target.value)}
+                      className={`w-full px-3 py-2 bg-slate-950 rounded-lg text-xs font-mono transition-all ${
+                        destinationSector === 'Openbox'
+                          ? 'border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400/40'
+                          : 'border border-slate-800 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500'
+                      }`}
+                      id="input-tracking-code"
+                      required={destinationSector === 'Openbox'}
+                    />
+                  </div>
+
+                  {/* Order Number */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Nº Pedido (Opcional)</label>
+                    <input 
+                      type="text"
+                      placeholder="Ex: 2000008172648"
+                      value={orderNumber}
+                      onChange={(e) => setOrderNumber(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                      id="input-order-number"
+                    />
+                  </div>
                 </div>
               </div>
 

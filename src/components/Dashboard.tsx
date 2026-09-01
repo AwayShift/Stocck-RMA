@@ -93,12 +93,12 @@ export default function Dashboard({
       case 'Shopee': return { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30', barBg: 'bg-orange-400', dotBg: 'bg-orange-400' };
       case 'Amazon': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30', barBg: 'bg-blue-400', dotBg: 'bg-blue-400' };
       case 'Amazon Ta Novo': return { 
-        bg: 'bg-[#05621a]/20', 
-        text: 'text-emerald-300', 
-        border: 'border-[#05621a]/80', 
-        barBg: 'bg-[#05621a]', 
-        dotBg: 'bg-[#05621a]',
-        customColor: 'rgba(5, 98, 26, 0.8)'
+        bg: 'bg-emerald-500/15', 
+        text: 'text-emerald-400', 
+        border: 'border-emerald-500/30', 
+        barBg: 'bg-emerald-500', 
+        dotBg: 'bg-emerald-500',
+        customColor: 'rgba(16, 185, 129, 0.8)'
       };
       case 'Kabum': return { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/30', barBg: 'bg-indigo-400', dotBg: 'bg-indigo-400' };
       default: return { bg: 'bg-zinc-500/10', text: 'text-zinc-400', border: 'border-zinc-500/30', barBg: 'bg-zinc-400', dotBg: 'bg-zinc-400' };
@@ -342,7 +342,7 @@ export default function Dashboard({
                   <div key={platform} className="space-y-1.5" id={`platform-row-${platform.replace(' ', '-')}`}>
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${style.dotBg}`}></span>
+                        <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${style.dotBg}`}></span>
                         {platform}
                       </span>
                       <span className="text-slate-400 font-mono">

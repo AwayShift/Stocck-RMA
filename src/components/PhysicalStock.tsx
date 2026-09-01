@@ -945,7 +945,7 @@ export default function PhysicalStock({
       case 'Mercado Livre': return 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20';
       case 'Shopee': return 'bg-orange-500/10 text-orange-400 border border-orange-500/20';
       case 'Amazon': return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
-      case 'Amazon Ta Novo': return 'bg-[#05621a]/20 text-emerald-300 border border-[#05621a]/80';
+      case 'Amazon Ta Novo': return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
       case 'Kabum': return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
       default: return 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20';
     }
