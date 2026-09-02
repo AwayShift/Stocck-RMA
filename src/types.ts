@@ -40,6 +40,7 @@ export interface CaseTracking {
 }
 
 export type PendingStatusType = 'Pendente' | 'Em Análise' | 'Aguardando Peça' | 'Aguardando NF' | 'Resolvido' | 'Cancelado';
+export type PendingPriorityType = 'Baixa' | 'Média' | 'Alta' | 'Urgente';
 
 export interface PendingItem {
   id: string;
@@ -53,6 +54,7 @@ export interface PendingItem {
   pendingReason: string; // Motivo da pendência (ex: "Sem nota fiscal", "Sem identificação", "Aguardando peças", etc.)
   detailedNotes?: string; // Observações / Laudo preliminar / Detalhes
   status: PendingStatusType;
+  priority?: PendingPriorityType; // Nível de prioridade: 'Baixa' | 'Média' | 'Alta' | 'Urgente'
   photos: string[]; // Base64 ou URLs das imagens
   createdAt: string; // ISO String
   updatedAt?: string;
@@ -92,11 +94,13 @@ export interface TriageUnit {
   checkoutDate?: string | null;
   source?: 'manual' | 'excel' | 'migration';
   isMigration?: boolean;
+  excludeFromDailyCount?: boolean; // Se verdadeiro, não contabiliza no contador de entrada diária
 }
 
 /**
- * Helper to identify units created via spreadsheet inventory migration,
- * so they are kept in stock inventory but ignored from operational RMA inflow counts.
+ * Helper to identify units created via spreadsheet inventory migration or
+ * flagged to be excluded from daily inflow counts,
+ * so they are kept in stock inventory but ignored from operational RMA daily inflow counts.
  */
 export function isMigrationUnit(u: {
   isMigration?: boolean;
@@ -104,8 +108,10 @@ export function isMigrationUnit(u: {
   id?: string;
   customerReason?: string;
   notes?: string;
+  excludeFromDailyCount?: boolean;
 }): boolean {
   if (!u) return false;
+  if (u.excludeFromDailyCount) return true;
   if (u.isMigration) return true;
   if (u.source === 'excel' || u.source === 'migration') return true;
   if (u.id && (

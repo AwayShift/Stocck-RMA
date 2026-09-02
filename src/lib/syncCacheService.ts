@@ -16,7 +16,11 @@ import {
   mapSupabaseToProduct, 
   mapSupabaseToTriageUnit, 
   mapSupabaseToDailyInflow, 
-  mapSupabaseToPendingItem 
+  mapSupabaseToPendingItem,
+  getTriageColumns,
+  getPendingColumns,
+  setHasExcludeDailyCol,
+  setHasPendingExtendedCols
 } from './supabase';
 
 interface SyncMetadata {
@@ -93,9 +97,9 @@ const persistToStorage = <T>(key: string, data: T[]) => {
 
 // Surgical Column Projections to reduce bandwidth & Egress (eliminating select * overload)
 const PRODUCT_COLUMNS = 'id, name, sku, voltage, description, image_url, images, images_product, images_box, images_accessories, accessories, brand, category, created_at, updated_at';
-const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration';
+const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration, exclude_from_daily_count';
 const INFLOW_COLUMNS = 'id, date, rma, estoque, openbox, es, total_dia, notes, source, created_at, updated_at';
-const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
+const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
 
 // ============================================================================
 // 1. BASE PRODUCTS INCREMENTAL SYNC
@@ -248,17 +252,29 @@ export const syncTriageUnitsIncrementally = async (
   if (forceFull || currentCached.length === 0 || !lastSync) {
     let { data, error } = await supabase
       .from('triage_units')
-      .select(TRIAGE_COLUMNS)
+      .select(getTriageColumns())
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.warn('Fallback: triage_units select with columns failed, trying select(*):', error);
-      const fallback = await supabase
+      if (error.message?.includes('exclude_from_daily_count') || error.code === '42703') {
+        setHasExcludeDailyCol(false);
+      }
+      console.warn('Fallback: triage_units select with columns failed, trying safe columns / select(*):', error);
+      const safeFallback = await supabase
         .from('triage_units')
-        .select('*')
+        .select(getTriageColumns())
         .order('created_at', { ascending: false });
-      data = fallback.data;
-      error = fallback.error;
+      if (!safeFallback.error && safeFallback.data) {
+        data = safeFallback.data;
+        error = null;
+      } else {
+        const starFallback = await supabase
+          .from('triage_units')
+          .select('*')
+          .order('created_at', { ascending: false });
+        data = starFallback.data;
+        error = starFallback.error;
+      }
     }
 
     if (error) {
@@ -282,7 +298,7 @@ export const syncTriageUnitsIncrementally = async (
     const [updatedRes, idsRes] = await Promise.all([
       supabase
         .from('triage_units')
-        .select(TRIAGE_COLUMNS)
+        .select(getTriageColumns())
         .gt('updated_at', lastSync)
         .order('updated_at', { ascending: true }),
       supabase
@@ -291,17 +307,30 @@ export const syncTriageUnitsIncrementally = async (
     ]);
 
     if (updatedRes.error) {
-      console.warn('Incremental triage sync error, trying select(*):', updatedRes.error);
-      const fallbackUpdated = await supabase
+      if (updatedRes.error.message?.includes('exclude_from_daily_count') || updatedRes.error.code === '42703') {
+        setHasExcludeDailyCol(false);
+      }
+      console.warn('Incremental triage sync error, trying safe columns / select(*):', updatedRes.error);
+      const safeFallback = await supabase
         .from('triage_units')
-        .select('*')
+        .select(getTriageColumns())
         .gt('updated_at', lastSync)
         .order('updated_at', { ascending: true });
-      if (!fallbackUpdated.error && fallbackUpdated.data) {
-        updatedRes.data = fallbackUpdated.data;
+      if (!safeFallback.error && safeFallback.data) {
+        updatedRes.data = safeFallback.data;
         updatedRes.error = null;
       } else {
-        return currentCached;
+        const starFallback = await supabase
+          .from('triage_units')
+          .select('*')
+          .gt('updated_at', lastSync)
+          .order('updated_at', { ascending: true });
+        if (!starFallback.error && starFallback.data) {
+          updatedRes.data = starFallback.data;
+          updatedRes.error = null;
+        } else {
+          return currentCached;
+        }
       }
     }
 
@@ -462,10 +491,30 @@ export const syncPendingItemsIncrementally = async (
   const lastSync = syncMeta.lastSyncPendingItems;
 
   if (forceFull || currentCached.length === 0 || !lastSync) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('pending_items')
-      .select(PENDING_COLUMNS)
+      .select(getPendingColumns())
       .order('created_at', { ascending: false });
+
+    if (error) {
+      setHasPendingExtendedCols(false);
+      console.warn('Fallback: pending_items select with columns failed, trying safe columns / select(*):', error);
+      const safeFallback = await supabase
+        .from('pending_items')
+        .select(getPendingColumns())
+        .order('created_at', { ascending: false });
+      if (!safeFallback.error && safeFallback.data) {
+        data = safeFallback.data;
+        error = null;
+      } else {
+        const starFallback = await supabase
+          .from('pending_items')
+          .select('*')
+          .order('created_at', { ascending: false });
+        data = starFallback.data;
+        error = starFallback.error;
+      }
+    }
 
     if (error) {
       console.error('Error fetching full pending items:', error);
@@ -487,7 +536,7 @@ export const syncPendingItemsIncrementally = async (
     const [updatedRes, idsRes] = await Promise.all([
       supabase
         .from('pending_items')
-        .select(PENDING_COLUMNS)
+        .select(getPendingColumns())
         .gt('updated_at', lastSync)
         .order('updated_at', { ascending: true }),
       supabase
@@ -496,7 +545,28 @@ export const syncPendingItemsIncrementally = async (
     ]);
 
     if (updatedRes.error) {
-      return currentCached;
+      setHasPendingExtendedCols(false);
+      const safeFallback = await supabase
+        .from('pending_items')
+        .select(getPendingColumns())
+        .gt('updated_at', lastSync)
+        .order('updated_at', { ascending: true });
+      if (!safeFallback.error && safeFallback.data) {
+        updatedRes.data = safeFallback.data;
+        updatedRes.error = null;
+      } else {
+        const starFallback = await supabase
+          .from('pending_items')
+          .select('*')
+          .gt('updated_at', lastSync)
+          .order('updated_at', { ascending: true });
+        if (!starFallback.error && starFallback.data) {
+          updatedRes.data = starFallback.data;
+          updatedRes.error = null;
+        } else {
+          return currentCached;
+        }
+      }
     }
 
     let validIdSet: Set<string> | null = null;

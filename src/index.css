@@ -187,6 +187,35 @@ html.light button.bg-blue-500 * {
   color: #ffffff !important;
 }
 
+/* Photo Tab Counter Badge Light & Dark Mode Fix */
+.photo-tab-counter-badge {
+  background-color: rgba(30, 41, 59, 0.9) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
+}
+
+html.light .photo-tab-counter-badge {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+/* Active photo tab counter badge in dark mode */
+button.bg-emerald-500 .photo-tab-counter-badge,
+button.bg-emerald-600 .photo-tab-counter-badge {
+  background-color: rgba(6, 78, 59, 0.75) !important;
+  color: #a7f3d0 !important;
+  border: 1px solid rgba(16, 185, 129, 0.5) !important;
+}
+
+/* Active photo tab counter badge in light mode */
+html.light button.bg-emerald-500 .photo-tab-counter-badge,
+html.light button.bg-emerald-600 .photo-tab-counter-badge {
+  background-color: #064e3b !important;
+  color: #ffffff !important;
+  border: 1px solid #047857 !important;
+}
+
 /* Input, Select, Textarea in Light Mode */
 html.light input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
 html.light select,

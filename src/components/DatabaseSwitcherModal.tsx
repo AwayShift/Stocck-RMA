@@ -38,6 +38,7 @@ import {
   fetchOfficialSupabaseUsage,
   OfficialSupabaseUsage,
   SUPABASE_SQL_SCHEMA,
+  SUPABASE_QUICK_PATCH_SQL,
   SupabaseConfig
 } from '../lib/supabase';
 import { isCloudinaryActive, getCloudinaryConfig } from '../lib/cloudinaryService';
@@ -148,6 +149,7 @@ export default function DatabaseSwitcherModal({
   });
 
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
+  const [copiedQuickPatch, setCopiedQuickPatch] = useState<boolean>(false);
   const [copiedRef, setCopiedRef] = useState<boolean>(false);
   const [showSqlCode, setShowSqlCode] = useState<boolean>(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState<boolean>(false);
@@ -410,6 +412,12 @@ export default function DatabaseSwitcherModal({
     navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 3000);
+  };
+
+  const handleCopyQuickPatch = () => {
+    navigator.clipboard.writeText(SUPABASE_QUICK_PATCH_SQL);
+    setCopiedQuickPatch(true);
+    setTimeout(() => setCopiedQuickPatch(false), 3000);
   };
 
   const handleCopyProjectRef = () => {
@@ -1062,23 +1070,44 @@ export default function DatabaseSwitcherModal({
               </button>
 
               {showSqlCode && (
-                <button
-                  type="button"
-                  onClick={handleCopySql}
-                  className="px-2.5 py-1 bg-[#1f1f1f] hover:bg-[#292929] text-white text-[11px] font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-[#333333]"
-                >
-                  {copiedSql ? (
-                    <>
-                      <Check className="w-3 h-3 text-[#3ecf8e]" />
-                      <span className="text-[#3ecf8e]">Copiado!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3 text-[#888888]" />
-                      <span>Copiar SQL</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyQuickPatch}
+                    className="px-2.5 py-1 bg-[#1f1f1f] hover:bg-[#292929] text-sky-400 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-sky-900/40"
+                    title="Copia script SQL rápido de 5 linhas para adicionar novas colunas sem alterar tabelas existentes"
+                  >
+                    {copiedQuickPatch ? (
+                      <>
+                        <Check className="w-3 h-3 text-[#3ecf8e]" />
+                        <span className="text-[#3ecf8e]">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 text-sky-400" />
+                        <span>Atualização Rápida (SQL)</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCopySql}
+                    className="px-2.5 py-1 bg-[#1f1f1f] hover:bg-[#292929] text-white text-[11px] font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-[#333333]"
+                  >
+                    {copiedSql ? (
+                      <>
+                        <Check className="w-3 h-3 text-[#3ecf8e]" />
+                        <span className="text-[#3ecf8e]">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 text-[#888888]" />
+                        <span>Copiar SQL Completo</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               )}
             </div>
 

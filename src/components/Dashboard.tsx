@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   TrendingUp, 
   Package, 
@@ -13,7 +13,12 @@ import {
   Calendar, 
   ShoppingCart, 
   Layers,
-  Clock
+  Clock,
+  MinusCircle,
+  PlusCircle,
+  EyeOff,
+  Eye,
+  CheckCircle2
 } from 'lucide-react';
 import { TriageUnit, PlatformType, DestinationSectorType, isMigrationUnit, BaseProduct } from '../types';
 import { getUnitResolvedPhotos } from '../utils/productImages';
@@ -23,6 +28,7 @@ interface DashboardProps {
   products?: BaseProduct[];
   pendingItemsCount?: number;
   onViewUnit: (unit: TriageUnit) => void;
+  onUpdateUnit?: (unit: TriageUnit) => Promise<void>;
   onNavigateToStock: () => void;
   onNavigateToPending?: () => void;
 }
@@ -32,13 +38,33 @@ export default function Dashboard({
   products = [], 
   pendingItemsCount = 0,
   onViewUnit, 
+  onUpdateUnit,
   onNavigateToStock,
   onNavigateToPending
 }: DashboardProps) {
-  // Filter for today's units (based on local timezone, excluding migration imports)
+  const [showExcluded, setShowExcluded] = useState(false);
+  const [updatingUnitId, setUpdatingUnitId] = useState<string | null>(null);
+
+  // Filter for today's units (based on local timezone, excluding migration imports and excluded units)
   const todayUnits = units.filter(u => {
     try {
       if (isMigrationUnit(u)) return false;
+      if (u.excludeFromDailyCount) return false;
+      const uDate = new Date(u.createdAt);
+      const today = new Date();
+      return uDate.getDate() === today.getDate() &&
+             uDate.getMonth() === today.getMonth() &&
+             uDate.getFullYear() === today.getFullYear();
+    } catch {
+      return false;
+    }
+  });
+
+  // Filter for units from today that were excluded from daily count
+  const excludedTodayUnits = units.filter(u => {
+    try {
+      if (isMigrationUnit(u)) return false;
+      if (!u.excludeFromDailyCount) return false;
       const uDate = new Date(u.createdAt);
       const today = new Date();
       return uDate.getDate() === today.getDate() &&
@@ -215,17 +241,75 @@ export default function Dashboard({
         {/* Left Side: Today's Triage Activity Log (8 cols) */}
         <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between" id="today-activity-card">
           <div>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
               <div>
                 <h3 className="text-lg font-bold text-white">
                   Histórico de Triagem de Hoje
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">Últimas devoluções recebidas e processadas hoje no setor</p>
               </div>
-              <span className="px-2.5 py-1 bg-sky-500/10 text-sky-400 rounded-full text-xs font-bold border border-sky-500/20">
-                {totalReceivedToday} Devoluções
-              </span>
+              <div className="flex items-center gap-2">
+                {excludedTodayUnits.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowExcluded(prev => !prev)}
+                    className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-full text-xs font-bold border border-amber-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    title={showExcluded ? "Ocultar itens ignorados" : "Visualizar itens ignorados do contador diário"}
+                  >
+                    <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{excludedTodayUnits.length} {excludedTodayUnits.length === 1 ? 'ignorado' : 'ignorados'}</span>
+                  </button>
+                )}
+                <span className="px-2.5 py-1 bg-sky-500/10 text-sky-400 rounded-full text-xs font-bold border border-sky-500/20">
+                  {totalReceivedToday} Devoluções
+                </span>
+              </div>
             </div>
+
+            {/* Excluded Units Panel (if toggled on) */}
+            {showExcluded && excludedTodayUnits.length > 0 && (
+              <div className="mb-4 p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                    <EyeOff className="w-4 h-4 text-amber-400" />
+                    <span>Itens Excluídos do Contador Diário ({excludedTodayUnits.length})</span>
+                  </div>
+                  <span className="text-[11px] text-amber-400/80">Estes produtos estão no estoque, mas não somam nas métricas de hoje.</span>
+                </div>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {excludedTodayUnits.map((exUnit) => (
+                    <div key={exUnit.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-sky-400 font-bold">{exUnit.baseProductSku}</span>
+                        <span className="text-white truncate max-w-xs">{exUnit.baseProductName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {onUpdateUnit && (
+                          <button
+                            type="button"
+                            disabled={updatingUnitId === exUnit.id}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setUpdatingUnitId(exUnit.id);
+                              try {
+                                await onUpdateUnit({ ...exUnit, excludeFromDailyCount: false });
+                              } finally {
+                                setUpdatingUnitId(null);
+                              }
+                            }}
+                            className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-semibold text-[10px] flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Reativar no contador de devoluções de hoje"
+                          >
+                            <PlusCircle className="w-3 h-3" />
+                            <span>Reativar no Contador</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {todayUnits.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-4 border border-dashed border-slate-800 rounded-xl bg-slate-950" id="no-returns-today">
@@ -309,6 +393,26 @@ export default function Dashboard({
                         <span className="font-mono text-xs text-slate-500 pl-2">
                           {hourStr}
                         </span>
+                        {onUpdateUnit && (
+                          <button
+                            type="button"
+                            disabled={updatingUnitId === unit.id}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setUpdatingUnitId(unit.id);
+                              try {
+                                await onUpdateUnit({ ...unit, excludeFromDailyCount: true });
+                              } finally {
+                                setUpdatingUnitId(null);
+                              }
+                            }}
+                            title="Remover este produto do contador diário de hoje"
+                            className="p-1.5 text-slate-500 hover:text-amber-400 hover:bg-amber-500/15 rounded-lg transition-colors cursor-pointer"
+                            id={`btn-exclude-daily-${unit.id}`}
+                          >
+                            <MinusCircle className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

@@ -448,12 +448,7 @@ export default function App() {
   const handleTransferPendingToStock = async (
     item: PendingItem,
     destination: DestinationSectorType,
-    details?: {
-      deviceStatus?: string;
-      packageStatus?: string;
-      accessoriesInclusion?: string;
-      notes?: string;
-    }
+    details?: Parameters<typeof transferPendingItemToStock>[2]
   ) => {
     const createdUnit = await transferPendingItemToStock(item, destination, details);
     const now = new Date().toISOString();
@@ -839,6 +834,7 @@ export default function App() {
                 products={products}
                 pendingItemsCount={pendingItems.filter(p => p.status !== 'Resolvido').length}
                 onViewUnit={handleViewUnitDetails}
+                onUpdateUnit={handleSaveTriage}
                 onNavigateToStock={() => setActiveTab('stock')}
                 onNavigateToPending={() => setActiveTab('pending')}
               />

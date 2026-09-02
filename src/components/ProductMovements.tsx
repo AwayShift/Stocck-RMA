@@ -213,10 +213,11 @@ export default function ProductMovements({
     };
   }, [selectedMonth]);
 
-  // Extract all triage units for the selected month (ignoring spreadsheet migration items)
+  // Extract all triage units for the selected month (ignoring spreadsheet migration items and items excluded from daily inflow count)
   const monthUnits = useMemo(() => {
     return units.filter(u => {
       if (isMigrationUnit(u)) return false; // Ignore migration items for RMA inflow flux
+      if (u.excludeFromDailyCount) return false; // Do not count units excluded from daily count in inflow flux
       const parts = getDateParts(u.createdAt);
       if (!parts) return false;
       return parts.year === selectedYear && parts.monthIdx === selectedMonthIdx;
@@ -265,17 +266,33 @@ export default function ProductMovements({
     explicitDateMap.forEach((rec, dateStr) => {
       const uStats = unitsByDay.get(dateStr);
       if (uStats) {
-        // Merge so that if triaged units are higher or recorded in real-time, they are reflected
-        unifiedMap.set(dateStr, {
-          ...rec,
-          rma: Math.max(rec.rma || 0, uStats.rma),
-          estoque: Math.max(rec.estoque || 0, uStats.estoque),
-          openbox: Math.max(rec.openbox || 0, uStats.openbox),
-          es: Math.max(rec.es || 0, uStats.es),
-          totalDia: Math.max(rec.totalDia || 0, uStats.total)
-        });
+        // If it was auto-generated from triage, use uStats totals directly
+        if (rec.id?.startsWith('triage-auto-') || rec.source === 'auto') {
+          unifiedMap.set(dateStr, {
+            ...rec,
+            rma: uStats.rma,
+            estoque: uStats.estoque,
+            openbox: uStats.openbox,
+            es: uStats.es,
+            totalDia: uStats.total
+          });
+        } else {
+          unifiedMap.set(dateStr, {
+            ...rec,
+            rma: Math.max(rec.rma || 0, uStats.rma),
+            estoque: Math.max(rec.estoque || 0, uStats.estoque),
+            openbox: Math.max(rec.openbox || 0, uStats.openbox),
+            es: Math.max(rec.es || 0, uStats.es),
+            totalDia: Math.max(rec.totalDia || 0, uStats.total)
+          });
+        }
       } else {
-        unifiedMap.set(dateStr, rec);
+        // If it was auto generated from triage and now has 0 units, skip phantom count
+        if (rec.id?.startsWith('triage-auto-')) {
+          // skip
+        } else {
+          unifiedMap.set(dateStr, rec);
+        }
       }
     });
 
@@ -453,10 +470,11 @@ export default function ProductMovements({
     };
   }, [weeklyCounts, dailyCounts]);
 
-  // Filtered list of movements (for unit view - excluding migration items)
+  // Filtered list of movements (for unit view - excluding migration items and items excluded from daily count)
   const filteredMovements = useMemo(() => {
     return units.filter(u => {
       if (isMigrationUnit(u)) return false; // Ignore migration items
+      if (u.excludeFromDailyCount) return false; // Exclude items removed from daily count from inflow flux
       const parts = getDateParts(u.createdAt);
       if (!parts) return false;
       if (

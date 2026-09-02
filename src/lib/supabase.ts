@@ -342,6 +342,19 @@ export const testSupabaseConnection = async (config?: SupabaseConfig): Promise<{
 };
 
 // SQL Schema generator for users to copy-paste into Supabase SQL Editor
+export const SUPABASE_QUICK_PATCH_SQL = `-- ========================================================
+-- ATUALIZAÇÃO RÁPIDA DE COLUNAS NO SUPABASE (STOCCKRMA)
+-- Execute este script no "SQL Editor" do seu painel Supabase
+-- para habilitar colunas nativas sem recriar tabelas.
+-- ========================================================
+
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS exclude_from_daily_count BOOLEAN DEFAULT FALSE;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_to_stock BOOLEAN DEFAULT FALSE;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_unit_id TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS destination_sector_suggested TEXT;
+`;
+
 export const SUPABASE_SQL_SCHEMA = `-- ========================================================
 -- STOCCKRMA PRO FLOW - ESQUEMA DE BANCO DE DADOS POSTGRESQL
 -- Cole este script no "SQL Editor" do seu painel Supabase
@@ -433,6 +446,7 @@ ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Estoque';
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS checkout_date TIMESTAMPTZ;
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual';
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS is_migration BOOLEAN DEFAULT FALSE;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS exclude_from_daily_count BOOLEAN DEFAULT FALSE;
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_triage_units_status ON triage_units(status);
@@ -500,6 +514,7 @@ ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS platform TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS pending_reason TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS detailed_notes TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pendente';
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'Média';
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS created_by JSONB;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
@@ -752,6 +767,61 @@ export const mapSupabaseToProduct = (r: any): BaseProduct => ({
   updatedAt: r.updated_at || r.updatedAt
 });
 
+// Dynamic schema feature detection & persistent fallbacks to prevent HTTP 400 Bad Request errors
+const STORAGE_FEAT_EXCLUDE_DAILY_COL = 'stocckrma_feat_exclude_daily_col';
+let memoryHasExcludeCol: boolean | null = null;
+
+export const getHasExcludeDailyCol = (): boolean | null => {
+  if (memoryHasExcludeCol !== null) return memoryHasExcludeCol;
+  try {
+    const val = localStorage.getItem(STORAGE_FEAT_EXCLUDE_DAILY_COL);
+    if (val === 'true') memoryHasExcludeCol = true;
+    else if (val === 'false') memoryHasExcludeCol = false;
+  } catch {}
+  return memoryHasExcludeCol;
+};
+
+export const setHasExcludeDailyCol = (supported: boolean): void => {
+  memoryHasExcludeCol = supported;
+  try {
+    localStorage.setItem(STORAGE_FEAT_EXCLUDE_DAILY_COL, supported ? 'true' : 'false');
+  } catch {}
+};
+
+const STORAGE_FEAT_PENDING_EXTENDED_KEY = 'stocckrma_feat_pending_extended_col';
+let memoryHasPendingExtended: boolean | null = null;
+
+export const getHasPendingExtendedCols = (): boolean | null => {
+  if (memoryHasPendingExtended !== null) return memoryHasPendingExtended;
+  try {
+    const val = localStorage.getItem(STORAGE_FEAT_PENDING_EXTENDED_KEY);
+    if (val === 'true') memoryHasPendingExtended = true;
+    else if (val === 'false') memoryHasPendingExtended = false;
+  } catch {}
+  return memoryHasPendingExtended;
+};
+
+export const setHasPendingExtendedCols = (supported: boolean): void => {
+  memoryHasPendingExtended = supported;
+  try {
+    localStorage.setItem(STORAGE_FEAT_PENDING_EXTENDED_KEY, supported ? 'true' : 'false');
+  } catch {}
+};
+
+export const getTriageColumns = (): string => {
+  if (getHasExcludeDailyCol() === false) {
+    return 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration';
+  }
+  return 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration, exclude_from_daily_count';
+};
+
+export const getPendingColumns = (): string => {
+  if (getHasPendingExtendedCols() === false) {
+    return 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, status, priority, created_by, created_at, updated_at';
+  }
+  return 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
+};
+
 export const mapTriageUnitToSupabase = (u: TriageUnit) => {
   const cleanId = (u.id && u.id.trim()) ? u.id.trim() : generateUUID();
   const now = new Date().toISOString();
@@ -764,7 +834,19 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     validCheckoutDate = new Date(u.checkoutDate).toISOString();
   }
 
-  return {
+  // Dual persistence: embed metadata tag [EXCLUDE_DAILY_COUNT] in notes so that even if
+  // the remote database does not yet have the exclude_from_daily_count column,
+  // the exclusion state is 100% persisted and synced across all devices and sessions!
+  let rawNotes = u.notes || '';
+  if (u.excludeFromDailyCount) {
+    if (!rawNotes.includes('[EXCLUDE_DAILY_COUNT]')) {
+      rawNotes = rawNotes ? `${rawNotes}\n[EXCLUDE_DAILY_COUNT]` : '[EXCLUDE_DAILY_COUNT]';
+    }
+  } else {
+    rawNotes = rawNotes.replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '').trim();
+  }
+
+  const payload: any = {
     id: cleanId,
     tracking_code: u.trackingCode ?? '',
     serial_number: u.serialNumber ?? '',
@@ -779,7 +861,7 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     package_status: u.packageStatus || 'Danificada',
     accessories_inclusion: compressText(u.accessoriesInclusion || ''),
     destination_sector: u.destinationSector || 'RMA',
-    notes: compressText(u.notes || ''),
+    notes: compressText(rawNotes),
     photos_product: Array.isArray(u.photosProduct) ? u.photosProduct : [],
     photos_box: Array.isArray(u.photosBox) ? u.photosBox : [],
     photos_accessories: Array.isArray(u.photosAccessories) ? u.photosAccessories : [],
@@ -790,33 +872,51 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     is_migration: Boolean(u.isMigration),
     updated_at: now
   };
+
+  // Only include exclude_from_daily_count column if not known to be missing in PostgreSQL schema
+  if (getHasExcludeDailyCol() !== false) {
+    payload.exclude_from_daily_count = Boolean(u.excludeFromDailyCount);
+  }
+
+  return payload;
 };
 
-export const mapSupabaseToTriageUnit = (r: any): TriageUnit => ({
-  id: r.id,
-  trackingCode: r.tracking_code ?? r.trackingCode ?? '',
-  serialNumber: r.serial_number ?? r.serialNumber ?? '',
-  orderNumber: r.order_number ?? r.orderNumber ?? '',
-  baseProductId: r.base_product_id ?? r.baseProductId ?? '',
-  baseProductName: r.base_product_name ?? r.baseProductName ?? '',
-  baseProductSku: r.base_product_sku ?? r.baseProductSku ?? '',
-  baseProductVoltage: r.base_product_voltage ?? r.baseProductVoltage ?? 'Bivolt',
-  platform: r.platform || 'Mercado Livre',
-  customerReason: decompressText(r.customer_reason || r.customerReason || ''),
-  deviceStatus: r.device_status || r.deviceStatus || '',
-  packageStatus: r.package_status || r.packageStatus || '',
-  accessoriesInclusion: decompressText(r.accessories_inclusion || r.accessoriesInclusion || ''),
-  destinationSector: r.destination_sector || r.destinationSector || 'RMA',
-  notes: decompressText(r.notes || ''),
-  photosProduct: Array.isArray(r.photos_product || r.photosProduct) ? (r.photos_product || r.photosProduct) : [],
-  photosBox: Array.isArray(r.photos_box || r.photosBox) ? (r.photos_box || r.photosBox) : [],
-  photosAccessories: Array.isArray(r.photos_accessories || r.photosAccessories) ? (r.photos_accessories || r.photosAccessories) : [],
-  createdAt: r.created_at || r.createdAt || new Date().toISOString(),
-  status: r.status || 'Estoque',
-  checkoutDate: r.checkout_date || r.checkoutDate || null,
-  source: r.source || 'manual',
-  isMigration: Boolean(r.is_migration ?? r.isMigration)
-});
+export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
+  const decompressedNotes = decompressText(r.notes || '');
+  const hasExcludeMarker = decompressedNotes.includes('[EXCLUDE_DAILY_COUNT]');
+  const cleanNotes = decompressedNotes.replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '').trim();
+
+  return {
+    id: r.id,
+    trackingCode: r.tracking_code ?? r.trackingCode ?? '',
+    serialNumber: r.serial_number ?? r.serialNumber ?? '',
+    orderNumber: r.order_number ?? r.orderNumber ?? '',
+    baseProductId: r.base_product_id ?? r.baseProductId ?? '',
+    baseProductName: r.base_product_name ?? r.baseProductName ?? '',
+    baseProductSku: r.base_product_sku ?? r.baseProductSku ?? '',
+    baseProductVoltage: r.base_product_voltage ?? r.baseProductVoltage ?? 'Bivolt',
+    platform: r.platform || 'Mercado Livre',
+    customerReason: decompressText(r.customer_reason || r.customerReason || ''),
+    deviceStatus: r.device_status || r.deviceStatus || '',
+    packageStatus: r.package_status || r.packageStatus || '',
+    accessoriesInclusion: decompressText(r.accessories_inclusion || r.accessoriesInclusion || ''),
+    destinationSector: r.destination_sector || r.destinationSector || 'RMA',
+    notes: cleanNotes,
+    photosProduct: Array.isArray(r.photos_product || r.photosProduct) ? (r.photos_product || r.photosProduct) : [],
+    photosBox: Array.isArray(r.photos_box || r.photosBox) ? (r.photos_box || r.photosBox) : [],
+    photosAccessories: Array.isArray(r.photos_accessories || r.photosAccessories) ? (r.photos_accessories || r.photosAccessories) : [],
+    createdAt: r.created_at || r.createdAt || new Date().toISOString(),
+    status: r.status || 'Estoque',
+    checkoutDate: r.checkout_date || r.checkoutDate || null,
+    source: r.source || 'manual',
+    isMigration: Boolean(r.is_migration ?? r.isMigration),
+    excludeFromDailyCount: Boolean(
+      r.exclude_from_daily_count === true ||
+      r.excludeFromDailyCount === true ||
+      hasExcludeMarker
+    )
+  };
+};
 
 export const mapDailyInflowToSupabase = (d: DailyInflowRecord) => {
   const cleanId = (d.id && d.id.trim()) ? d.id.trim() : generateUUID();
@@ -853,7 +953,7 @@ export const mapSupabaseToDailyInflow = (r: any): DailyInflowRecord => ({
 export const mapPendingItemToSupabase = (p: PendingItem) => {
   const cleanId = (p.id && p.id.trim()) ? p.id.trim() : generateUUID();
   const now = new Date().toISOString();
-  return {
+  const payload: any = {
     id: cleanId,
     sku: p.sku || '',
     product_name: p.productName || '',
@@ -865,15 +965,22 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
     pending_reason: compressText(p.pendingReason || ''),
     detailed_notes: compressText(p.detailedNotes || ''),
     status: p.status || 'Pendente',
+    priority: p.priority || 'Média',
     photos: Array.isArray(p.photos) ? p.photos : [],
     created_at: p.createdAt || now,
     updated_at: p.updatedAt || now,
-    created_by: p.createdBy || null,
-    resolved_at: p.resolvedAt || null,
-    transferred_to_stock: Boolean(p.transferredToStock),
-    transferred_unit_id: p.transferredUnitId || null,
-    destination_sector_suggested: p.destinationSectorSuggested || 'RMA'
+    created_by: p.createdBy || null
   };
+
+  // Only include extended columns if supported by remote schema
+  if (getHasPendingExtendedCols() !== false) {
+    payload.resolved_at = p.resolvedAt || null;
+    payload.transferred_to_stock = Boolean(p.transferredToStock);
+    payload.transferred_unit_id = p.transferredUnitId || null;
+    payload.destination_sector_suggested = p.destinationSectorSuggested || 'RMA';
+  }
+
+  return payload;
 };
 
 export const mapSupabaseToPendingItem = (r: any): PendingItem => ({
@@ -888,6 +995,7 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => ({
   pendingReason: decompressText(r.pending_reason || r.pendingReason || ''),
   detailedNotes: decompressText(r.detailed_notes || r.detailedNotes || ''),
   status: r.status || 'Pendente',
+  priority: (r.priority as any) || 'Média',
   photos: Array.isArray(r.photos) ? r.photos : [],
   createdAt: r.created_at || r.createdAt,
   updatedAt: r.updated_at || r.updatedAt,

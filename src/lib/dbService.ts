@@ -10,7 +10,7 @@
  * 3. Supabase Storage for all photo media (strictly WebP format, 3MB ceiling).
  */
 
-import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTracking, DailyInflowRecord, UserAccount, PendingItem, PendingStatusType } from '../types';
+import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTracking, DailyInflowRecord, UserAccount, PendingItem, PendingStatusType, DeviceStatusType, PackageStatusType } from '../types';
 import { recordDbOperation } from './quotaTracker';
 import { 
   getActiveDbProvider, 
@@ -25,7 +25,11 @@ import {
   mapPendingItemToSupabase,
   mapSupabaseToPendingItem,
   mapUserToSupabase,
-  mapSupabaseToUser
+  mapSupabaseToUser,
+  getTriageColumns,
+  getPendingColumns,
+  setHasExcludeDailyCol,
+  setHasPendingExtendedCols
 } from './supabase';
 import {
   getCachedBaseProducts,
@@ -178,9 +182,9 @@ export const uploadImageUrlToStorage = async (url: string, folder: string = 'med
 
 // Column selections for egress optimization (PRD Rule 2)
 const PRODUCT_COLUMNS = 'id, name, sku, voltage, description, image_url, images, images_product, images_box, images_accessories, accessories, brand, category, created_at, updated_at';
-const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date';
+const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration, exclude_from_daily_count';
 const INFLOW_COLUMNS = 'id, date, rma, estoque, openbox, es, total_dia, notes, source, created_at, updated_at';
-const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
+const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
 const AUDIT_LOG_COLUMNS = 'id, user_id, user_email, action, details, timestamp';
 const CASE_COLUMNS = 'id, code, platform, created_at, reason, resolution, status, notes, value';
 const USER_COLUMNS = 'uid, email, name, role, created_at, last_login, updated_at';
@@ -467,12 +471,29 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
   if (item.transferredToStock !== undefined) payload.transferredToStock = item.transferredToStock;
   if (item.transferredUnitId !== undefined) payload.transferredUnitId = item.transferredUnitId;
   if (item.destinationSectorSuggested !== undefined) payload.destinationSectorSuggested = item.destinationSectorSuggested;
+  if (item.priority !== undefined) payload.priority = item.priority;
 
   updateLocalCacheItem('pending_items', payload);
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('pending_items').upsert(mapPendingItemToSupabase(payload));
+    const row = mapPendingItemToSupabase(payload);
+    const { error } = await supabase.from('pending_items').upsert(row);
+    if (error) {
+      console.warn('Supabase upsert pending_items error, trying fallback:', error);
+      setHasPendingExtendedCols(false);
+      const fallbackRow = { ...row };
+      delete (fallbackRow as any).priority;
+      delete (fallbackRow as any).resolved_at;
+      delete (fallbackRow as any).transferred_to_stock;
+      delete (fallbackRow as any).transferred_unit_id;
+      delete (fallbackRow as any).destination_sector_suggested;
+      const fbRes = await supabase.from('pending_items').upsert(fallbackRow);
+      if (fbRes.error) {
+        console.error('Supabase fallback pending_items save error:', fbRes.error);
+        throw new Error(`Falha ao salvar pendência no Supabase: ${fbRes.error.message}`);
+      }
+    }
     recordDbOperation('write', 1);
     createAuditLog(
       'SAVE_PENDING_ITEM',
@@ -523,35 +544,57 @@ export const transferPendingItemToStock = async (
   pendingItem: PendingItem,
   destinationSector: DestinationSectorType,
   triageDetails?: {
-    deviceStatus?: string;
-    packageStatus?: string;
+    baseProductId?: string;
+    baseProductName?: string;
+    baseProductSku?: string;
+    baseProductVoltage?: string;
+    platform?: PlatformType;
+    serialNumber?: string;
+    trackingCode?: string;
+    orderNumber?: string;
+    customerReason?: string;
+    deviceStatus?: DeviceStatusType | string;
+    packageStatus?: PackageStatusType | string;
     accessoriesInclusion?: string;
     notes?: string;
+    photosProduct?: string[];
+    photosBox?: string[];
+    photosAccessories?: string[];
+    excludeFromDailyCount?: boolean;
   }
 ): Promise<TriageUnit> => {
   const newTriageId = `tr-pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   
+  const finalSku = triageDetails?.baseProductSku || pendingItem.sku || 'SEM-SKU';
+  const finalName = triageDetails?.baseProductName || pendingItem.productName || 'Produto Transferido de Pendências';
+  const finalVoltage = triageDetails?.baseProductVoltage || pendingItem.voltage || 'Bivolt';
+  const finalTracking = triageDetails?.trackingCode || pendingItem.trackingCode || '';
+  const finalSerial = triageDetails?.serialNumber || pendingItem.serialNumber || '';
+  const finalOrder = triageDetails?.orderNumber || pendingItem.orderNumber || '';
+  const finalPlatform = (triageDetails?.platform || pendingItem.platform || 'Mercado Livre') as PlatformType;
+
   const newUnit: TriageUnit = {
     id: newTriageId,
-    trackingCode: pendingItem.trackingCode || '',
-    serialNumber: pendingItem.serialNumber || '',
-    orderNumber: pendingItem.orderNumber || '',
-    baseProductId: `bp-custom-${(pendingItem.sku || 'ITEM').toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-    baseProductName: pendingItem.productName || 'Produto Transferido de Pendências',
-    baseProductSku: pendingItem.sku || 'SEM-SKU',
-    baseProductVoltage: pendingItem.voltage || 'Bivolt',
-    platform: (pendingItem.platform as any) || 'Mercado Livre',
-    customerReason: `Liberado de Pendências: ${pendingItem.pendingReason}. ${pendingItem.detailedNotes || ''}`,
-    deviceStatus: triageDetails?.deviceStatus || 'Usado',
-    packageStatus: triageDetails?.packageStatus || 'Danificada',
+    trackingCode: finalTracking,
+    serialNumber: finalSerial,
+    orderNumber: finalOrder,
+    baseProductId: triageDetails?.baseProductId || `bp-custom-${finalSku.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+    baseProductName: finalName,
+    baseProductSku: finalSku,
+    baseProductVoltage: finalVoltage,
+    platform: finalPlatform,
+    customerReason: triageDetails?.customerReason || `Liberado de Pendências: ${pendingItem.pendingReason}. ${pendingItem.detailedNotes || ''}`.trim(),
+    deviceStatus: (triageDetails?.deviceStatus as any) || 'Usado',
+    packageStatus: (triageDetails?.packageStatus as any) || 'Danificada',
     accessoriesInclusion: triageDetails?.accessoriesInclusion || 'Item liberado após resolução de pendência.',
     destinationSector: destinationSector,
     notes: triageDetails?.notes || `<p><strong>Item Liberado da Aba de Pendências:</strong></p><p>Motivo original: ${pendingItem.pendingReason}</p><p>${pendingItem.detailedNotes || ''}</p>`,
-    photosProduct: pendingItem.photos || [],
-    photosBox: [],
-    photosAccessories: [],
+    photosProduct: triageDetails?.photosProduct && triageDetails.photosProduct.length > 0 ? triageDetails.photosProduct : (pendingItem.photos || []),
+    photosBox: triageDetails?.photosBox || [],
+    photosAccessories: triageDetails?.photosAccessories || [],
     createdAt: new Date().toISOString(),
-    status: 'Estoque'
+    status: 'Estoque',
+    excludeFromDailyCount: Boolean(triageDetails?.excludeFromDailyCount)
   };
 
   // 1. Save unit to physical stock
@@ -888,19 +931,32 @@ export const getInitialTriageUnits = async (pageSize: number = 2500): Promise<Pa
     try {
       let { data, error } = await supabase
         .from('triage_units')
-        .select(TRIAGE_COLUMNS)
+        .select(getTriageColumns())
         .order('created_at', { ascending: false })
         .limit(pageSize);
 
       if (error) {
-        console.warn('Column projection failed for triage_units, falling back to select(*):', error);
+        if (error.message?.includes('exclude_from_daily_count') || error.code === '42703') {
+          setHasExcludeDailyCol(false);
+        }
+        console.warn('Column projection failed for triage_units, falling back to safe columns / select(*):', error);
         const fallback = await supabase
           .from('triage_units')
-          .select('*')
+          .select(getTriageColumns())
           .order('created_at', { ascending: false })
           .limit(pageSize);
-        data = fallback.data;
-        error = fallback.error;
+        if (!fallback.error && fallback.data) {
+          data = fallback.data;
+          error = null;
+        } else {
+          const starFallback = await supabase
+            .from('triage_units')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+          data = starFallback.data;
+          error = starFallback.error;
+        }
       }
 
       if (!error && data) {
@@ -933,19 +989,33 @@ export const getPaginatedTriageUnits = async (page: number = 1, pageSize: number
       const to = from + pageSize - 1;
       let { data, count, error } = await supabase
         .from('triage_units')
-        .select(TRIAGE_COLUMNS, { count: 'exact' })
+        .select(getTriageColumns(), { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
 
       if (error) {
+        if (error.message?.includes('exclude_from_daily_count') || error.code === '42703') {
+          setHasExcludeDailyCol(false);
+        }
         const fallback = await supabase
           .from('triage_units')
-          .select('*', { count: 'exact' })
+          .select(getTriageColumns(), { count: 'exact' })
           .order('created_at', { ascending: false })
           .range(from, to);
-        data = fallback.data;
-        count = fallback.count;
-        error = fallback.error;
+        if (!fallback.error && fallback.data) {
+          data = fallback.data;
+          count = fallback.count;
+          error = null;
+        } else {
+          const starFallback = await supabase
+            .from('triage_units')
+            .select('*', { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(from, to);
+          data = starFallback.data;
+          count = starFallback.count;
+          error = starFallback.error;
+        }
       }
 
       if (!error && data) {
@@ -979,19 +1049,30 @@ export const getInitialPendingItems = async (pageSize: number = 1000): Promise<P
     try {
       let { data, error } = await supabase
         .from('pending_items')
-        .select(PENDING_COLUMNS)
+        .select(getPendingColumns())
         .order('created_at', { ascending: false })
         .limit(pageSize);
 
       if (error) {
+        setHasPendingExtendedCols(false);
         console.warn('Column projection failed for pending_items, falling back to select(*):', error);
         const fallback = await supabase
           .from('pending_items')
-          .select('*')
+          .select(getPendingColumns())
           .order('created_at', { ascending: false })
           .limit(pageSize);
-        data = fallback.data;
-        error = fallback.error;
+        if (!fallback.error && fallback.data) {
+          data = fallback.data;
+          error = null;
+        } else {
+          const starFallback = await supabase
+            .from('pending_items')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+          data = starFallback.data;
+          error = starFallback.error;
+        }
       }
 
       if (!error && data) {
@@ -1239,7 +1320,21 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
   const supabase = getSupabaseClient();
   if (supabase) {
     const row = mapTriageUnitToSupabase(savedUnit);
-    const { error } = await supabase.from('triage_units').upsert(row);
+    let { error } = await supabase.from('triage_units').upsert(row);
+
+    // If upsert failed due to missing column (e.g. exclude_from_daily_count), mark feature disabled and retry immediately
+    if (error && (
+      error.message?.includes('exclude_from_daily_count') || 
+      error.code === 'PGRST204' || 
+      error.code === '42703'
+    )) {
+      setHasExcludeDailyCol(false);
+      const rowWithoutExclude = { ...row };
+      delete rowWithoutExclude.exclude_from_daily_count;
+      const retryRes = await supabase.from('triage_units').upsert(rowWithoutExclude);
+      error = retryRes.error;
+    }
+
     if (error) {
       console.warn('Supabase upsert triage_units error, attempting minimal fallback payload:', error);
       const minimalRow = {
@@ -1258,6 +1353,9 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
         accessories_inclusion: row.accessories_inclusion,
         destination_sector: row.destination_sector,
         notes: row.notes,
+        photos_product: row.photos_product,
+        photos_box: row.photos_box,
+        photos_accessories: row.photos_accessories,
         status: row.status,
         created_at: row.created_at,
         updated_at: row.updated_at

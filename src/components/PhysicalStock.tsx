@@ -2164,6 +2164,27 @@ export default function PhysicalStock({
                   />
                 </div>
 
+                {/* Opção de Contador Diário */}
+                <div className="bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input 
+                      type="checkbox"
+                      checked={Boolean(editForm.excludeFromDailyCount)}
+                      onChange={(e) => setEditForm({ ...editForm, excludeFromDailyCount: e.target.checked })}
+                      className="mt-0.5 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-400 focus:ring-offset-slate-900 h-4 w-4"
+                      id="checkbox-edit-exclude-daily"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-slate-200 block">
+                        Não contabilizar no registro de entrada diária
+                      </span>
+                      <span className="text-[11px] text-slate-400 block leading-tight">
+                        Se marcado, este produto será ignorado do contador e gráficos de devoluções diárias.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
                 {/* Section 4: Photo Gallery Editor */}
                 <div 
                   className="space-y-4 bg-slate-950 p-5 border border-slate-800 rounded-xl"
@@ -2207,7 +2228,10 @@ export default function PhysicalStock({
                           : 'hover:bg-slate-800 hover:text-white text-slate-400'
                       }`}
                     >
-                      <span>Aparelho ({editForm.photosProduct?.length || 0})</span>
+                      <span>Aparelho</span>
+                      <span className="photo-tab-counter-badge px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        {editForm.photosProduct?.length || 0}
+                      </span>
                       {urlInputCategory === 'photosProduct' && (
                         <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V Alvo</span>
                       )}
@@ -2221,7 +2245,10 @@ export default function PhysicalStock({
                           : 'hover:bg-slate-800 hover:text-white text-slate-400'
                       }`}
                     >
-                      <span>Embalagem ({editForm.photosBox?.length || 0})</span>
+                      <span>Embalagem</span>
+                      <span className="photo-tab-counter-badge px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        {editForm.photosBox?.length || 0}
+                      </span>
                       {urlInputCategory === 'photosBox' && (
                         <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V Alvo</span>
                       )}
@@ -2235,7 +2262,10 @@ export default function PhysicalStock({
                           : 'hover:bg-slate-800 hover:text-white text-slate-400'
                       }`}
                     >
-                      <span>Acessórios ({editForm.photosAccessories?.length || 0})</span>
+                      <span>Acessórios</span>
+                      <span className="photo-tab-counter-badge px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        {editForm.photosAccessories?.length || 0}
+                      </span>
                       {urlInputCategory === 'photosAccessories' && (
                         <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V Alvo</span>
                       )}
@@ -2866,9 +2896,51 @@ export default function PhysicalStock({
                         </button>
                       </div>
                     )}
-                    <div className="flex items-center gap-1.5 text-slate-400">
-                      <Clock className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Data de Entrada: <strong className="text-slate-200">{new Date(currentUnit.createdAt).toLocaleDateString('pt-BR')} às {new Date(currentUnit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 text-slate-400">
+                        <Clock className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Data de Entrada: <strong className="text-slate-200">{new Date(currentUnit.createdAt).toLocaleDateString('pt-BR')} às {new Date(currentUnit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
+                      </div>
+                      <span className="text-slate-600 hidden sm:inline">•</span>
+                      {currentUnit.excludeFromDailyCount ? (
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                            Ignorado do Contador Diário
+                          </span>
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await onUpdateUnit({ ...currentUnit, excludeFromDailyCount: false });
+                              setActionSuccess('Unidade reativada no contador de entrada diária!');
+                              setTimeout(() => setActionSuccess(null), 2500);
+                            }}
+                            className="text-[10px] text-sky-400 hover:text-sky-300 underline font-semibold cursor-pointer"
+                            id="btn-reactivate-daily-count"
+                          >
+                            Reativar no Contador
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                            Ativo no Contador Diário
+                          </span>
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await onUpdateUnit({ ...currentUnit, excludeFromDailyCount: true });
+                              setActionSuccess('Unidade removida do contador diário!');
+                              setTimeout(() => setActionSuccess(null), 2500);
+                            }}
+                            className="text-[10px] text-rose-400 hover:text-rose-300 underline font-semibold cursor-pointer"
+                            id="btn-remove-from-daily-count"
+                          >
+                            Remover do Contador
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 

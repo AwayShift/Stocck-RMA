@@ -84,6 +84,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
   const [serials, setSerials] = useState<string[]>(['']);
   const [platform, setPlatform] = useState<PlatformType>('Mercado Livre');
   const [customerReason, setCustomerReason] = useState('');
+  const [excludeFromDailyCount, setExcludeFromDailyCount] = useState(false);
 
   // Helpers to manage multiple serial lines for the same SKU
   const handleAddSerialLine = () => {
@@ -481,7 +482,8 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
           photosBox: finalPhotosBox,
           photosAccessories: finalPhotosAccessories,
           createdAt: new Date(baseTimestamp + i * 150).toISOString(),
-          status: 'Estoque'
+          status: 'Estoque',
+          excludeFromDailyCount: excludeFromDailyCount
         };
 
         await onSaveTriage(newTriage);
@@ -497,6 +499,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       setSelectedProductId('');
       setProductSearchTerm('');
       setCustomerReason('');
+      setExcludeFromDailyCount(false);
       handleSelectDestinationSector('Openbox');
       setPhotosProduct([]);
       setPhotosBox([]);
@@ -1254,6 +1257,27 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* Opção de Contador Diário */}
+                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input 
+                      type="checkbox"
+                      checked={excludeFromDailyCount}
+                      onChange={(e) => setExcludeFromDailyCount(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-400 focus:ring-offset-slate-900 h-4 w-4"
+                      id="checkbox-exclude-daily-count"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-slate-200 block">
+                        Não contabilizar na entrada diária
+                      </span>
+                      <span className="text-[11px] text-slate-400 block leading-tight">
+                        O produto entrará normalmente no estoque, mas será ignorado do contador de devoluções de hoje.
+                      </span>
+                    </div>
+                  </label>
                 </div>
 
                 {/* Prominent Action Button */}
