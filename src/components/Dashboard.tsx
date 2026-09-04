@@ -268,7 +268,7 @@ export default function Dashboard({
 
             {/* Excluded Units Panel (if toggled on) */}
             {showExcluded && excludedTodayUnits.length > 0 && (
-              <div className="mb-4 p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-xl space-y-2">
+              <div className="mb-4 p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-xl space-y-2" id="dashboard-excluded-panel">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
                     <EyeOff className="w-4 h-4 text-amber-400" />

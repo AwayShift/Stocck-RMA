@@ -656,14 +656,18 @@ export default function BaseCatalog({
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2.5 py-1 rounded text-xs font-bold ${
-                            product.voltage === 'Bivolt' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
-                            product.voltage === '110V' ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' :
-                            product.voltage === '220V' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
-                            'bg-slate-500/10 text-slate-400 border border-slate-500/20'
-                          }`}>
-                            {product.voltage}
-                          </span>
+                          {product.voltage && product.voltage !== 'N/A' ? (
+                            <span className={`px-2.5 py-1 rounded text-xs font-bold ${
+                              product.voltage === 'Bivolt' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                              product.voltage === '110V' ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' :
+                              product.voltage === '220V' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
+                              'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                            }`}>
+                              {product.voltage}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-500 italic">-</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right whitespace-nowrap">
                           <div className="flex justify-end items-center gap-2">
@@ -723,13 +727,14 @@ export default function BaseCatalog({
                         {/* Image Thumbnail Header */}
                         <div 
                           onClick={() => setViewingProduct(product)}
-                          className="relative aspect-[4/3] w-full bg-slate-900/90 overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-800 group-hover:border-sky-500/30 transition-colors"
+                          className="relative aspect-[4/3] w-full bg-slate-900/90 overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-800 group-hover:border-sky-500/30 transition-colors p-2.5"
                         >
                           {displayPhoto ? (
                             <img 
                               src={displayPhoto} 
                               alt={product.name} 
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              className="w-full h-full object-contain transition-transform duration-300 ease-out group-hover:scale-110"
+                              referrerPolicy="no-referrer"
                             />
                           ) : (
                             <div className="flex flex-col items-center justify-center text-slate-600 gap-1.5 p-4 select-none">
@@ -738,25 +743,19 @@ export default function BaseCatalog({
                             </div>
                           )}
 
-                          {/* Voltage Badge (Top Left) */}
-                          <div className="absolute top-2.5 left-2.5">
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shadow-md backdrop-blur-md ${
-                              product.voltage === 'Bivolt' ? 'bg-sky-950/85 text-sky-300 border border-sky-500/30' :
-                              product.voltage === '110V' ? 'bg-teal-950/85 text-teal-300 border border-teal-500/30' :
-                              product.voltage === '220V' ? 'bg-orange-950/85 text-orange-300 border border-orange-500/30' :
-                              'bg-slate-900/85 text-slate-300 border border-slate-700/50'
-                            }`}>
-                              {product.voltage}
-                            </span>
-                          </div>
-
-                          {/* Quick Hover Overlay */}
-                          <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none backdrop-blur-[1px]">
-                            <span className="px-3 py-1.5 bg-sky-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transform scale-95 group-hover:scale-100 transition-transform">
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>Ver Detalhes</span>
-                            </span>
-                          </div>
+                          {/* Voltage Badge (Top Left) - Rendered only when product has voltage and it is not N/A */}
+                          {product.voltage && product.voltage !== 'N/A' && (
+                            <div className="absolute top-2.5 left-2.5 z-10">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shadow-md backdrop-blur-md ${
+                                product.voltage === 'Bivolt' ? 'bg-sky-950/85 text-sky-300 border border-sky-500/30' :
+                                product.voltage === '110V' ? 'bg-teal-950/85 text-teal-300 border border-teal-500/30' :
+                                product.voltage === '220V' ? 'bg-orange-950/85 text-orange-300 border border-orange-500/30' :
+                                'bg-slate-900/85 text-slate-300 border border-slate-700/50'
+                              }`}>
+                                {product.voltage}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Card Body */}
@@ -1616,14 +1615,18 @@ export default function BaseCatalog({
                     <div className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl">
                       <div className="text-slate-500 font-medium text-[11px] uppercase tracking-wider">Voltagem Padrão</div>
                       <div className="text-white font-bold mt-1.5">
-                        <span className={`px-2 py-0.5 rounded text-[11px] font-extrabold inline-block ${
-                          viewingProduct.voltage === 'Bivolt' ? 'bg-sky-500/10 text-sky-400' :
-                          viewingProduct.voltage === '110V' ? 'bg-teal-500/10 text-teal-400' :
-                          viewingProduct.voltage === '220V' ? 'bg-orange-500/10 text-orange-400' :
-                          'bg-slate-500/10 text-slate-400'
-                        }`}>
-                          {viewingProduct.voltage}
-                        </span>
+                        {viewingProduct.voltage && viewingProduct.voltage !== 'N/A' ? (
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-extrabold inline-block ${
+                            viewingProduct.voltage === 'Bivolt' ? 'bg-sky-500/10 text-sky-400' :
+                            viewingProduct.voltage === '110V' ? 'bg-teal-500/10 text-teal-400' :
+                            viewingProduct.voltage === '220V' ? 'bg-orange-500/10 text-orange-400' :
+                            'bg-slate-500/10 text-slate-400'
+                          }`}>
+                            {viewingProduct.voltage}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 text-xs font-normal italic">Não informada / Sem tensão</span>
+                        )}
                       </div>
                     </div>
                     <div className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl">

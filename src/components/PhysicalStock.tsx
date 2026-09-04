@@ -43,6 +43,7 @@ import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceSta
 import ExcelImportModal from './ExcelImportModal';
 import { ImageZoomModal } from './ImageZoomModal';
 import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct } from '../utils/productImages';
+import { exportStockInventoryToExcel } from '../utils/excelHelpers';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 
@@ -679,7 +680,7 @@ export default function PhysicalStock({
     });
   };
 
-  // Export Physical Stock units to Excel (.xlsx) matching the import format
+  // Export Physical Stock units to Excel (.xlsx) matching exactly the import format
   const handleExportExcel = (unitsToExport?: TriageUnit[]) => {
     const list = unitsToExport || filteredUnits;
     if (list.length === 0) {
@@ -689,61 +690,12 @@ export default function PhysicalStock({
     }
 
     try {
-      const exportData = list.map(unit => {
-        // Packaging text format matching import conventions
-        let packaging = 'Na caixa';
-        if (unit.packageStatus === 'Sem Embalagem') {
-          packaging = 'Sem caixa';
-        } else if (unit.packageStatus === 'Danificada') {
-          packaging = 'Danificada';
-        } else if (unit.packageStatus === 'Perfeita') {
-          packaging = 'Na caixa';
-        }
-
-        // Category/Sector text format matching import conventions
-        let category = unit.destinationSector;
-        if (unit.destinationSector === 'Principal') {
-          category = 'Estoque Principal' as any;
-        }
-
-        // Observations / notes
-        const obs = unit.notes || unit.customerReason || 'Revisado';
-
-        return {
-          'SKU': unit.baseProductSku || '',
-          'STI': unit.trackingCode || '',
-          'Nº do Pedido': unit.orderNumber || '',
-          'Descrição do produto': unit.baseProductName || '',
-          'Embalagem': packaging,
-          'Observações': obs,
-          'Categoria': category,
-          'Número de Série': unit.serialNumber || ''
-        };
-      });
-
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-      // Auto column widths
-      worksheet['!cols'] = [
-        { wch: 16 }, // SKU
-        { wch: 18 }, // STI
-        { wch: 22 }, // Nº do Pedido
-        { wch: 48 }, // Descrição do produto
-        { wch: 16 }, // Embalagem
-        { wch: 38 }, // Observações
-        { wch: 22 }, // Categoria
-        { wch: 24 }  // Número de Série
-      ];
-
-      const workbook = XLSX.utils.book_new();
-      const sheetName = (activeTab === 'Todos' ? 'Inventario_Estoque' : `Estoque_${activeTab}`).substring(0, 31);
-      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-
       const todayStr = new Date().toISOString().split('T')[0];
       const isSelectedBatch = Boolean(unitsToExport && unitsToExport.length < filteredUnits.length);
       const fileName = `Inventario_Estoque_${isSelectedBatch ? 'Selecionados_' : activeTab !== 'Todos' ? activeTab + '_' : ''}${todayStr}.xlsx`;
+      const sheetName = (activeTab === 'Todos' ? 'Inventario_Estoque' : `Estoque_${activeTab}`).substring(0, 31);
 
-      XLSX.writeFile(workbook, fileName);
+      exportStockInventoryToExcel(list, fileName, sheetName);
 
       setActionSuccess(`${list.length} produto(s) exportado(s) com sucesso para a planilha ${fileName}!`);
       setTimeout(() => setActionSuccess(null), 4000);
@@ -1414,11 +1366,15 @@ export default function PhysicalStock({
 
         {/* Duplicate Warning Banner */}
         {duplicateUnitsCount > 0 && (
-          <div className={`px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3 text-xs font-medium transition-colors ${
-            filterOnlyDuplicates 
-              ? 'bg-amber-950/60 border-amber-500/50 text-amber-200' 
-              : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
-          }`} id="stock-duplicate-banner">
+          <div 
+            className={`px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3 text-xs font-medium transition-colors ${
+              filterOnlyDuplicates 
+                ? 'bg-amber-950/60 border-amber-500/50 text-amber-200' 
+                : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+            }`} 
+            id="stock-duplicate-banner"
+            data-active={filterOnlyDuplicates ? 'true' : 'false'}
+          >
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
@@ -1427,6 +1383,8 @@ export default function PhysicalStock({
             </div>
             <button
               type="button"
+              id="btn-filter-duplicates-banner"
+              data-active={filterOnlyDuplicates ? 'true' : 'false'}
               onClick={() => setFilterOnlyDuplicates(prev => !prev)}
               className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
             >
@@ -1525,9 +1483,9 @@ export default function PhysicalStock({
                     </div>
 
                     {/* Image / Thumbnail if exists */}
-                    <div className="w-full h-32 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center relative">
+                    <div className="w-full h-32 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center relative p-1.5">
                       {mainPhoto ? (
-                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300" referrerPolicy="no-referrer" />
                       ) : (
                         <Package className="w-8 h-8 text-slate-600" />
                       )}
@@ -2709,7 +2667,7 @@ export default function PhysicalStock({
                 
                 {/* Duplicate warning banner inside detail modal */}
                 {(isDuplicateSti(currentUnit) || isDuplicateSerial(currentUnit)) && (
-                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3 text-xs text-amber-200">
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3 text-xs text-amber-200" id="unit-detail-duplicate-warning">
                     <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
                     <div>
                       <p className="font-bold text-amber-300">Atenção: Identificado Código Repetido no Estoque Físico</p>
@@ -2851,9 +2809,15 @@ export default function PhysicalStock({
                   {/* Voltage */}
                   <div className="space-y-1.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Voltagem</span>
-                    <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 bg-amber-500/10 px-2.5 py-1.5 rounded-lg border border-amber-500/25 block truncate">
-                      {currentUnit.baseProductVoltage || 'N/A'}
-                    </span>
+                    {currentUnit.baseProductVoltage && currentUnit.baseProductVoltage !== 'N/A' ? (
+                      <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 bg-amber-500/10 px-2.5 py-1.5 rounded-lg border border-amber-500/25 block truncate">
+                        {currentUnit.baseProductVoltage}
+                      </span>
+                    ) : (
+                      <span className="font-mono text-xs sm:text-sm font-bold px-2.5 py-1.5 rounded-lg border block truncate text-slate-500 bg-slate-900/50 border-slate-800/60 italic">
+                        Não informada
+                      </span>
+                    )}
                   </div>
 
                   {/* Sector */}

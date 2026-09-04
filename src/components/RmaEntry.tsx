@@ -25,6 +25,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType } from '../types';
+import { PlatformSelector } from './PlatformSelector';
 import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 import { RichTextEditor } from './RichTextEditor';
 import { getBaseProductImages } from '../utils/productImages';
@@ -691,9 +692,11 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                                     <span className="product-search-sku font-mono text-[11px] font-bold text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                                       {p.sku}
                                     </span>
-                                    <span className="product-search-voltage text-[10px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
-                                      {p.voltage}
-                                    </span>
+                                    {p.voltage && p.voltage !== 'N/A' && (
+                                      <span className="product-search-voltage text-[10px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
+                                        {p.voltage}
+                                      </span>
+                                    )}
                                     {entryCount > 0 && (
                                       <span className="text-[9px] font-mono bg-slate-800 text-slate-400 px-1 rounded">
                                         {entryCount} un
@@ -854,18 +857,11 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   {/* Platform */}
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Plataforma</label>
-                    <select 
+                    <PlatformSelector
                       value={platform}
-                      onChange={(e) => setPlatform(e.target.value as PlatformType)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                      onChange={(p) => setPlatform(p as PlatformType)}
                       id="select-platform-origin"
-                    >
-                      <option value="Mercado Livre">Mercado Livre</option>
-                      <option value="Shopee">Shopee</option>
-                      <option value="Amazon">Amazon</option>
-                      <option value="Amazon Ta Novo">Amazon Ta Novo</option>
-                      <option value="Kabum">Kabum</option>
-                    </select>
+                    />
                   </div>
 
                   {/* Código STI */}
@@ -921,29 +917,34 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   {/* Estado do Aparelho with Quick Pills */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado do Aparelho</label>
-                    <div className="grid grid-cols-4 gap-1">
-                      {(['Novo', 'Usado', 'Danificado', 'Descrever'] as const).map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => {
-                            setDeviceStatus(st as DeviceStatusType);
-                            if (st === 'Descrever') {
-                              setIsCustomDeviceStatus(true);
-                            } else {
-                              setIsCustomDeviceStatus(false);
-                              setCustomDeviceStatusText('');
-                            }
-                          }}
-                          className={`py-1.5 px-1 rounded text-[11px] font-semibold border transition-all text-center cursor-pointer truncate ${
-                            deviceStatus === st
-                              ? 'bg-sky-500/20 border-sky-500 text-sky-300 font-bold shadow-sm'
-                              : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                          }`}
-                        >
-                          {st}
-                        </button>
-                      ))}
+                    <div className="grid grid-cols-4 gap-1.5" id="pills-device-status">
+                      {(['Novo', 'Usado', 'Danificado', 'Descrever'] as const).map((st) => {
+                        const isSelected = deviceStatus === st;
+                        return (
+                          <button
+                            key={st}
+                            type="button"
+                            id={`btn-device-status-${st.toLowerCase()}`}
+                            onClick={() => {
+                              setDeviceStatus(st as DeviceStatusType);
+                              if (st === 'Descrever') {
+                                setIsCustomDeviceStatus(true);
+                              } else {
+                                setIsCustomDeviceStatus(false);
+                                setCustomDeviceStatusText('');
+                              }
+                            }}
+                            className={`py-2 px-1.5 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer truncate flex items-center justify-center gap-1 focus:outline-none select-none ${
+                              isSelected
+                                ? 'bg-sky-500 text-white border-sky-400 font-bold shadow-md shadow-sky-500/25 ring-2 ring-sky-400/40 status-pill-selected'
+                                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700 status-pill-unselected'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />}
+                            <span>{st}</span>
+                          </button>
+                        );
+                      })}
                     </div>
 
                     {(deviceStatus === 'Descrever' || isCustomDeviceStatus) && (
@@ -962,30 +963,35 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   {/* Estado da Embalagem with Quick Pills */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado da Caixa / Embalagem</label>
-                    <div className="grid grid-cols-4 gap-1">
-                      {(['Perfeita', 'Danificada', 'Sem Embalagem', 'Descrever'] as const).map((pkg) => (
-                        <button
-                          key={pkg}
-                          type="button"
-                          onClick={() => {
-                            setPackageStatus(pkg as PackageStatusType);
-                            if (pkg === 'Descrever') {
-                              setIsCustomPackageStatus(true);
-                            } else {
-                              setIsCustomPackageStatus(false);
-                              setCustomPackageStatusText('');
-                            }
-                          }}
-                          className={`py-1.5 px-1 rounded text-[11px] font-semibold border transition-all text-center cursor-pointer truncate ${
-                            packageStatus === pkg
-                              ? 'bg-sky-500/20 border-sky-500 text-sky-300 font-bold shadow-sm'
-                              : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                          }`}
-                          title={pkg}
-                        >
-                          {pkg === 'Sem Embalagem' ? 'Sem Caixa' : pkg}
-                        </button>
-                      ))}
+                    <div className="grid grid-cols-4 gap-1.5" id="pills-package-status">
+                      {(['Perfeita', 'Danificada', 'Sem Embalagem', 'Descrever'] as const).map((pkg) => {
+                        const isSelected = packageStatus === pkg;
+                        return (
+                          <button
+                            key={pkg}
+                            type="button"
+                            id={`btn-package-status-${pkg.toLowerCase().replace(/\s+/g, '-')}`}
+                            onClick={() => {
+                              setPackageStatus(pkg as PackageStatusType);
+                              if (pkg === 'Descrever') {
+                                setIsCustomPackageStatus(true);
+                              } else {
+                                setIsCustomPackageStatus(false);
+                                setCustomPackageStatusText('');
+                              }
+                            }}
+                            className={`py-2 px-1.5 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer truncate flex items-center justify-center gap-1 focus:outline-none select-none ${
+                              isSelected
+                                ? 'bg-sky-500 text-white border-sky-400 font-bold shadow-md shadow-sky-500/25 ring-2 ring-sky-400/40 status-pill-selected'
+                                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700 status-pill-unselected'
+                            }`}
+                            title={pkg}
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />}
+                            <span>{pkg === 'Sem Embalagem' ? 'Sem Caixa' : pkg}</span>
+                          </button>
+                        );
+                      })}
                     </div>
 
                     {(packageStatus === 'Descrever' || isCustomPackageStatus) && (

@@ -54,6 +54,7 @@ export interface ParsedRow {
   sku: string;
   sti: string;
   serialNumber: string;
+  orderNumber?: string;
   productName: string;
   brand?: string;
   category?: string;
@@ -273,12 +274,14 @@ export default function ExcelImportModal({
 
         const stiCode = row.sti && row.sti.trim() !== '' ? row.sti.trim() : '';
         const serialCode = row.serialNumber && row.serialNumber.trim() !== '' ? row.serialNumber.trim() : '';
+        const orderCode = row.orderNumber && row.orderNumber.trim() !== '' ? row.orderNumber.trim() : '';
 
         return {
           id: `row-${idx}-${Date.now()}`,
           sku: cleanSku || (matchedProduct ? matchedProduct.sku : 'SKU-INDEF'),
           sti: stiCode,
           serialNumber: serialCode,
+          orderNumber: orderCode,
           productName: row.productName || (matchedProduct ? matchedProduct.name : 'Produto sem Descrição'),
           brand: row.brand || (matchedProduct ? matchedProduct.brand : ''),
           category: row.categoryOrSector || (matchedProduct ? matchedProduct.category : ''),
@@ -402,6 +405,7 @@ export default function ExcelImportModal({
           id: `tr-excel-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
           trackingCode: row.sti.trim(),
           serialNumber: row.serialNumber && row.serialNumber.trim() !== '' ? row.serialNumber.trim() : '',
+          orderNumber: row.orderNumber && row.orderNumber.trim() !== '' ? row.orderNumber.trim() : '',
           baseProductId: row.matchedProduct?.id || `bp-import-${row.sku}`,
           baseProductName: row.productName,
           baseProductSku: row.sku,
@@ -498,34 +502,35 @@ export default function ExcelImportModal({
       }}
     >
       <div 
+        id="excel-import-modal"
         className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-6xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         
         {/* Header */}
-        <div className="p-5 sm:p-6 border-b border-slate-800 bg-slate-950 flex items-center justify-between shrink-0">
+        <div className="p-5 sm:p-6 border-b border-slate-800 bg-slate-950 flex items-center justify-between shrink-0 excel-modal-header">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20 shrink-0">
+            <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20 shrink-0 excel-header-icon">
               <FileSpreadsheet className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-lg font-bold text-white">
+                <h3 className="text-lg font-bold text-white excel-modal-title">
                   Importar Planilha no Estoque Físico
                 </h3>
-                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] uppercase font-mono rounded-md font-bold flex items-center gap-1">
-                  <ShieldAlert className="w-3 h-3 text-emerald-400" />
+                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] uppercase font-mono rounded-md font-bold flex items-center gap-1 excel-modal-badge">
+                  <ShieldAlert className="w-3 h-3 text-emerald-400 shrink-0" />
                   Antiduplicação STI / Serial
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5 excel-modal-subtitle">
                 Produtos com <strong>Código STI</strong> ou <strong>Serial (S/N)</strong> já cadastrados no estoque são detectados automaticamente e não são duplicados.
               </p>
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+            className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer excel-btn-close"
             id="btn-close-excel-modal"
           >
             <X className="w-5 h-5" />
@@ -533,19 +538,19 @@ export default function ExcelImportModal({
         </div>
 
         {/* Content Body */}
-        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1">
+        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1 excel-modal-body">
 
           {/* Success Banner */}
           {successReport && (
-            <div className="p-4 bg-emerald-950/80 border border-emerald-500/50 rounded-xl flex items-start gap-3 text-emerald-200 animate-in fade-in" id="banner-import-success">
-              <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="p-4 bg-emerald-950/80 border border-emerald-500/50 rounded-xl flex items-start gap-3 text-emerald-200 animate-in fade-in excel-banner-success" id="banner-import-success">
+              <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5 excel-success-icon" />
               <div>
-                <h4 className="font-bold text-sm">Importação Concluída com Sucesso!</h4>
-                <p className="text-xs text-emerald-300 mt-1">
+                <h4 className="font-bold text-sm excel-success-title">Importação Concluída com Sucesso!</h4>
+                <p className="text-xs text-emerald-300 mt-1 excel-success-desc">
                   <strong>{successReport.importedCount}</strong> novos produtos foram adicionados ao estoque físico com códigos STI e Seriais preservados.
                 </p>
                 {successReport.ignoredDuplicatesCount > 0 && (
-                  <p className="text-xs text-emerald-400/90 font-medium mt-0.5">
+                  <p className="text-xs text-emerald-400/90 font-medium mt-0.5 excel-success-warn">
                     🛡️ <strong>{successReport.ignoredDuplicatesCount}</strong> itens repetidos (com STI ou Serial já existentes) foram ignorados e não foram duplicados no banco.
                   </p>
                 )}
@@ -555,24 +560,24 @@ export default function ExcelImportModal({
 
           {/* Error Banner */}
           {errorMsg && (
-            <div className="p-4 bg-rose-950/80 border border-rose-500/50 rounded-xl flex items-start gap-3 text-rose-200 animate-in fade-in" id="banner-import-error">
-              <AlertCircle className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
+            <div className="p-4 bg-rose-950/80 border border-rose-500/50 rounded-xl flex items-start gap-3 text-rose-200 animate-in fade-in excel-banner-error" id="banner-import-error">
+              <AlertCircle className="w-6 h-6 text-rose-400 shrink-0 mt-0.5 excel-error-icon" />
               <div className="text-xs">
-                <h4 className="font-bold">Atenção ao importar arquivo:</h4>
-                <p className="mt-0.5">{errorMsg}</p>
+                <h4 className="font-bold excel-error-title">Atenção ao importar arquivo:</h4>
+                <p className="mt-0.5 excel-error-desc">{errorMsg}</p>
               </div>
             </div>
           )}
 
           {/* Sheet Selector (Abas do Excel) if workbook has multiple sheets */}
           {availableSheets.length > 1 && (
-            <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2.5 animate-in fade-in">
+            <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2.5 animate-in fade-in excel-sheet-selector">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 excel-sheet-title">
                   <Layers2 className="w-4 h-4 text-sky-400" />
                   <span>Abas Detectadas na Planilha ({availableSheets.length}):</span>
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-400 excel-sheet-subtitle">
                   Clique para alternar entre as abas do arquivo Excel
                 </span>
               </div>
@@ -584,9 +589,9 @@ export default function ExcelImportModal({
                       key={sheet}
                       type="button"
                       onClick={() => handleSelectSheet(sheet)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer excel-sheet-tab ${
                         isSelected
-                          ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20 ring-1 ring-sky-400'
+                          ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20 ring-1 ring-sky-400 active'
                           : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
                       }`}
                     >
@@ -607,21 +612,21 @@ export default function ExcelImportModal({
             <div className="space-y-5">
               
               {/* Default Configurations */}
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 excel-setup-card">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-300 mb-1 excel-setup-label">
                     Setor Padrão de Destino
                   </label>
                   <select
                     value={selectedDefaultSector}
                     onChange={(e) => setSelectedDefaultSector(e.target.value as DestinationSectorType)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer excel-setup-select"
                   >
                     <option value="Openbox">Openbox (Revisados / Devoluções)</option>
                     <option value="Principal">Estoque Principal (Novos / Prontos)</option>
                     <option value="RMA">RMA (Assistência Técnica / Defeitos)</option>
                   </select>
-                  <p className="text-[10px] text-slate-500 mt-1">
+                  <p className="text-[10px] text-slate-500 mt-1 excel-setup-hint">
                     Itens contendo indicações de RMA ou defeito na planilha serão direcionados automaticamente.
                   </p>
                 </div>
@@ -633,7 +638,7 @@ export default function ExcelImportModal({
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-3 ${
+                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-3 excel-dropzone ${
                   isDragOver 
                     ? 'border-sky-400 bg-sky-500/10 scale-[1.01]' 
                     : 'border-slate-800 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-950'
@@ -648,43 +653,43 @@ export default function ExcelImportModal({
                   className="hidden" 
                   id="input-file-excel"
                 />
-                <div className="p-4 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
+                <div className="p-4 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20 excel-dropzone-icon">
                   <Upload className="w-8 h-8" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white">
+                  <p className="text-sm font-bold text-white excel-dropzone-title">
                     Clique aqui ou arraste seu arquivo Excel (.xlsx, .xls, .csv)
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Reconhecimento das colunas na ordem exata: <strong className="text-sky-300">A: STI</strong>, <strong className="text-cyan-300">B: SKU</strong>, <strong className="text-amber-300">C: DESCRIÇÃO DO PRODUTO</strong>, <strong className="text-emerald-300">D: SERIAL</strong>, <strong className="text-orange-300">E: SITUAÇÃO</strong> e <strong className="text-rose-300">F: OBSERVAÇÃO</strong>.
+                  <p className="text-xs text-slate-400 mt-1 excel-dropzone-sub">
+                    Reconhecimento das colunas na ordem exata: <strong className="text-sky-300 excel-col-sti">A: STI</strong>, <strong className="text-cyan-300 excel-col-sku">B: SKU</strong>, <strong className="text-amber-300 excel-col-desc">C: DESCRIÇÃO DO PRODUTO</strong>, <strong className="text-emerald-300 excel-col-serial">D: SERIAL</strong>, <strong className="text-orange-300 excel-col-pkg">E: SITUAÇÃO</strong> e <strong className="text-rose-300 excel-col-obs">F: OBSERVAÇÃO</strong>.
                   </p>
                 </div>
               </div>
 
               {/* Antiduplication Rules Summary Box */}
-              <div className="p-4 bg-sky-500/5 border border-sky-500/20 rounded-xl flex items-start gap-3">
-                <Info className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
+              <div className="p-4 bg-sky-500/5 border border-sky-500/20 rounded-xl flex items-start gap-3 excel-rules-card">
+                <Info className="w-5 h-5 text-sky-400 shrink-0 mt-0.5 excel-rules-icon" />
                 <div className="text-xs text-slate-300 space-y-1">
-                  <span className="font-bold text-white block">Regra de Proteção contra Duplicidade:</span>
-                  <p className="text-slate-400 leading-relaxed">
+                  <span className="font-bold text-white block excel-rules-title">Regra de Proteção contra Duplicidade:</span>
+                  <p className="text-slate-400 leading-relaxed excel-rules-text">
                     O sistema verifica instantaneamente as <strong>{existingUnits.length}</strong> unidades do estoque físico atual. Qualquer produto da planilha com <strong>Código STI idêntico</strong> ou <strong>Número de Série idêntico</strong> será sinalizado em destaque e desmarcado por padrão, impedindo que o mesmo item seja cadastrado repetidamente.
                   </p>
                 </div>
               </div>
 
               {/* Download Sample Template Banner */}
-              <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-950 rounded-xl border border-slate-800 gap-3">
+              <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-950 rounded-xl border border-slate-800 gap-3 excel-sample-card">
                 <div className="flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-sky-400 shrink-0" />
+                  <FileText className="w-5 h-5 text-sky-400 shrink-0 excel-sample-icon" />
                   <div className="text-xs">
-                    <span className="font-bold text-white block">Precisa de um modelo estruturado?</span>
-                    <span className="text-slate-400">Baixe a planilha de exemplo idêntica ao padrão com STI, SKU, Descrição, Serial, Situação e Observação.</span>
+                    <span className="font-bold text-white block excel-sample-title">Precisa de um modelo estruturado?</span>
+                    <span className="text-slate-400 excel-sample-desc">Baixe a planilha de exemplo idêntica ao padrão com STI, SKU, Descrição, Serial, Situação e Observação.</span>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={handleDownloadSample}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shrink-0 cursor-pointer excel-btn-download-sample"
                   id="btn-download-sample-excel"
                 >
                   <Download className="w-4 h-4 text-emerald-400" />
@@ -700,54 +705,54 @@ export default function ExcelImportModal({
               {/* Top Summary / Status Metric Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Total na Planilha */}
-                <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
+                <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between excel-card-total">
                   <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Total na Planilha</span>
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block excel-card-label">Total na Planilha</span>
                     <div className="flex items-baseline gap-2 mt-0.5">
-                      <span className="text-xl font-black text-white">{metrics.total}</span>
-                      <span className="text-xs text-slate-500">itens lidos</span>
+                      <span className="text-xl font-black text-white excel-card-val">{metrics.total}</span>
+                      <span className="text-xs text-slate-500 excel-card-sub">itens lidos</span>
                     </div>
                   </div>
-                  <div className="p-2.5 bg-slate-900 text-slate-300 rounded-lg border border-slate-800">
+                  <div className="p-2.5 bg-slate-900 text-slate-300 rounded-lg border border-slate-800 excel-card-icon">
                     <FileSpreadsheet className="w-5 h-5" />
                   </div>
                 </div>
 
                 {/* Novos / Prontos para Importar */}
-                <div className="p-3.5 bg-emerald-950/20 rounded-xl border border-emerald-500/30 flex items-center justify-between">
+                <div className="p-3.5 bg-emerald-950/20 rounded-xl border border-emerald-500/30 flex items-center justify-between excel-card-new">
                   <div>
-                    <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider block">Novos (Aptos)</span>
+                    <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider block excel-card-label">Novos (Aptos)</span>
                     <div className="flex items-baseline gap-2 mt-0.5">
-                      <span className="text-xl font-black text-emerald-400">{metrics.newCount}</span>
-                      <span className="text-xs text-emerald-500/80">({metrics.selectedNewCount} selecionados)</span>
+                      <span className="text-xl font-black text-emerald-400 excel-card-val">{metrics.newCount}</span>
+                      <span className="text-xs text-emerald-500/80 excel-card-sub">({metrics.selectedNewCount} selecionados)</span>
                     </div>
                   </div>
-                  <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+                  <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20 excel-card-icon">
                     <CheckCheck className="w-5 h-5" />
                   </div>
                 </div>
 
                 {/* Repetidos / Ignorados */}
-                <div className={`p-3.5 rounded-xl border flex items-center justify-between transition-colors ${
+                <div className={`p-3.5 rounded-xl border flex items-center justify-between transition-colors excel-card-dup ${
                   metrics.duplicatesCount > 0 
-                    ? 'bg-rose-950/25 border-rose-500/40 text-rose-300' 
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                    ? 'bg-rose-950/25 border-rose-500/40 text-rose-300 has-duplicates' 
+                    : 'bg-slate-950 border-slate-800 text-slate-400 no-duplicates'
                 }`}>
                   <div>
-                    <span className="text-[11px] font-semibold uppercase tracking-wider block flex items-center gap-1">
-                      {metrics.duplicatesCount > 0 && <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />}
+                    <span className="text-[11px] font-semibold uppercase tracking-wider block flex items-center gap-1 excel-card-label">
+                      {metrics.duplicatesCount > 0 && <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
                       Repetidos no Estoque
                     </span>
                     <div className="flex items-baseline gap-2 mt-0.5">
-                      <span className={`text-xl font-black ${metrics.duplicatesCount > 0 ? 'text-rose-400' : 'text-slate-500'}`}>
+                      <span className={`text-xl font-black excel-card-val ${metrics.duplicatesCount > 0 ? 'text-rose-400' : 'text-slate-500'}`}>
                         {metrics.duplicatesCount}
                       </span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-slate-500 excel-card-sub">
                         {metrics.duplicatesCount > 0 ? 'ignorados por padrão' : 'nenhum repetido'}
                       </span>
                     </div>
                   </div>
-                  <div className={`p-2.5 rounded-lg border ${
+                  <div className={`p-2.5 rounded-lg border excel-card-icon ${
                     metrics.duplicatesCount > 0 
                       ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
                       : 'bg-slate-900 text-slate-600 border-slate-800'
@@ -759,13 +764,13 @@ export default function ExcelImportModal({
 
               {/* Repetition Alert Banner (if duplicates exist) */}
               {metrics.duplicatesCount > 0 && (
-                <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3 text-amber-200 text-xs animate-in fade-in">
-                  <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3 text-amber-200 text-xs animate-in fade-in excel-alert-banner">
+                  <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 excel-alert-icon" />
                   <div className="space-y-0.5">
-                    <span className="font-bold text-amber-300 block">
+                    <span className="font-bold text-amber-300 block excel-alert-title">
                       ⚠️ Atenção: {metrics.duplicatesCount} {metrics.duplicatesCount === 1 ? 'item repetido detectado' : 'itens repetidos detectados'}
                     </span>
-                    <p className="text-amber-300/90 leading-relaxed">
+                    <p className="text-amber-300/90 leading-relaxed excel-alert-text">
                       Estes produtos já possuem o <strong>Código STI</strong> ou <strong>Número de Série</strong> cadastrados no estoque físico atual (ou duplicados na planilha). Eles foram <strong>desmarcados automaticamente</strong> para evitar cadastros duplicados.
                     </p>
                   </div>
@@ -773,16 +778,16 @@ export default function ExcelImportModal({
               )}
 
               {/* Action Bar & Filter Tabs */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-950 p-3.5 rounded-xl border border-slate-800 excel-action-bar">
                 
                 {/* Filter Tabs */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setFilterTab('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer excel-tab-all ${
                       filterTab === 'all'
-                        ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
+                        ? 'bg-slate-800 text-white border border-slate-700 shadow-sm active'
                         : 'bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -791,9 +796,9 @@ export default function ExcelImportModal({
                   <button
                     type="button"
                     onClick={() => setFilterTab('new')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 excel-tab-new ${
                       filterTab === 'new'
-                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20 active'
                         : 'bg-slate-900/60 hover:bg-emerald-950/30 text-emerald-400 hover:text-emerald-300'
                     }`}
                   >
@@ -803,9 +808,9 @@ export default function ExcelImportModal({
                   <button
                     type="button"
                     onClick={() => setFilterTab('duplicates')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 excel-tab-dup ${
                       filterTab === 'duplicates'
-                        ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/20'
+                        ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/20 active'
                         : 'bg-slate-900/60 hover:bg-rose-950/30 text-rose-400 hover:text-rose-300'
                     }`}
                   >
@@ -817,18 +822,18 @@ export default function ExcelImportModal({
                 {/* Search in preview */}
                 <div className="flex items-center gap-2 w-full md:w-auto">
                   <div className="relative flex-1 md:w-64">
-                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 excel-search-icon" />
                     <input
                       type="text"
                       value={searchFilter}
                       onChange={(e) => setSearchFilter(e.target.value)}
                       placeholder="Filtrar por SKU, STI, Serial..."
-                      className="w-full pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
+                      className="w-full pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-500 excel-search-input"
                     />
                     {searchFilter && (
                       <button 
                         onClick={() => setSearchFilter('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 excel-search-clear"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -839,7 +844,7 @@ export default function ExcelImportModal({
                   <button
                     type="button"
                     onClick={handleSelectOnlyNew}
-                    className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-sky-400 hover:text-sky-300 border border-slate-800 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
+                    className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-sky-400 hover:text-sky-300 border border-slate-800 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 excel-btn-helper-new"
                     title="Selecionar apenas os itens novos e desmarcar todos os repetidos"
                   >
                     Marcar Novos
@@ -847,14 +852,14 @@ export default function ExcelImportModal({
                   <button
                     type="button"
                     onClick={handleDeselectAll}
-                    className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
+                    className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 excel-btn-helper-clear"
                   >
                     Limpar
                   </button>
                   <button
                     type="button"
                     onClick={() => { setParsedRows([]); setFileName(null); setCurrentFile(null); setAvailableSheets([]); }}
-                    className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-300 border border-slate-800 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
+                    className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-300 border border-slate-800 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 excel-btn-helper-swap"
                     title="Carregar outro arquivo"
                   >
                     Trocar
@@ -864,11 +869,11 @@ export default function ExcelImportModal({
               </div>
 
               {/* Table Preview List */}
-              <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950 max-h-[380px] overflow-y-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-900 sticky top-0 z-10 text-slate-400 border-b border-slate-800 font-mono uppercase text-[10px]">
+              <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950 max-h-[380px] overflow-y-auto excel-table-container">
+                <table className="w-full text-left text-xs border-collapse excel-table">
+                  <thead className="bg-slate-900 sticky top-0 z-10 text-slate-400 border-b border-slate-800 font-mono uppercase text-[10px] excel-thead">
                     <tr>
-                      <th className="p-3 w-10 text-center">
+                      <th className="p-3 w-10 text-center excel-th-check">
                         <input 
                           type="checkbox"
                           checked={metrics.newCount > 0 && metrics.selectedNewCount === metrics.newCount}
@@ -879,24 +884,24 @@ export default function ExcelImportModal({
                               handleDeselectAll();
                             }
                           }}
-                          className="w-4 h-4 rounded text-sky-500 bg-slate-950 border-slate-700 cursor-pointer"
+                          className="w-4 h-4 rounded text-sky-500 bg-slate-950 border-slate-700 cursor-pointer excel-checkbox"
                           title="Selecionar todos os novos itens válidos"
                         />
                       </th>
-                      <th className="p-3 min-w-[110px]">Status / Validação</th>
-                      <th className="p-3 min-w-[130px] text-sky-400">A: Código STI</th>
-                      <th className="p-3 min-w-[100px] text-cyan-400">B: SKU</th>
-                      <th className="p-3 min-w-[180px] text-amber-400">C: Descrição do Produto</th>
-                      <th className="p-3 min-w-[140px] text-emerald-400">D: Serial (S/N)</th>
-                      <th className="p-3 min-w-[110px] text-orange-400">E: Situação</th>
-                      <th className="p-3 min-w-[140px] text-rose-400">F: Observações</th>
-                      <th className="p-3">Destino</th>
+                      <th className="p-3 min-w-[110px] excel-th-status">Status / Validação</th>
+                      <th className="p-3 min-w-[130px] text-sky-400 excel-th-sti">A: Código STI</th>
+                      <th className="p-3 min-w-[100px] text-cyan-400 excel-th-sku">B: SKU</th>
+                      <th className="p-3 min-w-[180px] text-amber-400 excel-th-desc">C: Descrição do Produto</th>
+                      <th className="p-3 min-w-[140px] text-emerald-400 excel-th-serial">D: Serial (S/N)</th>
+                      <th className="p-3 min-w-[110px] text-orange-400 excel-th-pkg">E: Situação</th>
+                      <th className="p-3 min-w-[140px] text-rose-400 excel-th-obs">F: Observações</th>
+                      <th className="p-3 excel-th-dest">Destino</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-850">
+                  <tbody className="divide-y divide-slate-850 excel-tbody">
                     {displayedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="p-8 text-center text-slate-500 text-xs">
+                        <td colSpan={9} className="p-8 text-center text-slate-500 text-xs excel-empty-msg">
                           {searchFilter 
                             ? 'Nenhum item encontrado com o termo filtrado.' 
                             : filterTab === 'duplicates'
@@ -915,33 +920,33 @@ export default function ExcelImportModal({
                             key={row.id}
                             className={`transition-colors ${
                               isDup 
-                                ? 'bg-rose-950/20 hover:bg-rose-950/30' 
+                                ? 'bg-rose-950/20 hover:bg-rose-950/30 excel-row-dup' 
                                 : row.selected 
-                                ? 'bg-slate-900/30 hover:bg-slate-900/50' 
-                                : 'opacity-60 bg-slate-950 hover:opacity-100 hover:bg-slate-900/20'
+                                ? 'bg-slate-900/30 hover:bg-slate-900/50 excel-row-selected' 
+                                : 'opacity-60 bg-slate-950 hover:opacity-100 hover:bg-slate-900/20 excel-row-unselected'
                             }`}
                           >
                             {/* Checkbox */}
-                            <td className="p-3 text-center">
+                            <td className="p-3 text-center excel-td-check">
                               <input 
                                 type="checkbox"
                                 checked={row.selected}
                                 onChange={() => handleToggleRow(row.id)}
-                                className={`w-4 h-4 rounded cursor-pointer ${
+                                className={`w-4 h-4 rounded cursor-pointer excel-checkbox ${
                                   isDup 
-                                    ? 'text-rose-500 bg-rose-950 border-rose-700' 
-                                    : 'text-sky-500 bg-slate-950 border-slate-700'
+                                    ? 'text-rose-500 bg-rose-950 border-rose-700 excel-check-dup' 
+                                    : 'text-sky-500 bg-slate-950 border-slate-700 excel-check-valid'
                                 }`}
                                 title={isDup ? 'Item repetido (não será importado a menos que o STI/Serial seja corrigido)' : 'Selecionar para importação'}
                               />
                             </td>
 
                             {/* Status / Duplicate Badge */}
-                            <td className="p-3 whitespace-nowrap">
+                            <td className="p-3 whitespace-nowrap excel-td-status">
                               {isDup ? (
                                 <div className="space-y-1">
                                   <span 
-                                    className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 inline-flex items-center gap-1 font-mono"
+                                    className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 inline-flex items-center gap-1 font-mono excel-badge-dup"
                                     title={row.duplicateInfo.detail}
                                   >
                                     <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
@@ -952,14 +957,14 @@ export default function ExcelImportModal({
                                       : 'Serial Repetido'}
                                   </span>
                                   <span 
-                                    className="block text-[9px] text-rose-400/90 font-medium truncate max-w-[140px]" 
+                                    className="block text-[9px] text-rose-400/90 font-medium truncate max-w-[140px] excel-badge-dup-detail" 
                                     title={row.duplicateInfo.detail}
                                   >
                                     {row.duplicateInfo.detail}
                                   </span>
                                 </div>
                               ) : (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 inline-flex items-center gap-1 font-mono">
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 inline-flex items-center gap-1 font-mono excel-badge-new">
                                   <CheckCheck className="w-3 h-3 text-emerald-400 shrink-0" />
                                   Novo Item
                                 </span>
@@ -967,22 +972,22 @@ export default function ExcelImportModal({
                             </td>
 
                             {/* Col A: STI */}
-                            <td className="p-3 font-mono text-xs">
+                            <td className="p-3 font-mono text-xs excel-td-sti">
                               <div className="space-y-1">
                                 <input 
                                   type="text"
                                   value={row.sti || ''}
                                   onChange={(e) => handleUpdateRowField(row.id, 'sti', e.target.value)}
                                   placeholder="STI..."
-                                  className={`w-full px-2 py-1 rounded text-xs font-mono font-bold border transition-colors ${
+                                  className={`w-full px-2 py-1 rounded text-xs font-mono font-bold border transition-colors excel-input-sti ${
                                     isStiDup
-                                      ? 'bg-rose-950/70 text-rose-200 border-rose-500 ring-1 ring-rose-500/50'
+                                      ? 'bg-rose-950/70 text-rose-200 border-rose-500 ring-1 ring-rose-500/50 excel-input-sti-dup'
                                       : 'bg-sky-950/50 text-sky-300 border-sky-500/40 focus:border-sky-400 focus:bg-sky-950/80'
                                   }`}
                                   title={isStiDup ? `STI repetido: ${row.duplicateInfo.detail}` : 'Código STI / Rastreio da Devolução (Coluna A)'}
                                 />
                                 {isStiDup && (
-                                  <span className="text-[9px] text-rose-400 font-bold block">
+                                  <span className="text-[9px] text-rose-400 font-bold block excel-warn-sti">
                                     ⚠️ STI já em estoque
                                   </span>
                                 )}
@@ -990,15 +995,20 @@ export default function ExcelImportModal({
                             </td>
 
                             {/* Col B: SKU */}
-                            <td className="p-3 font-mono font-bold text-cyan-400">
+                            <td className="p-3 font-mono font-bold text-cyan-400 excel-td-sku">
                               <div>
-                                <span>{row.sku}</span>
+                                <span className="excel-text-sku">{row.sku}</span>
+                                {row.orderNumber && (
+                                  <span className="block text-[10px] text-indigo-300 font-normal font-sans truncate max-w-[110px] excel-text-order" title={`Nº do Pedido: ${row.orderNumber}`}>
+                                    Ped: {row.orderNumber}
+                                  </span>
+                                )}
                                 {row.matchedProduct ? (
-                                  <span className="block text-[9px] text-emerald-400 font-semibold font-sans">
+                                  <span className="block text-[9px] text-emerald-400 font-semibold font-sans excel-badge-catalog">
                                     ✓ No Catálogo
                                   </span>
                                 ) : (
-                                  <span className="block text-[9px] text-amber-400 font-semibold font-sans">
+                                  <span className="block text-[9px] text-amber-400 font-semibold font-sans excel-badge-newsku">
                                     Novo SKU
                                   </span>
                                 )}
@@ -1006,34 +1016,34 @@ export default function ExcelImportModal({
                             </td>
 
                             {/* Col C: Descrição do Produto */}
-                            <td className="p-3 text-white font-medium max-w-[200px] truncate" title={row.productName}>
-                              {row.productName}
+                            <td className="p-3 text-white font-medium max-w-[200px] truncate excel-td-desc" title={row.productName}>
+                              <span className="excel-text-product-name">{row.productName}</span>
                               {row.brand && (
-                                <span className="block text-[10px] text-slate-400 font-normal">
+                                <span className="block text-[10px] text-slate-400 font-normal excel-text-brand">
                                   Marca: {row.brand}
                                 </span>
                               )}
                             </td>
 
                             {/* Col D: Serial Number */}
-                            <td className="p-3 font-mono text-xs">
+                            <td className="p-3 font-mono text-xs excel-td-serial">
                               <div className="space-y-1">
                                 <input 
                                   type="text"
                                   value={row.serialNumber || ''}
                                   onChange={(e) => handleUpdateRowField(row.id, 'serialNumber', e.target.value)}
                                   placeholder="Sem Serial"
-                                  className={`w-full px-2 py-1 rounded text-xs font-mono font-bold border transition-colors ${
+                                  className={`w-full px-2 py-1 rounded text-xs font-mono font-bold border transition-colors excel-input-serial ${
                                     isSerialDup
-                                      ? 'bg-rose-950/70 text-rose-200 border-rose-500 ring-1 ring-rose-500/50'
+                                      ? 'bg-rose-950/70 text-rose-200 border-rose-500 ring-1 ring-rose-500/50 excel-input-serial-dup'
                                       : row.serialNumber 
-                                      ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/40 focus:border-emerald-400 focus:bg-emerald-950/70' 
-                                      : 'bg-slate-900 text-slate-500 border-slate-800 focus:border-sky-500 focus:text-white placeholder:text-slate-600'
+                                      ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/40 focus:border-emerald-400 focus:bg-emerald-950/70 excel-input-serial-active' 
+                                      : 'bg-slate-900 text-slate-500 border-slate-800 focus:border-sky-500 focus:text-white placeholder:text-slate-600 excel-input-serial-empty'
                                   }`}
                                   title={isSerialDup ? `Serial repetido: ${row.duplicateInfo.detail}` : 'Número de Série do Fabricante (Hardware) (Coluna D)'}
                                 />
                                 {isSerialDup && (
-                                  <span className="text-[9px] text-rose-400 font-bold block">
+                                  <span className="text-[9px] text-rose-400 font-bold block excel-warn-serial">
                                     ⚠️ Serial já em estoque
                                   </span>
                                 )}
@@ -1041,36 +1051,36 @@ export default function ExcelImportModal({
                             </td>
 
                             {/* Col E: Situação / Embalagem */}
-                            <td className="p-3 text-slate-300">
-                              <span className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${
+                            <td className="p-3 text-slate-300 excel-td-pkg">
+                              <span className={`px-2 py-0.5 rounded border text-[10px] font-semibold excel-badge-packaging ${
                                 row.packaging.toLowerCase().includes('sem') 
-                                  ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
-                                  : 'bg-slate-800 border-slate-700 text-slate-300'
+                                  ? 'bg-rose-500/10 text-rose-300 border-rose-500/30 pkg-without'
+                                  : 'bg-slate-800 border-slate-700 text-slate-300 pkg-with'
                               }`}>
                                 {row.packaging}
                               </span>
                             </td>
 
                             {/* Col F: Observações */}
-                            <td className="p-3 text-slate-300 max-w-[160px] truncate" title={row.observations}>
+                            <td className="p-3 text-slate-300 max-w-[160px] truncate excel-td-obs" title={row.observations}>
                               {row.observations ? (
-                                <span className="text-rose-300 font-medium">{row.observations}</span>
+                                <span className="text-rose-300 font-medium excel-text-obs">{row.observations}</span>
                               ) : (
-                                <span className="text-slate-600 italic">-</span>
+                                <span className="text-slate-600 italic excel-text-obs-empty">-</span>
                               )}
                             </td>
 
                             {/* Destino */}
-                            <td className="p-3">
+                            <td className="p-3 excel-td-dest">
                               <select
                                 value={row.destinationSector}
                                 onChange={(e) => handleUpdateRowSector(row.id, e.target.value as DestinationSectorType)}
-                                className={`px-2 py-1 rounded text-[10px] font-bold border focus:outline-none cursor-pointer ${
+                                className={`px-2 py-1 rounded text-[10px] font-bold border focus:outline-none cursor-pointer excel-select-sector ${
                                   row.destinationSector === 'Openbox' 
-                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' 
+                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 sector-openbox' 
                                     : row.destinationSector === 'Principal'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                    : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 sector-principal'
+                                    : 'bg-rose-500/10 text-rose-400 border-rose-500/30 sector-rma'
                                 }`}
                               >
                                 <option value="Openbox">Openbox</option>
@@ -1092,21 +1102,21 @@ export default function ExcelImportModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-5 border-t border-slate-800 bg-slate-950 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        <div className="p-5 border-t border-slate-800 bg-slate-950 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 excel-footer">
           <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold rounded-xl text-xs transition-colors cursor-pointer excel-btn-cancel"
             >
               Cancelar
             </button>
 
             {parsedRows.length > 0 && (
-              <div className="text-xs text-slate-400">
+              <div className="text-xs text-slate-400 excel-footer-info">
                 <span>{metrics.selectedNewCount} novos itens selecionados</span>
                 {metrics.duplicatesCount > 0 && (
-                  <span className="text-rose-400 font-medium ml-1">
+                  <span className="text-rose-400 font-medium ml-1 excel-footer-dup-count">
                     ({metrics.duplicatesCount} repetidos ignorados)
                   </span>
                 )}
@@ -1119,7 +1129,7 @@ export default function ExcelImportModal({
               type="button"
               disabled={isProcessing || metrics.selectedNewCount === 0}
               onClick={handleConfirmImport}
-              className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer excel-btn-confirm"
               id="btn-confirm-excel-import"
             >
               {isProcessing ? (

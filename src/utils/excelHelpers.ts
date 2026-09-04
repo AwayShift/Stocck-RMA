@@ -4,7 +4,7 @@
  */
 
 import * as XLSX from 'xlsx';
-import { DailyInflowRecord, InflowWeekSummary } from '../types';
+import { DailyInflowRecord, InflowWeekSummary, TriageUnit, BaseProduct } from '../types';
 
 /**
  * Parses Excel dates safely (supporting numeric serial dates, DD/MM/YYYY, YYYY-MM-DD, etc.)
@@ -671,6 +671,7 @@ export interface StockInventoryParsedRow {
   sku: string;
   productName: string;
   serialNumber: string;
+  orderNumber?: string;
   sti: string;
   packaging: string;
   observations: string;
@@ -890,6 +891,13 @@ export async function parseStockInventoryExcelFile(
           h.includes('setor') || h.includes('destino') || h.includes('categoria')
         );
 
+        // 7. Nº DO PEDIDO: Column H or named header (Pedido, Ordem)
+        const orderIdx = headerRow.findIndex(h => 
+          h === 'pedido' || h === 'nº do pedido' || h === 'no do pedido' || h === 'n do pedido' || 
+          h === 'numero do pedido' || h === 'num pedido' || h === 'num do pedido' || h === 'order' || 
+          h === 'numero pedido' || h.includes('pedido') || h.includes('ordem')
+        );
+
         const parsedRows: StockInventoryParsedRow[] = [];
         let serialsFound = 0;
         let stiFound = 0;
@@ -975,10 +983,27 @@ export async function parseStockInventoryExcelFile(
           // 6. Extract Category / Sector
           const categoryOrSector = catIdx !== -1 && row[catIdx] !== undefined && row[catIdx] !== null ? String(row[catIdx]).trim() : '';
 
+          // 7. Extract Order Number
+          let rawOrder = orderIdx !== -1 && row[orderIdx] !== undefined && row[orderIdx] !== null ? String(row[orderIdx]).trim() : '';
+          const orderUpper = rawOrder.toUpperCase();
+          let orderNumber = '';
+          if (
+            rawOrder && 
+            orderUpper !== 'N/A' && 
+            orderUpper !== 'NA' && 
+            orderUpper !== '-' && 
+            orderUpper !== 'NULL' && 
+            orderUpper !== 'UNDEFINED' && 
+            orderUpper !== 'NONE'
+          ) {
+            orderNumber = rawOrder;
+          }
+
           parsedRows.push({
             sku: sku || 'SKU-INDEF',
             productName: productName || 'Produto Importado',
             serialNumber,
+            orderNumber,
             sti,
             packaging,
             observations: rawObs,
@@ -1032,13 +1057,15 @@ export async function parseStockInventoryExcelFile(
 
 /**
  * Downloads a pre-formatted Excel template for Physical Stock & OpenBox inventory
- * Matches EXACTLY the 6-column structure:
+ * Matches EXACTLY the required column structure:
  * Col A: STI
  * Col B: SKU
  * Col C: DESCRIÇÃO DO PRODUTO
  * Col D: SERIAL
  * Col E: SITUAÇÃO
  * Col F: OBSERVAÇÃO
+ * Col G: CATEGORIA (Opcional - Ex: Openbox, Estoque Principal, RMA)
+ * Col H: Nº DO PEDIDO (Opcional)
  */
 export function downloadStockInventoryTemplate() {
   const stockData = [
@@ -1048,7 +1075,9 @@ export function downloadStockInventoryTemplate() {
       'DESCRIÇÃO DO PRODUTO': 'FORNO ELÉTRICO 17L PHILCO PRETO 2 RESISTÊNCIAS PFE17P 220V - PHILCO',
       'SERIAL': '',
       'SITUAÇÃO': 'NA CAIXA',
-      'OBSERVAÇÃO': ''
+      'OBSERVAÇÃO': '',
+      'CATEGORIA': 'Openbox',
+      'Nº DO PEDIDO': '104820'
     },
     {
       'STI': 'STI135454',
@@ -1056,7 +1085,9 @@ export function downloadStockInventoryTemplate() {
       'DESCRIÇÃO DO PRODUTO': 'FORNO ELÉTRICO 17L PHILCO PRETO 2 RESISTÊNCIAS PFE17P 220V - PHILCO',
       'SERIAL': '',
       'SITUAÇÃO': 'NA CAIXA',
-      'OBSERVAÇÃO': 'RETORNO GARANTIA'
+      'OBSERVAÇÃO': 'RETORNO GARANTIA',
+      'CATEGORIA': 'Openbox',
+      'Nº DO PEDIDO': '104821'
     },
     {
       'STI': 'STI 135635',
@@ -1064,7 +1095,9 @@ export function downloadStockInventoryTemplate() {
       'DESCRIÇÃO DO PRODUTO': 'ASPIRADOR DE PÓ PHILCO PAS1450C 2 EM 1 1300W 220V - PHILCO',
       'SERIAL': '',
       'SITUAÇÃO': 'NA CAIXA',
-      'OBSERVAÇÃO': ''
+      'OBSERVAÇÃO': '',
+      'CATEGORIA': 'Openbox',
+      'Nº DO PEDIDO': ''
     },
     {
       'STI': 'STI135625',
@@ -1072,7 +1105,9 @@ export function downloadStockInventoryTemplate() {
       'DESCRIÇÃO DO PRODUTO': 'VOLANTE MULTILASER JS087 MULTI PLATAF C/MARCHA+PEDAL JS087 - MULTILASER',
       'SERIAL': '',
       'SITUAÇÃO': 'NA CAIXA',
-      'OBSERVAÇÃO': ''
+      'OBSERVAÇÃO': '',
+      'CATEGORIA': 'Estoque Principal',
+      'Nº DO PEDIDO': ''
     },
     {
       'STI': 'STI 135607',
@@ -1080,7 +1115,9 @@ export function downloadStockInventoryTemplate() {
       'DESCRIÇÃO DO PRODUTO': 'Tablet Infantil Princesas com Controle Parental MULTILASER',
       'SERIAL': '',
       'SITUAÇÃO': 'NA CAIXA',
-      'OBSERVAÇÃO': 'MARCAS DE USO'
+      'OBSERVAÇÃO': 'MARCAS DE USO',
+      'CATEGORIA': 'Openbox',
+      'Nº DO PEDIDO': '104822'
     },
     {
       'STI': 'STI134976',
@@ -1088,7 +1125,9 @@ export function downloadStockInventoryTemplate() {
       'DESCRIÇÃO DO PRODUTO': 'IMPRESSORA TÉRMICA NÃO FISCAL EPSON TM T88VII-C31CJ57062',
       'SERIAL': 'XB4F027290',
       'SITUAÇÃO': 'SEM / CAIXA',
-      'OBSERVAÇÃO': ''
+      'OBSERVAÇÃO': '',
+      'CATEGORIA': 'RMA',
+      'Nº DO PEDIDO': '104823'
     },
     {
       'STI': 'STI135425',
@@ -1096,7 +1135,9 @@ export function downloadStockInventoryTemplate() {
       'DESCRIÇÃO DO PRODUTO': 'IMPRESSORA TÉRMICA NÃO FISCAL ELGIN I8',
       'SERIAL': '',
       'SITUAÇÃO': 'SEM / CAIXA',
-      'OBSERVAÇÃO': ''
+      'OBSERVAÇÃO': '',
+      'CATEGORIA': 'Openbox',
+      'Nº DO PEDIDO': ''
     }
   ];
 
@@ -1107,12 +1148,101 @@ export function downloadStockInventoryTemplate() {
     { wch: 65 }, // C: DESCRIÇÃO DO PRODUTO
     { wch: 22 }, // D: SERIAL
     { wch: 18 }, // E: SITUAÇÃO
-    { wch: 32 }  // F: OBSERVAÇÃO
+    { wch: 32 }, // F: OBSERVAÇÃO
+    { wch: 20 }, // G: CATEGORIA
+    { wch: 20 }  // H: Nº DO PEDIDO
   ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Inventario_Estoque');
   XLSX.writeFile(wb, 'modelo_importacao_estoque.xlsx');
+}
+
+/**
+ * Exports physical stock / triage units to an Excel spreadsheet (.xlsx)
+ * Matches EXACTLY the column order and header names of the system import:
+ * Col A: STI
+ * Col B: SKU
+ * Col C: DESCRIÇÃO DO PRODUTO
+ * Col D: SERIAL
+ * Col E: SITUAÇÃO
+ * Col F: OBSERVAÇÃO
+ * Col G: CATEGORIA
+ * Col H: Nº DO PEDIDO
+ */
+export function exportStockInventoryToExcel(
+  units: TriageUnit[], 
+  filename = 'inventario_estoque_exportado.xlsx',
+  sheetName = 'Inventario_Estoque'
+) {
+  const rows = units.map(unit => {
+    // 1. STI
+    const sti = (unit.trackingCode || '').trim();
+
+    // 2. SKU
+    const sku = (unit.baseProductSku || '').trim();
+
+    // 3. DESCRIÇÃO DO PRODUTO
+    const productName = (unit.baseProductName || '').trim();
+
+    // 4. SERIAL
+    const serial = (unit.serialNumber || '').trim();
+
+    // 5. SITUAÇÃO (NA CAIXA, SEM / CAIXA, DANIFICADA)
+    let situacao = 'NA CAIXA';
+    if (unit.packageStatus === 'Sem Embalagem') {
+      situacao = 'SEM / CAIXA';
+    } else if (unit.packageStatus === 'Danificada') {
+      situacao = 'DANIFICADA';
+    } else if (unit.packageStatus === 'Perfeita') {
+      situacao = 'NA CAIXA';
+    }
+
+    // 6. OBSERVAÇÃO (clean notes, removing internal markers)
+    let rawNotes = (unit.notes || '').replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '').trim();
+    let obs = rawNotes;
+    if (!obs && unit.customerReason && unit.customerReason !== 'Inventário OpenBox' && unit.customerReason !== 'Entrada de Estoque') {
+      obs = unit.customerReason.trim();
+    }
+
+    // 7. CATEGORIA (destination sector)
+    let categoria: string = unit.destinationSector || 'Openbox';
+    if (unit.destinationSector === 'Principal') {
+      categoria = 'Estoque Principal';
+    }
+
+    // 8. Nº DO PEDIDO
+    const pedido = (unit.orderNumber || '').trim();
+
+    return {
+      'STI': sti,
+      'SKU': sku,
+      'DESCRIÇÃO DO PRODUTO': productName,
+      'SERIAL': serial,
+      'SITUAÇÃO': situacao,
+      'OBSERVAÇÃO': obs,
+      'CATEGORIA': categoria,
+      'Nº DO PEDIDO': pedido
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  ws['!cols'] = [
+    { wch: 18 }, // A: STI
+    { wch: 16 }, // B: SKU
+    { wch: 65 }, // C: DESCRIÇÃO DO PRODUTO
+    { wch: 22 }, // D: SERIAL
+    { wch: 18 }, // E: SITUAÇÃO
+    { wch: 35 }, // F: OBSERVAÇÃO
+    { wch: 20 }, // G: CATEGORIA
+    { wch: 20 }  // H: Nº DO PEDIDO
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const safeSheetName = (sheetName || 'Inventario_Estoque').substring(0, 31);
+  XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+  XLSX.writeFile(wb, filename);
 }
 
 

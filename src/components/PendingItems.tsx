@@ -20,6 +20,7 @@ import {
   Package,
   ShieldCheck,
   Eye,
+  EyeOff,
   FileSpreadsheet,
   Check,
   Info,
@@ -45,6 +46,7 @@ import {
   TriageUnit
 } from '../types';
 import { ImageZoomModal } from './ImageZoomModal';
+import { PlatformSelector } from './PlatformSelector';
 import { uploadFileToStorage } from '../lib/dbService';
 
 interface PendingItemsProps {
@@ -126,6 +128,28 @@ export default function PendingItems({
   const [platformFilter, setPlatformFilter] = useState<string>('Todas');
   const [priorityFilter, setPriorityFilter] = useState<'Todas' | PendingPriorityType>('Todas');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  
+  // Option to hide or show already resolved pendencies (stored in localStorage)
+  const [hideResolved, setHideResolved] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('rma_hide_resolved_pendencies');
+      return saved !== null ? saved === 'true' : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleHideResolved = () => {
+    setHideResolved(prev => {
+      const nextVal = !prev;
+      try {
+        localStorage.setItem('rma_hide_resolved_pendencies', String(nextVal));
+      } catch {
+        // ignore
+      }
+      return nextVal;
+    });
+  };
 
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -363,12 +387,22 @@ export default function PendingItems({
     return item.status !== 'Resolvido' && item.status !== 'Cancelado' && !item.transferredToStock;
   };
 
+  // Helper to determine if an item is resolved
+  const isPendingResolved = (item: PendingItem) => {
+    return item.status === 'Resolvido' || !!item.transferredToStock;
+  };
+
   // Filtered & Sorted Items
   // 1. Unresolved items appear before resolved ones
   // 2. Higher priority appears before lower priority
   // 3. Newest registration date appears first
   const filteredItems = useMemo(() => {
     const list = items.filter(item => {
+      // If user chose to hide resolved items, filter them out UNLESS the user explicitly selected "Resolvido" in statusFilter
+      if (hideResolved && isPendingResolved(item) && statusFilter !== 'Resolvido') {
+        return false;
+      }
+
       const term = searchTerm.toLowerCase().trim();
       const matchesSearch = 
         !term ||
@@ -409,7 +443,7 @@ export default function PendingItems({
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return bTime - aTime;
     });
-  }, [items, searchTerm, statusFilter, platformFilter, priorityFilter]);
+  }, [items, searchTerm, statusFilter, platformFilter, priorityFilter, hideResolved]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -417,7 +451,7 @@ export default function PendingItems({
     const pendentes = items.filter(i => i.status === 'Pendente').length;
     const analise = items.filter(i => i.status === 'Em Análise').length;
     const aguardandoPecaOuNf = items.filter(i => i.status === 'Aguardando Peça' || i.status === 'Aguardando NF').length;
-    const resolvidos = items.filter(i => i.status === 'Resolvido').length;
+    const resolvidos = items.filter(i => isPendingResolved(i)).length;
     const urgentes = items.filter(i => isPendingUnresolved(i) && (i.priority === 'Urgente' || i.priority === 'Alta')).length;
     const comFotos = items.filter(i => i.photos && i.photos.length > 0).length;
 
@@ -978,8 +1012,29 @@ export default function PendingItems({
             <div className="text-[10px] text-slate-400 font-medium mt-0.5">Falta componente/NF</div>
           </div>
 
-          <div className="bg-slate-950/60 border border-emerald-500/20 p-3 rounded-xl">
-            <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">Resolvidos</div>
+          <div 
+            onClick={() => {
+              if (statusFilter === 'Resolvido') {
+                setStatusFilter('Todos');
+              } else {
+                setStatusFilter('Resolvido');
+                if (hideResolved) setHideResolved(false);
+              }
+            }}
+            className={`bg-slate-950/60 border p-3 rounded-xl cursor-pointer transition-all ${
+              statusFilter === 'Resolvido'
+                ? 'border-emerald-500 bg-emerald-950/20 ring-1 ring-emerald-500/50'
+                : 'border-emerald-500/20 hover:border-emerald-500/40'
+            }`}
+            title="Clique para filtrar apenas pendências resolvidas"
+            id="card-metric-resolvidos"
+          >
+            <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Resolvidos</span>
+              {hideResolved && (
+                <span className="text-[9px] text-slate-400 lowercase font-normal">(ocultos)</span>
+              )}
+            </div>
             <div className="text-xl font-extrabold text-emerald-300 mt-1">{stats.resolvidos}</div>
             <div className="text-[10px] text-slate-400 font-medium mt-0.5">Liberados p/ estoque</div>
           </div>
@@ -1033,7 +1088,13 @@ export default function PendingItems({
             <span className="text-xs text-slate-400 font-medium">Status:</span>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
+              onChange={(e) => {
+                const val = e.target.value as any;
+                setStatusFilter(val);
+                if (val === 'Resolvido' && hideResolved) {
+                  setHideResolved(false);
+                }
+              }}
               className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
               id="select-status-filter"
             >
@@ -1063,6 +1124,46 @@ export default function PendingItems({
             </select>
           </div>
 
+          {/* Toggle Hide/Show Resolved Button */}
+          <button
+            type="button"
+            onClick={handleToggleHideResolved}
+            data-hidden={hideResolved ? 'true' : 'false'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+              hideResolved
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 shadow-sm'
+                : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+            }`}
+            title={
+              hideResolved
+                ? "Pendências resolvidas estão ocultas. Clique para exibir todas."
+                : "Pendências resolvidas estão visíveis. Clique para ocultá-las."
+            }
+            id="btn-toggle-hide-resolved"
+          >
+            {hideResolved ? (
+              <>
+                <EyeOff className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Ocultando Resolvidas</span>
+                {stats.resolvidos > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    {stats.resolvidos}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <Eye className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>Ocultar Resolvidas</span>
+                {stats.resolvidos > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                    {stats.resolvidos}
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+
           {/* View Mode Toggle */}
           <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 ml-auto md:ml-0">
             <button
@@ -1089,34 +1190,71 @@ export default function PendingItems({
         </div>
       </div>
 
+      {/* Alert banner if resolved items are hidden */}
+      {hideResolved && stats.resolvidos > 0 && statusFilter !== 'Resolvido' && (
+        <div className="pending-hidden-resolved-banner flex items-center justify-between px-4 py-2.5 bg-emerald-950/20 border border-emerald-500/25 rounded-xl text-xs text-emerald-300 shadow-sm animate-in fade-in" id="banner-hidden-resolved">
+          <div className="flex items-center gap-2">
+            <EyeOff className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              <strong>{stats.resolvidos}</strong> {stats.resolvidos === 1 ? 'pendência resolvida está oculta' : 'pendências resolvidas estão ocultas'} da lista atual.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setHideResolved(false)}
+            className="text-xs text-emerald-400 hover:text-emerald-200 font-bold underline cursor-pointer shrink-0 ml-2"
+            id="btn-show-resolved-inline"
+          >
+            Exibir resolvidas
+          </button>
+        </div>
+      )}
+
       {/* Main Content Area: Cards or Table */}
       {filteredItems.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center max-w-lg mx-auto space-y-3">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center max-w-lg mx-auto space-y-3" id="empty-state-pendencias">
           <div className="p-3 bg-slate-800/80 text-slate-400 rounded-2xl w-fit mx-auto border border-slate-700">
             <Clock className="w-8 h-8 text-slate-400" />
           </div>
           <h3 className="text-base font-bold text-white">Nenhuma pendência encontrada</h3>
           <p className="text-xs text-slate-400 leading-relaxed">
-            {searchTerm || statusFilter !== 'Todos' || platformFilter !== 'Todas'
-              ? 'Nenhum item corresponde aos filtros selecionados. Tente limpar os filtros de busca.'
+            {hideResolved && stats.resolvidos > 0 && !searchTerm && statusFilter === 'Todos' && platformFilter === 'Todas' && priorityFilter === 'Todas'
+              ? `Todas as ${stats.resolvidos} pendências registradas já estão resolvidas e foram ocultadas pelo filtro ativo.`
+              : (searchTerm || statusFilter !== 'Todos' || platformFilter !== 'Todas' || priorityFilter !== 'Todas' || hideResolved)
+              ? 'Nenhum item corresponde aos filtros selecionados. Tente ajustar os filtros ou reexibir pendências resolvidas.'
               : 'Não há itens pendentes cadastrados no momento. Clique no botão acima para adicionar um novo produto à lista de pendências.'}
           </p>
-          {(searchTerm || statusFilter !== 'Todos' || platformFilter !== 'Todas') ? (
-            <button
-              onClick={() => { setSearchTerm(''); setStatusFilter('Todos'); setPlatformFilter('Todas'); }}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sky-400 text-xs font-bold rounded-xl border border-slate-700 transition-all cursor-pointer"
-            >
-              Limpar Filtros
-            </button>
-          ) : (
-            <button
-              onClick={handleOpenNewModal}
-              className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              Cadastrar Nova Pendência
-            </button>
-          )}
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            {hideResolved && stats.resolvidos > 0 && (
+              <button
+                onClick={() => setHideResolved(false)}
+                className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-bold rounded-xl border border-emerald-500/40 transition-all cursor-pointer flex items-center gap-1.5"
+                id="btn-empty-show-resolved"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Exibir {stats.resolvidos} {stats.resolvidos === 1 ? 'Resolvida' : 'Resolvidas'}</span>
+              </button>
+            )}
+            {(searchTerm || statusFilter !== 'Todos' || platformFilter !== 'Todas' || priorityFilter !== 'Todas') && (
+              <button
+                onClick={() => { setSearchTerm(''); setStatusFilter('Todos'); setPlatformFilter('Todas'); setPriorityFilter('Todas'); }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sky-400 text-xs font-bold rounded-xl border border-slate-700 transition-all cursor-pointer"
+                id="btn-clear-pending-filters"
+              >
+                Limpar Filtros
+              </button>
+            )}
+            {!searchTerm && statusFilter === 'Todos' && platformFilter === 'Todas' && priorityFilter === 'Todas' && (!hideResolved || stats.resolvidos === 0) && (
+              <button
+                onClick={handleOpenNewModal}
+                className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5"
+                id="btn-empty-new-pending"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                Cadastrar Nova Pendência
+              </button>
+            )}
+          </div>
         </div>
       ) : viewMode === 'grid' ? (
         /* GRID VIEW */
@@ -1376,7 +1514,7 @@ export default function PendingItems({
                         <div className={`truncate mt-0.5 ${isResolved ? 'text-slate-300 font-normal' : 'text-white font-medium'}`} title={item.productName}>
                           {item.productName}
                         </div>
-                        {item.voltage && (
+                        {item.voltage && item.voltage !== 'N/A' && (
                           <span className="text-[10px] text-slate-400">{item.voltage}</span>
                         )}
                       </td>
@@ -2074,7 +2212,7 @@ export default function PendingItems({
                               <span className="font-mono font-bold text-amber-400">{prod.sku}</span>
                               <span className="text-slate-300 ml-2 font-medium">{prod.name}</span>
                             </div>
-                            {prod.voltage && (
+                            {prod.voltage && prod.voltage !== 'N/A' && (
                               <span className="text-[10px] text-slate-400 font-mono">{prod.voltage}</span>
                             )}
                           </div>
@@ -2120,15 +2258,12 @@ export default function PendingItems({
                       <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                         Plataforma de Origem
                       </label>
-                      <select
+                      <PlatformSelector
                         value={transferPlatform}
-                        onChange={(e) => setTransferPlatform(e.target.value as PlatformType)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
-                      >
-                        {PLATFORMS.map(p => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
-                      </select>
+                        onChange={(p) => setTransferPlatform(p as PlatformType)}
+                        id="select-transfer-platform"
+                        platforms={PLATFORMS.filter(p => p !== 'Outro') as PlatformType[]}
+                      />
                     </div>
                   </div>
                 </div>
