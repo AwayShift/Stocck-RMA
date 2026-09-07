@@ -34,6 +34,9 @@ import { RichTextEditor } from './RichTextEditor';
 import ExcelBaseCatalogImportModal from './ExcelBaseCatalogImportModal';
 import { ImageZoomModal } from './ImageZoomModal';
 import { exportBaseCatalogToExcel } from '../utils/excelHelpers';
+import { CategoryFormSelector } from './CategoryFormSelector';
+import { CategoryBadge } from './CategoryBadge';
+import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
 
 interface BaseCatalogProps {
   products: BaseProduct[];
@@ -394,16 +397,29 @@ export default function BaseCatalog({
     });
   };
 
-  // Dynamically extract unique categories for the filters
-  const uniqueCategories = React.useMemo(() => {
-    return Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
+  // Category counts
+  const categoryCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    products.forEach(p => {
+      if (p.category && p.category.trim()) {
+        const cat = p.category.trim();
+        counts[cat] = (counts[cat] || 0) + 1;
+      }
+    });
+    return counts;
   }, [products]);
 
-  // Filter products by SKU or Name/Model, Category, and Voltage
+  // Grouped categories by General Category & Subcategories
+  const groupedFilterCategories = React.useMemo(() => {
+    const rawCategories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
+    return buildGroupedFilterCategories(rawCategories, categoryCounts);
+  }, [products, categoryCounts]);
+
+  // Filter products by SKU or Name/Model, Category (Macro or Subcategory), and Voltage
   const filteredProducts = products.filter(p => {
     const term = searchTerm.toLowerCase();
     const matchesTerm = p.name.toLowerCase().includes(term) || p.sku.toLowerCase().includes(term);
-    const matchesCategory = selectedCategory === 'Todas' || p.category === selectedCategory;
+    const matchesCategory = checkCategoryFilterMatch(p.category, selectedCategory);
     const matchesVoltage = selectedVoltage === 'Todas' || p.voltage === selectedVoltage;
     return matchesTerm && matchesCategory && matchesVoltage;
   });
@@ -507,12 +523,24 @@ export default function BaseCatalog({
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 transition-colors"
+                className={`w-full px-4 py-2.5 bg-slate-950 border rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 transition-colors ${
+                  selectedCategory !== 'Todas' ? 'border-sky-500/50 bg-sky-950/20 text-sky-200 font-semibold' : 'border-slate-800'
+                }`}
                 id="select-filter-category"
               >
-                <option value="Todas">Todas as Categorias</option>
-                {uniqueCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                <option value="Todas">Todas as Categorias ({products.length})</option>
+                {groupedFilterCategories.map(group => (
+                  <optgroup key={group.general.id} label={`📂 ${group.general.name}`}>
+                    {group.options.map(opt => (
+                      <option 
+                        key={opt.value} 
+                        value={opt.value}
+                        className={opt.isGeneralHeader ? 'font-bold text-sky-400 bg-slate-900' : 'pl-4'}
+                      >
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -647,9 +675,7 @@ export default function BaseCatalog({
                                   </span>
                                 )}
                                 {product.category && (
-                                  <span className="bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-700">
-                                    Cat: <strong className="text-slate-350">{product.category}</strong>
-                                  </span>
+                                  <CategoryBadge category={product.category} size="xs" />
                                 )}
                               </div>
                             </div>
@@ -786,9 +812,7 @@ export default function BaseCatalog({
                             {/* Category & Attributes */}
                             <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 pt-0.5">
                               {product.category && (
-                                <span className="text-[10px] bg-slate-900 text-slate-300 px-2 py-0.5 rounded-md border border-slate-800 font-medium">
-                                  {product.category}
-                                </span>
+                                <CategoryBadge category={product.category} size="sm" />
                               )}
                               {product.accessories && (
                                 <span className="text-[10px] bg-slate-900 text-emerald-400/90 px-1.5 py-0.5 rounded-md border border-emerald-950/60 truncate" title={`Acessórios: ${product.accessories}`}>
@@ -1236,15 +1260,11 @@ export default function BaseCatalog({
                   />
                 </div>
 
-                {/* Category Field */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">Categoria</label>
-                  <input 
-                    type="text"
-                    placeholder="Ex: Eletroportáteis, Áudio, Informática..."
+                {/* Category Field - Selecionável com Categoria Geral e Subcategoria */}
+                <div className="col-span-1 md:col-span-2">
+                  <CategoryFormSelector
                     value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-600"
+                    onChange={setCategory}
                     id="input-product-category"
                   />
                 </div>
@@ -1636,9 +1656,13 @@ export default function BaseCatalog({
                       </div>
                     </div>
                     <div className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl col-span-2">
-                      <div className="text-slate-500 font-medium text-[11px] uppercase tracking-wider">Categoria</div>
-                      <div className="text-slate-250 font-bold mt-1.5" title={viewingProduct.category || 'Não informada'}>
-                        {viewingProduct.category || <span className="text-slate-600 font-normal italic">Não informada</span>}
+                      <div className="text-slate-500 font-medium text-[11px] uppercase tracking-wider mb-1.5">Categoria & Subcategoria</div>
+                      <div className="text-slate-200 font-bold flex items-center gap-2">
+                        {viewingProduct.category ? (
+                          <CategoryBadge category={viewingProduct.category} size="md" />
+                        ) : (
+                          <span className="text-slate-600 font-normal italic text-xs">Não informada</span>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -137,6 +137,7 @@ export default function ProductMovements({
 
   // Filter selection states
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [dailyViewType, setDailyViewType] = useState<'calendar' | 'chart'>('calendar');
   const [searchQuery, setSearchQuery] = useState('');
@@ -144,6 +145,7 @@ export default function ProductMovements({
   // Reset day/week filters when selected month changes
   useEffect(() => {
     setSelectedDay(null);
+    setSelectedDateStr(null);
     setSelectedWeek(null);
   }, [selectedMonth]);
 
@@ -213,22 +215,109 @@ export default function ProductMovements({
     };
   }, [selectedMonth]);
 
-  // Extract all triage units for the selected month (ignoring spreadsheet migration items and items excluded from daily inflow count)
-  const monthUnits = useMemo(() => {
+  // Helper to format Date to YYYY-MM-DD in local time safely
+  const formatDateStr = (d: Date) => 
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  // Compute dynamic calendar weeks covering EVERY day of the month without gaps
+  const monthWeeks = useMemo(() => {
+    const weeks: {
+      index: number;
+      title: string;
+      range: string;
+      startDate: Date;
+      endDate: Date;
+      startStr: string;
+      endStr: string;
+    }[] = [];
+
+    const firstDayOfMonth = new Date(selectedYear, selectedMonthIdx, 1, 0, 0, 0, 0);
+    const lastDayOfMonth = new Date(selectedYear, selectedMonthIdx, daysInMonth, 23, 59, 59, 999);
+
+    // Find the Monday of the week containing firstDayOfMonth
+    let currMon = new Date(firstDayOfMonth);
+    const dayOfWeek = currMon.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    currMon.setDate(currMon.getDate() + diffToMon);
+    currMon.setHours(0, 0, 0, 0);
+
+    let weekNumber = 1;
+    while (currMon <= lastDayOfMonth) {
+      const sunDate = new Date(currMon);
+      sunDate.setDate(sunDate.getDate() + 6);
+      sunDate.setHours(23, 59, 59, 999);
+
+      const friDate = new Date(currMon);
+      friDate.setDate(friDate.getDate() + 4);
+
+      const startMonNum = currMon.getDate();
+      const startMonMonth = currMon.getMonth();
+      const endFriNum = friDate.getDate();
+      const endFriMonth = friDate.getMonth();
+
+      let rangeStr = '';
+      if (startMonMonth === endFriMonth) {
+        rangeStr = `${String(startMonNum).padStart(2, '0')} a ${String(endFriNum).padStart(2, '0')}`;
+      } else {
+        const m1 = String(startMonMonth + 1).padStart(2, '0');
+        const m2 = String(endFriMonth + 1).padStart(2, '0');
+        rangeStr = `${String(startMonNum).padStart(2, '0')}/${m1} a ${String(endFriNum).padStart(2, '0')}/${m2}`;
+      }
+
+      weeks.push({
+        index: weeks.length,
+        title: `Semana ${weekNumber++}`,
+        range: rangeStr,
+        startDate: new Date(currMon),
+        endDate: new Date(sunDate),
+        startStr: formatDateStr(currMon),
+        endStr: formatDateStr(sunDate)
+      });
+
+      currMon.setDate(currMon.getDate() + 7);
+    }
+
+    return weeks;
+  }, [selectedYear, selectedMonthIdx, daysInMonth]);
+
+  // Calendar bounds covering the full range of all weeks touching this month
+  const calendarBounds = useMemo(() => {
+    if (monthWeeks.length === 0) {
+      return {
+        minDateStr: `${selectedYear}-${String(selectedMonthIdx + 1).padStart(2, '0')}-01`,
+        maxDateStr: `${selectedYear}-${String(selectedMonthIdx + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`
+      };
+    }
+    return {
+      minDateStr: monthWeeks[0].startStr,
+      maxDateStr: monthWeeks[monthWeeks.length - 1].endStr
+    };
+  }, [monthWeeks, selectedYear, selectedMonthIdx, daysInMonth]);
+
+  // Extract all triage units within the complete calendar weeks (including adjacent month days)
+  const extendedUnits = useMemo(() => {
     return units.filter(u => {
       if (isMigrationUnit(u)) return false; // Ignore migration items for RMA inflow flux
       if (u.excludeFromDailyCount) return false; // Do not count units excluded from daily count in inflow flux
       const parts = getDateParts(u.createdAt);
       if (!parts) return false;
-      return parts.year === selectedYear && parts.monthIdx === selectedMonthIdx;
+      return parts.dateStr >= calendarBounds.minDateStr && parts.dateStr <= calendarBounds.maxDateStr;
     });
-  }, [units, selectedYear, selectedMonthIdx]);
+  }, [units, calendarBounds]);
 
-  // Filter and unify daily inflows for selected month (including triaged units)
-  const monthDailyInflows = useMemo(() => {
-    // 1. Get explicit daily inflows from collection
+  // Units strictly for the selected month (for monthly metrics)
+  const monthUnits = useMemo(() => {
+    return extendedUnits.filter(u => {
+      const parts = getDateParts(u.createdAt);
+      return parts && parts.year === selectedYear && parts.monthIdx === selectedMonthIdx;
+    });
+  }, [extendedUnits, selectedYear, selectedMonthIdx]);
+
+  // Filter and unify daily inflows covering the complete calendar weeks (including days from other months)
+  const extendedDailyInflows = useMemo(() => {
+    // 1. Get explicit daily inflows from collection within the weeks range
     const explicitInflows = dailyInflows
-      .filter(item => item.date.startsWith(selectedMonth))
+      .filter(item => item.date >= calendarBounds.minDateStr && item.date <= calendarBounds.maxDateStr)
       .map(item => ({ ...item }));
 
     const explicitDateMap = new Map<string, DailyInflowRecord>();
@@ -238,9 +327,9 @@ export default function ProductMovements({
 
     // 2. Aggregate triage units by day
     const unitsByDay = new Map<string, { rma: number; estoque: number; openbox: number; es: number; total: number }>();
-    monthUnits.forEach(u => {
+    extendedUnits.forEach(u => {
       const parts = getDateParts(u.createdAt);
-      if (parts && parts.year === selectedYear && parts.monthIdx === selectedMonthIdx) {
+      if (parts) {
         const dStr = parts.dateStr;
         if (!unitsByDay.has(dStr)) {
           unitsByDay.set(dStr, { rma: 0, estoque: 0, openbox: 0, es: 0, total: 0 });
@@ -315,12 +404,20 @@ export default function ProductMovements({
     });
 
     return Array.from(unifiedMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [dailyInflows, selectedMonth, monthUnits, selectedYear, selectedMonthIdx]);
+  }, [dailyInflows, calendarBounds, extendedUnits]);
 
-  // Group month daily inflows by week for the spreadsheet view
+  // Filter daily inflows strictly belonging to selectedMonth (for monthly totals/metrics)
+  const monthDailyInflows = useMemo(() => {
+    return extendedDailyInflows.filter(item => item.date.startsWith(selectedMonth));
+  }, [extendedDailyInflows, selectedMonth]);
+
+  // Group daily inflows by week for the spreadsheet view, ensuring all days in the week cycle are accounted for
   const weekSummaries = useMemo(() => {
-    return groupRecordsByWeek(monthDailyInflows);
-  }, [monthDailyInflows]);
+    const allSummaries = groupRecordsByWeek(extendedDailyInflows);
+    // Retain only the weeks that belong to this month's calendar weeks
+    const validMonKeys = new Set(monthWeeks.map(w => w.startStr));
+    return allSummaries.filter(ws => validMonKeys.has(ws.startDate));
+  }, [extendedDailyInflows, monthWeeks]);
 
   // Total summary for selected month
   const monthTotals = useMemo(() => {
@@ -368,81 +465,17 @@ export default function ProductMovements({
     return counts;
   }, [monthDailyInflows, daysInMonth, selectedYear, selectedMonthIdx]);
 
-  // Compute dynamic calendar weeks covering EVERY day of the month without gaps
-  const monthWeeks = useMemo(() => {
-    const weeks: {
-      index: number;
-      title: string;
-      range: string;
-      startDate: Date;
-      endDate: Date;
-    }[] = [];
-
-    const firstDayOfMonth = new Date(selectedYear, selectedMonthIdx, 1, 0, 0, 0, 0);
-    const lastDayOfMonth = new Date(selectedYear, selectedMonthIdx, daysInMonth, 23, 59, 59, 999);
-
-    // Find the Monday of the week containing firstDayOfMonth
-    let currMon = new Date(firstDayOfMonth);
-    const dayOfWeek = currMon.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    currMon.setDate(currMon.getDate() + diffToMon);
-    currMon.setHours(0, 0, 0, 0);
-
-    let weekNumber = 1;
-    while (currMon <= lastDayOfMonth) {
-      const sunDate = new Date(currMon);
-      sunDate.setDate(sunDate.getDate() + 6);
-      sunDate.setHours(23, 59, 59, 999);
-
-      const friDate = new Date(currMon);
-      friDate.setDate(friDate.getDate() + 4);
-
-      const startMonNum = currMon.getDate();
-      const startMonMonth = currMon.getMonth();
-      const endFriNum = friDate.getDate();
-      const endFriMonth = friDate.getMonth();
-
-      let rangeStr = '';
-      if (startMonMonth === endFriMonth) {
-        rangeStr = `${String(startMonNum).padStart(2, '0')} a ${String(endFriNum).padStart(2, '0')}`;
-      } else {
-        const m1 = String(startMonMonth + 1).padStart(2, '0');
-        const m2 = String(endFriMonth + 1).padStart(2, '0');
-        rangeStr = `${String(startMonNum).padStart(2, '0')}/${m1} a ${String(endFriNum).padStart(2, '0')}/${m2}`;
-      }
-
-      weeks.push({
-        index: weeks.length,
-        title: `Semana ${weekNumber++}`,
-        range: rangeStr,
-        startDate: new Date(currMon),
-        endDate: new Date(sunDate)
-      });
-
-      currMon.setDate(currMon.getDate() + 7);
-    }
-
-    return weeks;
-  }, [selectedYear, selectedMonthIdx, daysInMonth]);
-
-  // Compute entries per week based on monthWeeks & dailyCounts
+  // Compute entries per week based on weekSummaries directly, eliminating any divergence with the table
   const weeklyCounts = useMemo(() => {
-    const counts = Array(monthWeeks.length).fill(0);
-    
-    monthWeeks.forEach((week, wIdx) => {
-      const startT = week.startDate.getTime();
-      const endT = week.endDate.getTime();
-
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dayTime = new Date(selectedYear, selectedMonthIdx, d, 12, 0, 0).getTime();
-        if (dayTime >= startT && dayTime <= endT) {
-          counts[wIdx] += dailyCounts[d - 1];
-        }
-      }
+    const summaryMap = new Map<string, number>();
+    weekSummaries.forEach(ws => {
+      summaryMap.set(ws.startDate, ws.totalWeek);
     });
 
-    return counts;
-  }, [monthWeeks, dailyCounts, daysInMonth, selectedYear, selectedMonthIdx]);
+    return monthWeeks.map(week => {
+      return summaryMap.get(week.startStr) || 0;
+    });
+  }, [monthWeeks, weekSummaries]);
 
   // Peak metrics
   const peakMetrics = useMemo(() => {
@@ -477,21 +510,23 @@ export default function ProductMovements({
       if (u.excludeFromDailyCount) return false; // Exclude items removed from daily count from inflow flux
       const parts = getDateParts(u.createdAt);
       if (!parts) return false;
-      if (
-        parts.year !== selectedYear ||
-        parts.monthIdx !== selectedMonthIdx
-      ) {
-        return false;
-      }
 
-      if (selectedDay !== null && parts.day !== selectedDay) {
-        return false;
-      }
-
-      if (selectedWeek !== null && monthWeeks[selectedWeek]) {
+      // Filter by specific day if selected (handles both current month and cross-month days)
+      if (selectedDateStr) {
+        if (parts.dateStr !== selectedDateStr) return false;
+      } else if (selectedWeek !== null && monthWeeks[selectedWeek]) {
+        // Filter by selected week (covering the full Monday through Sunday of that week)
         const targetWeek = monthWeeks[selectedWeek];
         const dayTime = new Date(parts.year, parts.monthIdx, parts.day, 12, 0, 0).getTime();
         if (dayTime < targetWeek.startDate.getTime() || dayTime > targetWeek.endDate.getTime()) {
+          return false;
+        }
+      } else {
+        // Default to selected month
+        if (
+          parts.year !== selectedYear ||
+          parts.monthIdx !== selectedMonthIdx
+        ) {
           return false;
         }
       }
@@ -514,32 +549,73 @@ export default function ProductMovements({
       const tb = getDateParts(b.createdAt)?.time || 0;
       return tb - ta;
     });
-  }, [units, selectedYear, selectedMonthIdx, selectedDay, selectedWeek, searchQuery, monthWeeks]);
+  }, [units, selectedYear, selectedMonthIdx, selectedDateStr, selectedWeek, searchQuery, monthWeeks]);
 
   const maxWeeklyCount = Math.max(...weeklyCounts, 1);
   const maxDailyCount = Math.max(...dailyCounts, 1);
 
-  // Calendar info for 7-day calendar grid
-  const firstDayWeekday = new Date(selectedYear, selectedMonthIdx, 1).getDay();
+  // Calendar info for 7-day calendar grid (Sunday through Saturday)
+  const firstDayWeekday = new Date(selectedYear, selectedMonthIdx, 1, 12, 0, 0).getDay();
   const calendarDays = useMemo(() => {
-    const days: ({ dayNum: number; count: number; dateStr: string } | null)[] = [];
+    const days: {
+      dayNum: number;
+      count: number;
+      dateStr: string;
+      isAdjacentMonth: boolean;
+      monthLabel?: string;
+    }[] = [];
 
+    const inflowsMap = new Map<string, DailyInflowRecord>();
+    extendedDailyInflows.forEach(item => {
+      inflowsMap.set(item.date, item);
+    });
+
+    const monthNamesShort = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+    // 1. Fill leading days from previous month to align with Sunday start
     for (let i = 0; i < firstDayWeekday; i++) {
-      days.push(null);
+      const d = new Date(selectedYear, selectedMonthIdx, 1 - (firstDayWeekday - i), 12, 0, 0);
+      const dateStr = formatDateStr(d);
+      const rec = inflowsMap.get(dateStr);
+      days.push({
+        dayNum: d.getDate(),
+        count: rec?.totalDia || 0,
+        dateStr,
+        isAdjacentMonth: true,
+        monthLabel: monthNamesShort[d.getMonth()]
+      });
     }
 
+    // 2. Fill days of current month
     for (let d = 1; d <= daysInMonth; d++) {
-      const count = dailyCounts[d - 1];
       const dateStr = `${selectedYear}-${String(selectedMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const rec = inflowsMap.get(dateStr);
       days.push({
         dayNum: d,
-        count,
-        dateStr
+        count: rec?.totalDia || 0,
+        dateStr,
+        isAdjacentMonth: false
+      });
+    }
+
+    // 3. Fill trailing days from next month to complete the last week grid
+    const totalCells = days.length;
+    const remainingDays = (7 - (totalCells % 7)) % 7;
+    for (let j = 1; j <= remainingDays; j++) {
+      const d = new Date(selectedYear, selectedMonthIdx + 1, j, 12, 0, 0);
+      const dateStr = formatDateStr(d);
+      const rec = inflowsMap.get(dateStr);
+      days.push({
+        dayNum: d.getDate(),
+        count: rec?.totalDia || 0,
+        dateStr,
+        isAdjacentMonth: true,
+        monthLabel: monthNamesShort[d.getMonth()]
       });
     }
 
     return days;
-  }, [firstDayWeekday, daysInMonth, dailyCounts, selectedYear, selectedMonthIdx]);
+  }, [firstDayWeekday, daysInMonth, extendedDailyInflows, selectedYear, selectedMonthIdx]);
 
   // Format month name to show in select dropdown
   const formatMonthOptionName = (mStr: string) => {
@@ -915,12 +991,17 @@ export default function ProductMovements({
                               >
                                 {/* DATA */}
                                 <td className="py-3 px-4 font-mono font-bold text-slate-200">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div className={`w-2 h-2 rounded-full shrink-0 ${record.date.startsWith(selectedMonth) ? 'bg-blue-500' : 'bg-amber-400 ring-2 ring-amber-400/20'}`} />
                                     <span>{formatBrDate(record.date)}</span>
                                     <span className="text-[10px] font-sans font-normal text-slate-400">
                                       ({getWeekdayName(record.date)})
                                     </span>
+                                    {!record.date.startsWith(selectedMonth) && (
+                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap">
+                                        {record.date < selectedMonth ? 'Mês Anterior' : 'Próximo Mês'}
+                                      </span>
+                                    )}
                                   </div>
                                   {record.notes && (
                                     <span className="text-[10px] text-slate-500 block truncate max-w-xs pl-4 font-sans font-normal">
@@ -1005,7 +1086,7 @@ export default function ProductMovements({
                       <td className="py-4 px-4 text-right">
                         {enableSpreadsheetExport && (
                           <button
-                            onClick={() => exportInflowRecordsToExcel(monthDailyInflows, `fluxo_entradas_${selectedMonth}.xlsx`)}
+                            onClick={() => exportInflowRecordsToExcel(extendedDailyInflows, `fluxo_entradas_${selectedMonth}.xlsx`)}
                             className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded border border-slate-700"
                           >
                             Exportar
@@ -1017,6 +1098,16 @@ export default function ProductMovements({
                 </table>
               </div>
             )}
+
+            {/* Explanatory note about complete week cycle */}
+            <div className="px-4 py-2.5 bg-slate-950/60 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+              <span>
+                * A contagem das semanas inclui todos os dias pertencentes ao ciclo semanal (mesmo de meses adjacentes), garantindo consistência total no fechamento semanal.
+              </span>
+              <span className="font-mono text-[10px] text-slate-500">
+                Total consolidado do mês: {monthTotals.totalGeral} un
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -1148,17 +1239,8 @@ export default function ProductMovements({
                     </div>
 
                     <div className="grid grid-cols-7 gap-1.5" id="calendar-grid-cells">
-                      {calendarDays.map((cell, index) => {
-                        if (cell === null) {
-                          return (
-                            <div 
-                              key={`empty-${index}`} 
-                              className="aspect-square rounded-xl bg-slate-950/10 border border-slate-900/10 opacity-20"
-                            />
-                          );
-                        }
-
-                        const isSelected = selectedDay === cell.dayNum;
+                      {calendarDays.map((cell) => {
+                        const isSelected = selectedDateStr === cell.dateStr;
                         const hasEntries = cell.count > 0;
                         
                         let cellTierClass = 'cal-day-empty';
@@ -1177,19 +1259,39 @@ export default function ProductMovements({
                           cellTierClass = 'cal-day-selected';
                         }
 
+                        const adjacentStyle = cell.isAdjacentMonth
+                          ? isSelected
+                            ? 'ring-2 ring-amber-400'
+                            : hasEntries
+                            ? 'ring-1 ring-amber-500/40 opacity-90'
+                            : 'opacity-40 hover:opacity-75 border-dashed'
+                          : '';
+
                         return (
                           <div
-                            key={`day-${cell.dayNum}`}
+                            key={cell.dateStr}
                             onClick={() => {
-                              setSelectedDay(isSelected ? null : cell.dayNum);
+                              const newSelected = isSelected ? null : cell.dateStr;
+                              setSelectedDateStr(newSelected);
+                              setSelectedDay(newSelected ? cell.dayNum : null);
                               setSelectedWeek(null);
                             }}
-                            className={`cal-day-cell aspect-square rounded-xl border flex flex-col justify-between p-2 cursor-pointer transition-all ${cellTierClass}`}
-                            title={`${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${cell.dayNum} de ${monthName}`}
+                            className={`cal-day-cell aspect-square rounded-xl border flex flex-col justify-between p-2 cursor-pointer transition-all ${cellTierClass} ${adjacentStyle}`}
+                            title={cell.isAdjacentMonth 
+                              ? `${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${formatBrDate(cell.dateStr)} (Mês ${cell.monthLabel} - conta na semana)`
+                              : `${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${cell.dayNum} de ${monthName}`
+                            }
                           >
-                            <span className="cal-day-number text-[11px] font-mono leading-none font-bold">
-                              {cell.dayNum}
-                            </span>
+                            <div className="flex items-center justify-between w-full">
+                              <span className={`cal-day-number text-[11px] font-mono leading-none font-bold ${cell.isAdjacentMonth ? 'text-amber-400/90' : ''}`}>
+                                {cell.dayNum}
+                              </span>
+                              {cell.isAdjacentMonth && cell.monthLabel && (
+                                <span className="text-[8px] uppercase font-black text-amber-400/90 px-1 rounded bg-amber-500/10">
+                                  {cell.monthLabel}
+                                </span>
+                              )}
+                            </div>
                             
                             {hasEntries ? (
                               <span className="cal-count text-[10px] font-mono tracking-tighter self-end leading-none font-bold">
@@ -1216,14 +1318,17 @@ export default function ProductMovements({
                     <div className="h-72 w-full flex items-end gap-1.5 pt-12 border-b border-slate-800 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950 pb-2 px-1">
                       {dailyCounts.map((val, idx) => {
                         const dayNum = idx + 1;
+                        const dateStr = `${selectedYear}-${String(selectedMonthIdx + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                         const heightPercent = maxDailyCount > 0 ? Math.max(6, (val / maxDailyCount) * 75) : 6;
-                        const isSelected = selectedDay === dayNum;
+                        const isSelected = selectedDateStr === dateStr || (selectedDay === dayNum && !selectedDateStr);
 
                         return (
                           <div 
                             key={idx} 
                             onClick={() => {
-                              setSelectedDay(isSelected ? null : dayNum);
+                              const newSelected = isSelected ? null : dateStr;
+                              setSelectedDateStr(newSelected);
+                              setSelectedDay(newSelected ? dayNum : null);
                               setSelectedWeek(null);
                             }}
                             className="flex-1 min-w-[16px] max-w-[28px] flex flex-col items-center group relative h-full justify-end cursor-pointer"
@@ -1274,9 +1379,26 @@ export default function ProductMovements({
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  {selectedDay !== null ? (
-                    <span>
-                      Exibindo produtos que deram entrada especificamente no <strong className="text-white">Dia {selectedDay} de {monthName}</strong>.
+                  {selectedDateStr ? (
+                    <span className="flex items-center flex-wrap gap-2">
+                      <span>
+                        Exibindo produtos que deram entrada especificamente no <strong className="text-white">{formatBrDate(selectedDateStr)}</strong>
+                        {selectedDateStr.substring(0, 7) !== selectedMonth && (
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Mês Adjacente ({selectedDateStr.substring(0, 7) < selectedMonth ? 'Anterior' : 'Seguinte'})
+                          </span>
+                        )}.
+                      </span>
+                      <button
+                        onClick={() => {
+                          const existingRec = extendedDailyInflows.find(r => r.date === selectedDateStr);
+                          handleOpenManualEntry(selectedDateStr, existingRec);
+                        }}
+                        className="text-xs text-blue-400 hover:text-blue-300 font-bold underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>{extendedDailyInflows.some(r => r.date === selectedDateStr) ? 'Editar Lançamento' : '+ Registrar Lançamento'}</span>
+                      </button>
                     </span>
                   ) : selectedWeek !== null && monthWeeks[selectedWeek] ? (
                     <span>
@@ -1291,10 +1413,11 @@ export default function ProductMovements({
               </div>
               
               <div className="flex items-center gap-2">
-                {(selectedDay !== null || selectedWeek !== null) && (
+                {(selectedDateStr !== null || selectedDay !== null || selectedWeek !== null) && (
                   <button
                     onClick={() => {
                       setSelectedDay(null);
+                      setSelectedDateStr(null);
                       setSelectedWeek(null);
                     }}
                     className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg text-xs font-bold border border-slate-700/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { BaseProduct } from '../types';
 import { parseCatalogExcelFile, downloadBaseCatalogTemplate } from '../utils/excelHelpers';
+import { GENERAL_CATEGORIES } from '../utils/categoryTaxonomy';
 
 interface ExcelBaseCatalogImportModalProps {
   isOpen: boolean;
@@ -421,13 +422,20 @@ export default function ExcelBaseCatalogImportModal({
                   <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
                     Categoria Padrão (Opcional)
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Informática / Beleza"
+                  <select
                     value={defaultCategory}
                     onChange={(e) => setDefaultCategory(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                  />
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  >
+                    <option value="">Não definir padrão</option>
+                    {GENERAL_CATEGORIES.map(g => (
+                      <optgroup key={g.id} label={`📂 ${g.name}`}>
+                        {g.subcategories.map(s => (
+                          <option key={s.id} value={s.name}>{s.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Default Brand & Apply */}

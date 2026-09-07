@@ -46,6 +46,8 @@ import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct } from '..
 import { exportStockInventoryToExcel } from '../utils/excelHelpers';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
+import { CategoryBadge } from './CategoryBadge';
+import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
 
 interface PhysicalStockProps {
   units: TriageUnit[];
@@ -500,8 +502,21 @@ export default function PhysicalStock({
     return Array.from(brandsSet).sort();
   }, [products, units]);
 
-  // Unique Categories from catalog products and units
-  const uniqueCategories = React.useMemo(() => {
+  // Category counts and grouped filter categories
+  const categoryCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    units.forEach(u => {
+      const bp = findBaseProduct(u, products);
+      if (bp?.category && bp.category.trim() && bp.category.trim() !== 'Todas') {
+        const cat = bp.category.trim();
+        counts[cat] = (counts[cat] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [units, products]);
+
+  // Grouped Categories with General Categories & Subcategories
+  const groupedFilterCategories = React.useMemo(() => {
     const categoriesSet = new Set<string>();
     products.forEach(p => {
       if (p.category && p.category.trim() && p.category.trim() !== 'Todas') {
@@ -514,8 +529,8 @@ export default function PhysicalStock({
         categoriesSet.add(bp.category.trim());
       }
     });
-    return Array.from(categoriesSet).sort();
-  }, [products, units]);
+    return buildGroupedFilterCategories(Array.from(categoriesSet), categoryCounts);
+  }, [products, units, categoryCounts]);
 
   const handleClearAllFilters = () => {
     setSearchTerm('');
@@ -551,11 +566,10 @@ export default function PhysicalStock({
       }
     }
 
-    // 2. Category filter
+    // 2. Category filter (hierárquico: Categoria Geral ou Subcategoria)
     if (selectedCategory !== 'Todas') {
-      const targetCategory = selectedCategory.trim().toLowerCase();
-      const unitCategory = (baseProd?.category || '').trim().toLowerCase();
-      if (unitCategory !== targetCategory) {
+      const unitCategory = baseProd?.category;
+      if (!checkCategoryFilterMatch(unitCategory, selectedCategory)) {
         return false;
       }
     }
@@ -1247,9 +1261,19 @@ export default function PhysicalStock({
                 }`}
                 id="select-filter-stock-category"
               >
-                <option value="Todas">Todas as Categorias ({uniqueCategories.length})</option>
-                {uniqueCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                <option value="Todas">Todas as Categorias</option>
+                {groupedFilterCategories.map(group => (
+                  <optgroup key={group.general.id} label={`📂 ${group.general.name}`}>
+                    {group.options.map(opt => (
+                      <option 
+                        key={opt.value} 
+                        value={opt.value}
+                        className={opt.isGeneralHeader ? 'font-bold text-emerald-400 bg-slate-900' : 'pl-4'}
+                      >
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -1531,10 +1555,7 @@ export default function PhysicalStock({
                               </span>
                             )}
                             {bCat && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title={`Categoria: ${bCat}`}>
-                                <Layers className="w-2.5 h-2.5" />
-                                <span>{bCat}</span>
-                              </span>
+                              <CategoryBadge category={bCat} size="xs" />
                             )}
                             {bVolt && bVolt !== 'N/A' && (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1" title={`Tensão: ${bVolt}`}>
@@ -1717,10 +1738,7 @@ export default function PhysicalStock({
                                 </span>
                               )}
                               {bCat && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1" title={`Categoria: ${bCat}`}>
-                                  <Layers className="w-2.5 h-2.5" />
-                                  <span>{bCat}</span>
-                                </span>
+                                <CategoryBadge category={bCat} size="xs" />
                               )}
                               {bVolt && bVolt !== 'N/A' && (
                                 <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1" title={`Tensão: ${bVolt}`}>

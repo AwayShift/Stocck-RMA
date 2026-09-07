@@ -353,13 +353,14 @@ export function groupRecordsByWeek(records: DailyInflowRecord[]): InflowWeekSumm
 
   sorted.forEach(rec => {
     const [y, m, d] = rec.date.split('-').map(Number);
-    const currDate = new Date(y, m - 1, d);
+    const currDate = new Date(y, m - 1, d, 12, 0, 0);
     
     // Find Monday of this week
     const dayOfWeek = currDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
     const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const monDate = new Date(currDate);
     monDate.setDate(currDate.getDate() + diffToMon);
+    monDate.setHours(12, 0, 0, 0);
     
     const monKey = `${monDate.getFullYear()}-${String(monDate.getMonth() + 1).padStart(2, '0')}-${String(monDate.getDate()).padStart(2, '0')}`;
     
@@ -374,9 +375,10 @@ export function groupRecordsByWeek(records: DailyInflowRecord[]): InflowWeekSumm
 
   Array.from(weekMap.entries()).forEach(([monKey, weekRecords]) => {
     const [my, mm, md] = monKey.split('-').map(Number);
-    const monDate = new Date(my, mm - 1, md);
+    const monDate = new Date(my, mm - 1, md, 12, 0, 0);
     const sunDate = new Date(monDate);
     sunDate.setDate(monDate.getDate() + 6);
+    sunDate.setHours(12, 0, 0, 0);
 
     const startStr = `${String(monDate.getDate()).padStart(2, '0')}/${String(monDate.getMonth() + 1).padStart(2, '0')}`;
     const endStr = `${String(sunDate.getDate()).padStart(2, '0')}/${String(sunDate.getMonth() + 1).padStart(2, '0')}/${sunDate.getFullYear()}`;
