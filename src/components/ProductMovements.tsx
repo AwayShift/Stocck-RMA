@@ -411,15 +411,42 @@ export default function ProductMovements({
     return extendedDailyInflows.filter(item => item.date.startsWith(selectedMonth));
   }, [extendedDailyInflows, selectedMonth]);
 
-  // Group daily inflows by week for the spreadsheet view, ensuring all days in the week cycle are accounted for
+  // Group daily inflows by week for the spreadsheet view, using monthWeeks to ensure exact week order and inclusion of adjacent month days
   const weekSummaries = useMemo(() => {
-    const allSummaries = groupRecordsByWeek(extendedDailyInflows);
-    // Retain only the weeks that belong to this month's calendar weeks
-    const validMonKeys = new Set(monthWeeks.map(w => w.startStr));
-    return allSummaries.filter(ws => validMonKeys.has(ws.startDate));
+    return groupRecordsByWeek(extendedDailyInflows, monthWeeks);
   }, [extendedDailyInflows, monthWeeks]);
 
-  // Total summary for selected month
+  // Grand totals across all weeks in the month (including days belonging to weekly cycles)
+  const weeksGrandTotal = useMemo(() => {
+    let totalRma = 0;
+    let totalEstoque = 0;
+    let totalOpenbox = 0;
+    let totalEs = 0;
+    let totalGeral = 0;
+
+    weekSummaries.forEach(w => {
+      totalRma += w.totalRma || 0;
+      totalEstoque += w.totalEstoque || 0;
+      totalOpenbox += w.totalOpenbox || 0;
+      totalEs += w.totalEs || 0;
+      totalGeral += w.totalWeek || 0;
+    });
+
+    const activeDaysInWeeks = weekSummaries.reduce((sum, w) => sum + w.records.length, 0);
+    const avgDailyWeeks = activeDaysInWeeks > 0 ? (totalGeral / activeDaysInWeeks).toFixed(1) : '0';
+
+    return {
+      totalRma,
+      totalEstoque,
+      totalOpenbox,
+      totalEs,
+      totalGeral,
+      activeDaysCount: activeDaysInWeeks,
+      avgDaily: avgDailyWeeks
+    };
+  }, [weekSummaries]);
+
+  // Total summary for selected month (strictly days starting with selectedMonth)
   const monthTotals = useMemo(() => {
     let totalRma = 0;
     let totalEstoque = 0;
@@ -467,15 +494,8 @@ export default function ProductMovements({
 
   // Compute entries per week based on weekSummaries directly, eliminating any divergence with the table
   const weeklyCounts = useMemo(() => {
-    const summaryMap = new Map<string, number>();
-    weekSummaries.forEach(ws => {
-      summaryMap.set(ws.startDate, ws.totalWeek);
-    });
-
-    return monthWeeks.map(week => {
-      return summaryMap.get(week.startStr) || 0;
-    });
-  }, [monthWeeks, weekSummaries]);
+    return weekSummaries.map(w => w.totalWeek);
+  }, [weekSummaries]);
 
   // Peak metrics
   const peakMetrics = useMemo(() => {
@@ -832,16 +852,20 @@ export default function ProductMovements({
             <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Entradas</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-emerald-400">{monthTotals.totalGeral}</span>
+                <span className="text-2xl font-black text-emerald-400">{weeksGrandTotal.totalGeral}</span>
                 <span className="text-[10px] text-slate-500 font-bold">un</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">{monthTotals.activeDaysCount} dias com entrada</span>
+              <span className="text-[10px] text-slate-500 mt-1">
+                {weeksGrandTotal.totalGeral !== monthTotals.totalGeral 
+                  ? `Semanas (${monthTotals.totalGeral} no mês civil)` 
+                  : `${weeksGrandTotal.activeDaysCount} dias registrados`}
+              </span>
             </div>
 
             <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">RMA (Triagem)</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-rose-400">{monthTotals.totalRma}</span>
+                <span className="text-2xl font-black text-rose-400">{weeksGrandTotal.totalRma}</span>
                 <span className="text-[10px] text-slate-500 font-bold">un</span>
               </div>
               <span className="text-[10px] text-slate-500 mt-1">Garantia / Devoluções</span>
@@ -850,7 +874,7 @@ export default function ProductMovements({
             <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estoque Geral</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-emerald-400">{monthTotals.totalEstoque}</span>
+                <span className="text-2xl font-black text-emerald-400">{weeksGrandTotal.totalEstoque}</span>
                 <span className="text-[10px] text-slate-500 font-bold">un</span>
               </div>
               <span className="text-[10px] text-slate-500 mt-1">Almoxarifado</span>
@@ -859,7 +883,7 @@ export default function ProductMovements({
             <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Openbox</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-amber-400">{monthTotals.totalOpenbox}</span>
+                <span className="text-2xl font-black text-amber-400">{weeksGrandTotal.totalOpenbox}</span>
                 <span className="text-[10px] text-slate-500 font-bold">un</span>
               </div>
               <span className="text-[10px] text-slate-500 mt-1">Reembalados / Testados</span>
@@ -868,7 +892,7 @@ export default function ProductMovements({
             <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ES (Espírito Santo)</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-purple-400">{monthTotals.totalEs}</span>
+                <span className="text-2xl font-black text-purple-400">{weeksGrandTotal.totalEs}</span>
                 <span className="text-[10px] text-slate-500 font-bold">un</span>
               </div>
               <span className="text-[10px] text-slate-500 mt-1">Filial Espírito Santo</span>
@@ -877,10 +901,10 @@ export default function ProductMovements({
             <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Média Diária</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-sky-400">{monthTotals.avgDaily}</span>
+                <span className="text-2xl font-black text-sky-400">{weeksGrandTotal.avgDaily}</span>
                 <span className="text-[10px] text-slate-500 font-bold">un/dia</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">No período ativo</span>
+              <span className="text-[10px] text-slate-500 mt-1">No ciclo das semanas</span>
             </div>
           </div>
 
@@ -1075,14 +1099,17 @@ export default function ProductMovements({
                     {/* Table Footer Grand Totals */}
                     <tr className="bg-slate-950 text-white font-black border-t-2 border-slate-700 text-xs">
                       <td className="py-4 px-4 uppercase tracking-wider">
-                        TOTAL GERAL DO MÊS ({monthName})
+                        <div className="flex flex-col">
+                          <span>TOTAL GERAL DAS SEMANAS</span>
+                          <span className="text-[10px] text-slate-400 font-normal">Ciclo semanal completo com dias adjacentes</span>
+                        </div>
                       </td>
-                      <td className="py-4 px-4 text-center font-mono text-rose-400 text-sm">{monthTotals.totalRma}</td>
-                      <td className="py-4 px-4 text-center font-mono text-emerald-400 text-sm">{monthTotals.totalEstoque}</td>
-                      <td className="py-4 px-4 text-center font-mono text-amber-400 text-sm">{monthTotals.totalOpenbox}</td>
-                      <td className="py-4 px-4 text-center font-mono text-purple-400 text-sm">{monthTotals.totalEs}</td>
-                      <td className="py-4 px-4 text-center font-mono text-emerald-400 text-base bg-slate-900">{monthTotals.totalGeral}</td>
-                      <td className="py-4 px-4 text-center font-mono text-sky-400 text-base bg-blue-950/40">{monthTotals.totalGeral}</td>
+                      <td className="py-4 px-4 text-center font-mono text-rose-400 text-sm">{weeksGrandTotal.totalRma}</td>
+                      <td className="py-4 px-4 text-center font-mono text-emerald-400 text-sm">{weeksGrandTotal.totalEstoque}</td>
+                      <td className="py-4 px-4 text-center font-mono text-amber-400 text-sm">{weeksGrandTotal.totalOpenbox}</td>
+                      <td className="py-4 px-4 text-center font-mono text-purple-400 text-sm">{weeksGrandTotal.totalEs}</td>
+                      <td className="py-4 px-4 text-center font-mono text-emerald-400 text-base bg-slate-900">{weeksGrandTotal.totalGeral}</td>
+                      <td className="py-4 px-4 text-center font-mono text-sky-400 text-base bg-blue-950/60 shadow-inner">{weeksGrandTotal.totalGeral}</td>
                       <td className="py-4 px-4 text-right">
                         {enableSpreadsheetExport && (
                           <button
@@ -1094,19 +1121,42 @@ export default function ProductMovements({
                         )}
                       </td>
                     </tr>
+
+                    {/* Secondary row if there are adjacent month days */}
+                    {weeksGrandTotal.totalGeral !== monthTotals.totalGeral && (
+                      <tr className="bg-slate-950/40 text-slate-400 border-t border-slate-800/80 text-[11px]">
+                        <td className="py-2.5 px-4 font-semibold text-slate-300">
+                          Mês Civil Estrito ({monthName})
+                        </td>
+                        <td className="py-2.5 px-4 text-center font-mono text-rose-400/80">{monthTotals.totalRma}</td>
+                        <td className="py-2.5 px-4 text-center font-mono text-emerald-400/80">{monthTotals.totalEstoque}</td>
+                        <td className="py-2.5 px-4 text-center font-mono text-amber-400/80">{monthTotals.totalOpenbox}</td>
+                        <td className="py-2.5 px-4 text-center font-mono text-purple-400/80">{monthTotals.totalEs}</td>
+                        <td className="py-2.5 px-4 text-center font-mono text-slate-200 bg-slate-900/60">{monthTotals.totalGeral}</td>
+                        <td className="py-2.5 px-4 text-center font-mono text-slate-400 bg-blue-950/20">
+                          {monthTotals.totalGeral}
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-[10px] text-amber-400">
+                          +{weeksGrandTotal.totalGeral - monthTotals.totalGeral} adj.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             )}
 
             {/* Explanatory note about complete week cycle */}
-            <div className="px-4 py-2.5 bg-slate-950/60 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-              <span>
-                * A contagem das semanas inclui todos os dias pertencentes ao ciclo semanal (mesmo de meses adjacentes), garantindo consistência total no fechamento semanal.
+            <div className="px-4 py-2.5 bg-slate-950/60 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 flex-wrap gap-2">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+                <span>A contagem das semanas inclui todos os dias pertencentes ao ciclo semanal (mesmo de meses adjacentes), garantindo que a soma semanal bata 100% com os registros diários.</span>
               </span>
-              <span className="font-mono text-[10px] text-slate-500">
-                Total consolidado do mês: {monthTotals.totalGeral} un
-              </span>
+              <div className="flex items-center gap-3 font-mono text-[11px]">
+                <span className="text-sky-300 font-bold">Total Ciclo Semanal: {weeksGrandTotal.totalGeral} un</span>
+                <span className="text-slate-500">|</span>
+                <span className="text-slate-400">Mês Civil: {monthTotals.totalGeral} un</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1185,16 +1235,20 @@ export default function ProductMovements({
               {/* Meta breakdown summary */}
               <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/40 p-3.5 rounded-xl border border-slate-800/50 shrink-0">
                 <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">Unidades no Mês</span>
+                  <span className="text-slate-400 block text-[10px] font-bold">Total nas Semanas</span>
                   <span className="font-extrabold text-white text-base mt-0.5 block">
-                    {monthTotals.totalGeral || monthUnits.length}
+                    {weeksGrandTotal.totalGeral}
                   </span>
+                  {weeksGrandTotal.totalGeral !== monthTotals.totalGeral && (
+                    <span className="text-[9px] text-slate-400">({monthTotals.totalGeral} no mês civil)</span>
+                  )}
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] font-bold">Média Semanal</span>
                   <span className="font-extrabold text-white text-base mt-0.5 block">
-                    {((monthTotals.totalGeral || monthUnits.length) / Math.max(monthWeeks.length, 1)).toFixed(1)} / sem
+                    {(weeksGrandTotal.totalGeral / Math.max(monthWeeks.length, 1)).toFixed(1)} / sem
                   </span>
+                  <span className="text-[9px] text-slate-400">Em {monthWeeks.length} semanas</span>
                 </div>
               </div>
             </div>

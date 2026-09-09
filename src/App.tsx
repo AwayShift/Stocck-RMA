@@ -26,7 +26,7 @@ import {
   Zap
 } from 'lucide-react';
 
-import { BaseProduct, TriageUnit, DailyInflowRecord, PendingItem, PendingStatusType, DestinationSectorType } from './types';
+import { BaseProduct, TriageUnit, DailyInflowRecord, PendingItem, PendingStatusType, DestinationSectorType, PlatformType } from './types';
 import { 
   getInitialBaseProducts,
   getMoreBaseProducts,
@@ -118,6 +118,20 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDbSwitcherModalOpen, setIsDbSwitcherModalOpen] = useState<boolean>(false);
+
+  // Shared filters when navigating from Dashboard to Stock
+  const [initialStockFilters, setInitialStockFilters] = useState<{
+    platform?: PlatformType | null;
+    sector?: DestinationSectorType | null;
+  } | null>(null);
+
+  const handleNavigateToStockWithFilters = (platform?: PlatformType | null, sector?: DestinationSectorType | null) => {
+    setInitialStockFilters({
+      platform: platform || null,
+      sector: sector || null
+    });
+    setActiveTab('stock');
+  };
 
   // System Settings: Spreadsheet Import & Export Visibility Toggles
   const [enableSpreadsheetImport, setEnableSpreadsheetImport] = useState<boolean>(() => {
@@ -835,7 +849,7 @@ export default function App() {
                 pendingItemsCount={pendingItems.filter(p => p.status !== 'Resolvido').length}
                 onViewUnit={handleViewUnitDetails}
                 onUpdateUnit={handleSaveTriage}
-                onNavigateToStock={() => setActiveTab('stock')}
+                onNavigateToStock={handleNavigateToStockWithFilters}
                 onNavigateToPending={() => setActiveTab('pending')}
               />
             )}
@@ -878,6 +892,8 @@ export default function App() {
                 enableSpreadsheetImport={enableSpreadsheetImport}
                 enableSpreadsheetExport={enableSpreadsheetExport}
                 isLight={isLight}
+                initialPlatformFilter={initialStockFilters?.platform}
+                initialSectorFilter={initialStockFilters?.sector}
               />
             )}
 

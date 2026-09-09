@@ -37,10 +37,13 @@ import {
   Zap,
   ShieldCheck,
   RefreshCw,
-  RotateCcw
+  RotateCcw,
+  Calendar,
+  ShoppingCart
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
 import ExcelImportModal from './ExcelImportModal';
+import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
 import { ImageZoomModal } from './ImageZoomModal';
 import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct } from '../utils/productImages';
 import { exportStockInventoryToExcel } from '../utils/excelHelpers';
@@ -48,6 +51,7 @@ import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 import { CategoryBadge } from './CategoryBadge';
 import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
+import { RichTextEditor } from './RichTextEditor';
 
 interface PhysicalStockProps {
   units: TriageUnit[];
@@ -62,6 +66,8 @@ interface PhysicalStockProps {
   enableSpreadsheetImport?: boolean;
   enableSpreadsheetExport?: boolean;
   isLight?: boolean;
+  initialPlatformFilter?: PlatformType | null;
+  initialSectorFilter?: DestinationSectorType | null;
 }
 
 export default function PhysicalStock({ 
@@ -76,12 +82,47 @@ export default function PhysicalStock({
   onSaveTriage,
   enableSpreadsheetImport = true,
   enableSpreadsheetExport = true,
-  isLight = false
+  isLight = false,
+  initialPlatformFilter,
+  initialSectorFilter
 }: PhysicalStockProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('Todas');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
+  const [selectedPlatform, setSelectedPlatform] = useState<string>(initialPlatformFilter || 'Todas');
   const [selectedVoltage, setSelectedVoltage] = useState<string>('Todas');
+  const [selectedDate, setSelectedDate] = useState<string>(''); // YYYY-MM-DD
+
+  // React to initial platform filter changes from Dashboard navigation
+  useEffect(() => {
+    if (initialPlatformFilter !== undefined) {
+      setSelectedPlatform(initialPlatformFilter || 'Todas');
+    }
+  }, [initialPlatformFilter]);
+
+  // React to initial sector filter changes from Dashboard navigation
+  useEffect(() => {
+    if (initialSectorFilter) {
+      setActiveTab(initialSectorFilter);
+    }
+  }, [initialSectorFilter]);
+
+  const getTodayIsoDate = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const getYesterdayIsoDate = () => {
+    const now = new Date();
+    now.setDate(now.getDate() - 1);
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
 
   const [activeTab, setActiveTab] = useState<'Todos' | DestinationSectorType | 'Baixado'>('Todos');
   const [visibleCount, setVisibleCount] = useState(20);
@@ -204,7 +245,10 @@ export default function PhysicalStock({
 
   const handleStartEdit = (unit: TriageUnit) => {
     setSelectedUnitId(unit.id);
-    setEditForm({ ...unit });
+    setEditForm({ 
+      ...unit,
+      platform: (unit.platform || '') as any,
+    });
     setOriginalUnitPhotos({
       photosProduct: [...(unit.photosProduct || [])],
       photosBox: [...(unit.photosBox || [])],
@@ -218,6 +262,9 @@ export default function PhysicalStock({
     setIsSavingEdit(true);
     try {
       let updatedForm = { ...editForm };
+      
+      // Ensure platform is properly set (or empty string/undefined)
+      updatedForm.platform = (editForm.platform || '') as any;
       
       // If destinationSector is 'Principal' and photos are empty, auto-reference base product images
       if (updatedForm.destinationSector === 'Principal' && (!updatedForm.photosProduct || updatedForm.photosProduct.length === 0)) {
@@ -536,7 +583,9 @@ export default function PhysicalStock({
     setSearchTerm('');
     setSelectedBrand('Todas');
     setSelectedCategory('Todas');
+    setSelectedPlatform('Todas');
     setSelectedVoltage('Todas');
+    setSelectedDate('');
     setFilterOnlyDuplicates(false);
   };
 
@@ -544,7 +593,9 @@ export default function PhysicalStock({
     searchTerm.trim() || 
     selectedBrand !== 'Todas' || 
     selectedCategory !== 'Todas' || 
+    selectedPlatform !== 'Todas' ||
     selectedVoltage !== 'Todas' || 
+    selectedDate !== '' ||
     filterOnlyDuplicates
   );
 
@@ -574,11 +625,44 @@ export default function PhysicalStock({
       }
     }
 
+    // 2.5 Platform filter
+    if (selectedPlatform !== 'Todas') {
+      const targetPlatform = selectedPlatform.trim().toLowerCase();
+      const unitPlatform = (unit.platform || '').trim().toLowerCase();
+      if (targetPlatform === 'sem plataforma') {
+        if (unitPlatform !== '' && unitPlatform !== 'sem plataforma' && unitPlatform !== 'não informada') {
+          return false;
+        }
+      } else if (unitPlatform !== targetPlatform) {
+        return false;
+      }
+    }
+
     // 3. Voltage filter
     if (selectedVoltage !== 'Todas') {
       const targetVoltage = selectedVoltage.trim().toLowerCase();
       const unitVoltage = (unit.baseProductVoltage || baseProd?.voltage || '').trim().toLowerCase();
       if (unitVoltage !== targetVoltage) {
+        return false;
+      }
+    }
+
+    // 3.5 Filter by registration date (dia em que o produto foi registrado)
+    if (selectedDate) {
+      if (!unit.createdAt) {
+        return false;
+      }
+      try {
+        const uDate = new Date(unit.createdAt);
+        const y = uDate.getFullYear();
+        const m = String(uDate.getMonth() + 1).padStart(2, '0');
+        const d = String(uDate.getDate()).padStart(2, '0');
+        const localDateStr = `${y}-${m}-${d}`;
+        const rawIsoDateStr = unit.createdAt.slice(0, 10);
+        if (localDateStr !== selectedDate && rawIsoDateStr !== selectedDate) {
+          return false;
+        }
+      } catch {
         return false;
       }
     }
@@ -600,7 +684,7 @@ export default function PhysicalStock({
       (unit.trackingCode || '').toLowerCase().includes(term) ||
       (unit.orderNumber || '').toLowerCase().includes(term) ||
       (unit.serialNumber || '').toLowerCase().includes(term) ||
-      (unit.destinationSector !== 'Openbox' && (unit.platform || '').toLowerCase().includes(term)) ||
+      (unit.platform || '').toLowerCase().includes(term) ||
       (unit.customerReason || '').toLowerCase().includes(term) ||
       (unit.destinationSector || '').toLowerCase().includes(term) ||
       (unit.notes || '').toLowerCase().includes(term) ||
@@ -617,10 +701,10 @@ export default function PhysicalStock({
     }
   });
 
-  // Reset pagination limit when search term, filters, sector tab, or duplicate filter changes
+  // Reset pagination limit when search term, filters, sector tab, date, or duplicate filter changes
   useEffect(() => {
     setVisibleCount(20);
-  }, [searchTerm, selectedBrand, selectedCategory, selectedVoltage, activeTab, filterOnlyDuplicates]);
+  }, [searchTerm, selectedBrand, selectedCategory, selectedVoltage, selectedDate, activeTab, filterOnlyDuplicates]);
 
   // Slice filtered units according to current pagination limit (20 items per page)
   const displayedUnits = filteredUnits.slice(0, visibleCount);
@@ -908,12 +992,12 @@ export default function PhysicalStock({
 
   const getPlatformStyle = (p: PlatformType) => {
     switch(p) {
-      case 'Mercado Livre': return 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20';
-      case 'Shopee': return 'bg-orange-500/10 text-orange-400 border border-orange-500/20';
-      case 'Amazon': return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
-      case 'Amazon Ta Novo': return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
-      case 'Kabum': return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
-      default: return 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20';
+      case 'Mercado Livre': return 'bg-yellow-500/10 text-amber-800 dark:text-yellow-400 border border-yellow-500/30 font-medium';
+      case 'Shopee': return 'bg-orange-500/10 text-orange-800 dark:text-orange-400 border border-orange-500/30 font-medium';
+      case 'Amazon': return 'bg-blue-500/10 text-sky-800 dark:text-blue-400 border border-blue-500/30 font-medium';
+      case 'Amazon Ta Novo': return 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-400 border border-emerald-500/30 font-medium';
+      case 'Kabum': return 'bg-indigo-500/10 text-indigo-800 dark:text-indigo-400 border border-indigo-500/30 font-medium';
+      default: return 'bg-zinc-500/10 text-zinc-800 dark:text-zinc-400 border border-zinc-500/20 font-medium';
     }
   };
 
@@ -1224,8 +1308,8 @@ export default function PhysicalStock({
             </div>
           </div>
 
-          {/* Filter Controls Row: Marcas, Categoria, Voltagem */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800" id="stock-filter-controls">
+          {/* Filter Controls Row: Marcas, Categoria, Plataforma, Voltagem, Data de Registro */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-3 border-t border-slate-800" id="stock-filter-controls">
             {/* 1. Filter by Marca (Brand) */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -1278,6 +1362,31 @@ export default function PhysicalStock({
               </select>
             </div>
 
+            {/* 2.5 Filter by Plataforma */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <ShoppingCart className={`w-3 h-3 ${selectedPlatform !== 'Todas' ? getPlatformFilterStyle(selectedPlatform).dotClasses.replace('bg-', 'text-') : 'text-sky-400'}`} />
+                <span>Plataforma</span>
+              </label>
+              <select
+                value={selectedPlatform}
+                onChange={(e) => setSelectedPlatform(e.target.value)}
+                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold focus:outline-none transition-colors truncate ${
+                  selectedPlatform !== 'Todas' ? getPlatformFilterStyle(selectedPlatform).selectClasses : 'border-slate-800 text-slate-200'
+                }`}
+                id="select-filter-stock-platform"
+              >
+                <option value="Todas">Todas as Plataformas</option>
+                <option value="Mercado Livre">Mercado Livre</option>
+                <option value="Shopee">Shopee</option>
+                <option value="Amazon">Amazon</option>
+                <option value="Amazon Ta Novo">Amazon Ta Novo</option>
+                <option value="Kabum">Kabum</option>
+                <option value="Outra">Outra</option>
+                <option value="Sem Plataforma">Sem Plataforma / Não Informada</option>
+              </select>
+            </div>
+
             {/* 3. Filter by Voltagem */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -1298,6 +1407,61 @@ export default function PhysicalStock({
                 <option value="Bivolt">Bivolt</option>
                 <option value="N/A">N/A (Pilhas / USB / Bateria)</option>
               </select>
+            </div>
+
+            {/* 4. Filter by Data de Registro */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="w-3 h-3 text-sky-450" />
+                  <span>Data de Registro</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(getTodayIsoDate())}
+                    className={`text-[9px] px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
+                      selectedDate === getTodayIsoDate()
+                        ? 'bg-sky-500 text-white'
+                        : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+                    }`}
+                    title="Filtrar produtos registrados hoje"
+                  >
+                    Hoje
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(getYesterdayIsoDate())}
+                    className={`text-[9px] px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
+                      selectedDate === getYesterdayIsoDate()
+                        ? 'bg-sky-500 text-white'
+                        : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+                    }`}
+                    title="Filtrar produtos registrados ontem"
+                  >
+                    Ontem
+                  </button>
+                  {selectedDate && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDate('')}
+                      className="text-[9px] px-1.5 py-0.5 rounded font-bold text-rose-400 hover:bg-rose-500/20 cursor-pointer transition-colors"
+                      title="Limpar filtro de data"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+              </div>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors [color-scheme:dark] ${
+                  selectedDate ? 'border-sky-500/50 bg-sky-950/20 text-sky-300' : 'border-slate-800'
+                }`}
+                id="input-filter-stock-date"
+              />
             </div>
           </div>
 
@@ -1357,6 +1521,46 @@ export default function PhysicalStock({
                     </button>
                   </span>
                 )}
+                {activeTab !== 'Todas' && (() => {
+                  const sStyle = getSectorFilterStyle(activeTab);
+                  return (
+                    <span 
+                      data-sector={activeTab}
+                      className={`px-2 py-0.5 rounded-md border font-medium flex items-center gap-1.5 shadow-xs filter-sector-badge ${sStyle.badgeClasses}`}
+                    >
+                      <span className={`w-2 h-2 rounded-full shrink-0 filter-badge-dot ${sStyle.dotClasses}`} />
+                      <span>Estoque: <strong>{sStyle.label}</strong></span>
+                      <button 
+                        type="button" 
+                        onClick={() => setActiveTab('Todas')} 
+                        className={`transition-colors cursor-pointer p-0.5 rounded ${sStyle.hoverBtnClasses}`}
+                        title="Ver todos os estoques"
+                      >
+                        <X className="w-2.5 h-2.5 stroke-[2.5]" />
+                      </button>
+                    </span>
+                  );
+                })()}
+                {selectedPlatform !== 'Todas' && (() => {
+                  const pStyle = getPlatformFilterStyle(selectedPlatform);
+                  return (
+                    <span 
+                      data-platform={selectedPlatform}
+                      className={`px-2 py-0.5 rounded-md border font-medium flex items-center gap-1.5 shadow-xs filter-platform-badge ${pStyle.badgeClasses}`}
+                    >
+                      <span className={`w-2 h-2 rounded-full shrink-0 filter-badge-dot ${pStyle.dotClasses}`} />
+                      <span>Plat: <strong>{selectedPlatform}</strong></span>
+                      <button 
+                        type="button" 
+                        onClick={() => setSelectedPlatform('Todas')} 
+                        className={`transition-colors cursor-pointer p-0.5 rounded ${pStyle.hoverBtnClasses}`}
+                        title="Remover filtro de Plataforma"
+                      >
+                        <X className="w-2.5 h-2.5 stroke-[2.5]" />
+                      </button>
+                    </span>
+                  );
+                })()}
                 {selectedVoltage !== 'Todas' && (
                   <span className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 font-medium flex items-center gap-1">
                     <span>Voltagem: {selectedVoltage}</span>
@@ -1365,6 +1569,20 @@ export default function PhysicalStock({
                       onClick={() => setSelectedVoltage('Todas')} 
                       className="hover:text-white transition-colors cursor-pointer"
                       title="Remover filtro de Voltagem"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
+                {selectedDate && (
+                  <span className="px-2 py-0.5 rounded-md bg-sky-500/10 border border-sky-500/30 text-sky-300 font-medium flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-sky-400" />
+                    <span>Data: {new Date(`${selectedDate}T12:00:00`).toLocaleDateString('pt-BR')}</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setSelectedDate('')} 
+                      className="hover:text-white transition-colors cursor-pointer"
+                      title="Remover filtro de Data"
                     >
                       <X className="w-2.5 h-2.5" />
                     </button>
@@ -1578,12 +1796,12 @@ export default function PhysicalStock({
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
-                    {unit.destinationSector !== 'Openbox' ? (
+                    {unit.platform ? (
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
                         {unit.platform}
                       </span>
                     ) : (
-                      <span className="text-[10px] text-slate-500 italic">Openbox</span>
+                      <span className="text-[10px] text-slate-500 italic">Sem Plataforma</span>
                     )}
                     <div className="flex items-center gap-2">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
@@ -1697,11 +1915,11 @@ export default function PhysicalStock({
                             <span>Serial Repetido</span>
                           </span>
                         )}
-                        {unit.destinationSector !== 'Openbox' && (
+                        {unit.platform ? (
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
                             {unit.platform}
                           </span>
-                        )}
+                        ) : null}
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
                           {unit.destinationSector}
                         </span>
@@ -2005,6 +2223,27 @@ export default function PhysicalStock({
                       </select>
                     </div>
 
+                    {/* Plataforma de Origem */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Plataforma de Origem
+                      </label>
+                      <select 
+                        value={editForm.platform || ''} 
+                        onChange={(e) => setEditForm({ ...editForm, platform: e.target.value as PlatformType })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                        id="edit-unit-platform"
+                      >
+                        <option value="">Sem Plataforma / Não informada</option>
+                        <option value="Mercado Livre">Mercado Livre</option>
+                        <option value="Shopee">Shopee</option>
+                        <option value="Amazon">Amazon</option>
+                        <option value="Amazon Ta Novo">Amazon Ta Novo</option>
+                        <option value="Kabum">Kabum</option>
+                        <option value="Outro">Outro</option>
+                      </select>
+                    </div>
+
                     <div>
                       <label className={`block text-[11px] font-bold mb-1 ${
                         editForm.destinationSector === 'Openbox' ? 'text-amber-400' : 'text-slate-300'
@@ -2131,12 +2370,11 @@ export default function PhysicalStock({
                     <FileText className="w-4 h-4" />
                     Laudo Técnico de Entrada / Descrição Detalhada
                   </h4>
-                  <textarea 
+                  <RichTextEditor 
                     value={editForm.notes || ''} 
-                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} 
-                    rows={4}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-sky-500 leading-relaxed" 
-                    placeholder="Adicione texto ou formato HTML do laudo..."
+                    onChange={(val) => setEditForm({ ...editForm, notes: val })} 
+                    placeholder="Adicione texto ou laudo com formatação (negrito, itálico, listas, tabelas, cores)..."
+                    minHeight="180px"
                   />
                 </div>
 
@@ -2856,12 +3094,17 @@ export default function PhysicalStock({
                 {/* Secondary metadata: Origin & Dates */}
                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-950/60 p-3.5 px-4 rounded-xl border border-slate-800/60">
                   <div className="flex flex-wrap items-center gap-3">
-                    {currentUnit.destinationSector !== 'Openbox' && (
+                    {currentUnit.platform ? (
                       <div className="flex items-center gap-2">
-                        <span className="text-slate-400 font-semibold text-[11px]">Canal:</span>
+                        <span className="text-slate-400 font-semibold text-[11px]">Plataforma / Canal:</span>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}>
                           {currentUnit.platform}
                         </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400 font-semibold text-[11px]">Plataforma / Canal:</span>
+                        <span className="text-slate-500 text-[10px] italic">Não informada</span>
                       </div>
                     )}
                     {currentUnit.orderNumber && (

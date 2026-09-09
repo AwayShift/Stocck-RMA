@@ -309,6 +309,43 @@ html.light .text-rose-400 {
   color: #be123c !important;
 }
 
+html.light .text-teal-100,
+html.light .text-teal-200,
+html.light .text-teal-300,
+html.light .text-teal-400 {
+  color: #0f766e !important;
+}
+html.light .text-teal-500,
+html.light .text-teal-600,
+html.light .text-teal-700,
+html.light .text-teal-800 {
+  color: #115e59 !important;
+}
+
+html.light .text-cyan-100,
+html.light .text-cyan-200,
+html.light .text-cyan-300,
+html.light .text-cyan-400 {
+  color: #0e7490 !important;
+}
+html.light .text-cyan-500,
+html.light .text-cyan-600 {
+  color: #155e75 !important;
+}
+
+html.light .text-orange-100,
+html.light .text-orange-200,
+html.light .text-orange-300,
+html.light .text-orange-400 {
+  color: #c2410c !important;
+}
+html.light .text-orange-500,
+html.light .text-orange-600,
+html.light .text-orange-700,
+html.light .text-orange-800 {
+  color: #9a3412 !important;
+}
+
 /* Badge & Card backgrounds in Light Mode */
 html.light .bg-emerald-950,
 html.light .bg-emerald-950\/95,
@@ -327,6 +364,40 @@ html.light .bg-emerald-500\/20 {
   border-color: #a7f3d0 !important;
 }
 
+html.light .bg-teal-950,
+html.light .bg-teal-950\/95,
+html.light .bg-teal-950\/90,
+html.light .bg-teal-950\/80,
+html.light .bg-teal-950\/70,
+html.light .bg-teal-950\/60,
+html.light .bg-teal-950\/50,
+html.light .bg-teal-950\/40,
+html.light .bg-teal-950\/30,
+html.light .bg-teal-950\/20,
+html.light .bg-teal-500\/10,
+html.light .bg-teal-500\/15,
+html.light .bg-teal-500\/20 {
+  background-color: #f0fdfa !important;
+  border-color: #99f6e4 !important;
+}
+
+html.light .bg-orange-950,
+html.light .bg-orange-950\/95,
+html.light .bg-orange-950\/90,
+html.light .bg-orange-950\/80,
+html.light .bg-orange-950\/70,
+html.light .bg-orange-950\/60,
+html.light .bg-orange-950\/50,
+html.light .bg-orange-950\/40,
+html.light .bg-orange-950\/30,
+html.light .bg-orange-950\/20,
+html.light .bg-orange-500\/10,
+html.light .bg-orange-500\/15,
+html.light .bg-orange-500\/20 {
+  background-color: #fff7ed !important;
+  border-color: #fed7aa !important;
+}
+
 html.light .bg-sky-500\/10,
 html.light .bg-sky-500\/15,
 html.light .bg-sky-500\/20 {
@@ -341,11 +412,23 @@ html.light .bg-indigo-500\/20 {
   border-color: #c7d2fe !important;
 }
 
+html.light .bg-amber-50,
+html.light .bg-yellow-50,
+html.light .bg-amber-950,
+html.light .bg-amber-950\/95,
+html.light .bg-amber-950\/90,
+html.light .bg-amber-950\/80,
+html.light .bg-amber-950\/70,
+html.light .bg-amber-950\/60,
+html.light .bg-amber-950\/50,
+html.light .bg-amber-950\/40,
+html.light .bg-amber-950\/30,
+html.light .bg-amber-950\/20,
 html.light .bg-amber-500\/10,
 html.light .bg-amber-500\/15,
 html.light .bg-amber-500\/20,
 html.light .bg-amber-500\/25 {
-  background-color: #fffbeb !important;
+  background-color: #fefce8 !important;
   border-color: #fde68a !important;
 }
 
@@ -354,6 +437,54 @@ html.light .border-amber-500\/25,
 html.light .border-amber-500\/30,
 html.light .border-amber-500\/40 {
   border-color: #fde68a !important;
+}
+
+/* Dashboard Sector KPI Cards: Normal vs Selected state */
+html.light #kpi-principal[data-selected="false"],
+html.light #kpi-openbox[data-selected="false"],
+html.light #kpi-conserto[data-selected="false"],
+html.light #kpi-principal:not(.kpi-card-selected),
+html.light #kpi-openbox:not(.kpi-card-selected),
+html.light #kpi-conserto:not(.kpi-card-selected) {
+  background-color: #ffffff !important;
+}
+
+/* Dashboard Sector KPI Cards: ONLY when selected (filtro aplicado) */
+html.light #kpi-principal[data-selected="true"],
+html.light #kpi-principal.kpi-card-selected {
+  background-color: #ecfdf5 !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.12) !important;
+}
+
+html.light #kpi-openbox[data-selected="true"],
+html.light #kpi-openbox.kpi-card-selected {
+  background-color: #fefce8 !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.15) !important;
+}
+
+html.light #kpi-conserto[data-selected="true"],
+html.light #kpi-conserto.kpi-card-selected {
+  background-color: #fff1f2 !important;
+  border-color: #f43f5e !important;
+  box-shadow: 0 4px 14px rgba(244, 63, 94, 0.12) !important;
+}
+
+/* Dark mode selected states */
+html.dark #kpi-principal.kpi-card-selected,
+html:not(.light) #kpi-principal.kpi-card-selected {
+  background-color: rgba(6, 78, 59, 0.35) !important;
+}
+
+html.dark #kpi-openbox.kpi-card-selected,
+html:not(.light) #kpi-openbox.kpi-card-selected {
+  background-color: rgba(120, 53, 15, 0.35) !important;
+}
+
+html.dark #kpi-conserto.kpi-card-selected,
+html:not(.light) #kpi-conserto.kpi-card-selected {
+  background-color: rgba(136, 19, 55, 0.35) !important;
 }
 
 html.light .bg-rose-950,
@@ -2933,6 +3064,298 @@ html.light #destination-sector-cards button.bg-rose-500\/15 {
   border-color: #e11d48 !important;
   color: #881337 !important;
   box-shadow: 0 1px 3px rgba(225, 29, 72, 0.2) !important;
+}
+
+/* ==========================================================================
+   Filter Badges: Platform & Sector Colors (High Contrast & Themes)
+   ========================================================================== */
+
+/* Active Filters Container in Light Mode */
+html.light #dashboard-active-filters-bar {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light #dashboard-active-filters-bar span.text-slate-400 {
+  color: #475569 !important;
+}
+
+/* --- PLATFORM FILTER COLORS IN LIGHT MODE --- */
+html.light .filter-platform-badge[data-platform="Mercado Livre"] {
+  background-color: #fefce8 !important;
+  border-color: #f59e0b !important;
+  color: #78350f !important;
+}
+html.light .filter-platform-badge[data-platform="Mercado Livre"] .filter-badge-dot {
+  background-color: #d97706 !important;
+}
+
+html.light .filter-platform-badge[data-platform="Shopee"] {
+  background-color: #fff7ed !important;
+  border-color: #f97316 !important;
+  color: #7c2d12 !important;
+}
+html.light .filter-platform-badge[data-platform="Shopee"] .filter-badge-dot {
+  background-color: #ea580c !important;
+}
+
+html.light .filter-platform-badge[data-platform="Amazon"] {
+  background-color: #f0f9ff !important;
+  border-color: #0284c7 !important;
+  color: #0369a1 !important;
+}
+html.light .filter-platform-badge[data-platform="Amazon"] .filter-badge-dot {
+  background-color: #0284c7 !important;
+}
+
+html.light .filter-platform-badge[data-platform="Amazon Ta Novo"] {
+  background-color: #ecfdf5 !important;
+  border-color: #059669 !important;
+  color: #065f46 !important;
+}
+html.light .filter-platform-badge[data-platform="Amazon Ta Novo"] .filter-badge-dot {
+  background-color: #059669 !important;
+}
+
+html.light .filter-platform-badge[data-platform="Kabum"] {
+  background-color: #eef2ff !important;
+  border-color: #6366f1 !important;
+  color: #3730a3 !important;
+}
+html.light .filter-platform-badge[data-platform="Kabum"] .filter-badge-dot {
+  background-color: #6366f1 !important;
+}
+
+html.light .filter-platform-badge[data-platform="Sem Plataforma"],
+html.light .filter-platform-badge[data-platform="Outra"] {
+  background-color: #faf5ff !important;
+  border-color: #a855f7 !important;
+  color: #581c87 !important;
+}
+html.light .filter-platform-badge[data-platform="Sem Plataforma"] .filter-badge-dot,
+html.light .filter-platform-badge[data-platform="Outra"] .filter-badge-dot {
+  background-color: #a855f7 !important;
+}
+
+/* --- SECTOR / STOCK FILTER COLORS IN LIGHT MODE --- */
+html.light .filter-sector-badge[data-sector="Principal"] {
+  background-color: #ecfdf5 !important;
+  border-color: #059669 !important;
+  color: #065f46 !important;
+}
+html.light .filter-sector-badge[data-sector="Principal"] .filter-badge-dot {
+  background-color: #059669 !important;
+}
+
+html.light .filter-sector-badge[data-sector="Openbox"] {
+  background-color: #fffbeb !important;
+  border-color: #d97706 !important;
+  color: #78350f !important;
+}
+html.light .filter-sector-badge[data-sector="Openbox"] .filter-badge-dot {
+  background-color: #d97706 !important;
+}
+
+html.light .filter-sector-badge[data-sector="RMA"] {
+  background-color: #fff1f2 !important;
+  border-color: #e11d48 !important;
+  color: #881337 !important;
+}
+html.light .filter-sector-badge[data-sector="RMA"] .filter-badge-dot {
+  background-color: #e11d48 !important;
+}
+
+html.light .filter-sector-badge[data-sector="Baixado"] {
+  background-color: #f1f5f9 !important;
+  border-color: #64748b !important;
+  color: #334155 !important;
+}
+html.light .filter-sector-badge[data-sector="Baixado"] .filter-badge-dot {
+  background-color: #64748b !important;
+}
+
+/* ==========================================================================
+   PLATFORM BREAKDOWN ROWS & FILTERING BADGES (LIGHT MODE)
+   ========================================================================== */
+html.light .platform-breakdown-row[data-selected="false"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .platform-breakdown-row[data-selected="false"]:hover {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Shopee Filter */
+html.light #platform-row-Shopee[data-selected="true"],
+html.light .platform-breakdown-row[data-platform="Shopee"][data-selected="true"] {
+  background-color: #fff7ed !important;
+  border-color: #f97316 !important;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15) !important;
+}
+
+html.light .platform-filtering-badge[data-platform="Shopee"],
+html.light #platform-row-Shopee .platform-filtering-badge {
+  background-color: #ffedd5 !important;
+  border-color: #f97316 !important;
+  color: #9a3412 !important;
+  font-weight: 800 !important;
+}
+
+/* Mercado Livre Filter */
+html.light #platform-row-Mercado-Livre[data-selected="true"],
+html.light .platform-breakdown-row[data-platform="Mercado Livre"][data-selected="true"] {
+  background-color: #fefce8 !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15) !important;
+}
+
+html.light .platform-filtering-badge[data-platform="Mercado Livre"],
+html.light #platform-row-Mercado-Livre .platform-filtering-badge {
+  background-color: #fef3c7 !important;
+  border-color: #f59e0b !important;
+  color: #78350f !important;
+  font-weight: 800 !important;
+}
+
+/* Amazon Filter */
+html.light #platform-row-Amazon[data-selected="true"],
+html.light .platform-breakdown-row[data-platform="Amazon"][data-selected="true"] {
+  background-color: #f0f9ff !important;
+  border-color: #0284c7 !important;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15) !important;
+}
+
+html.light .platform-filtering-badge[data-platform="Amazon"],
+html.light #platform-row-Amazon .platform-filtering-badge {
+  background-color: #e0f2fe !important;
+  border-color: #0284c7 !important;
+  color: #0369a1 !important;
+  font-weight: 800 !important;
+}
+
+/* Amazon Ta Novo Filter */
+html.light #platform-row-Amazon-Ta-Novo[data-selected="true"],
+html.light .platform-breakdown-row[data-platform="Amazon Ta Novo"][data-selected="true"] {
+  background-color: #ecfdf5 !important;
+  border-color: #059669 !important;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.15) !important;
+}
+
+html.light .platform-filtering-badge[data-platform="Amazon Ta Novo"],
+html.light #platform-row-Amazon-Ta-Novo .platform-filtering-badge {
+  background-color: #d1fae5 !important;
+  border-color: #059669 !important;
+  color: #065f46 !important;
+  font-weight: 800 !important;
+}
+
+/* Kabum Filter */
+html.light #platform-row-Kabum[data-selected="true"],
+html.light .platform-breakdown-row[data-platform="Kabum"][data-selected="true"] {
+  background-color: #eef2ff !important;
+  border-color: #4f46e5 !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15) !important;
+}
+
+html.light .platform-filtering-badge[data-platform="Kabum"],
+html.light #platform-row-Kabum .platform-filtering-badge {
+  background-color: #e0e7ff !important;
+  border-color: #4f46e5 !important;
+  color: #3730a3 !important;
+  font-weight: 800 !important;
+}
+
+/* Sem Plataforma / Outros Filter */
+html.light #platform-row-Sem-Plataforma[data-selected="true"],
+html.light .platform-breakdown-row[data-platform="Sem Plataforma"][data-selected="true"] {
+  background-color: #faf5ff !important;
+  border-color: #9333ea !important;
+  box-shadow: 0 4px 12px rgba(147, 51, 234, 0.15) !important;
+}
+
+html.light .platform-filtering-badge[data-platform="Sem Plataforma"],
+html.light #platform-row-Sem-Plataforma .platform-filtering-badge {
+  background-color: #f3e8ff !important;
+  border-color: #9333ea !important;
+  color: #6b21a8 !important;
+  font-weight: 800 !important;
+}
+
+/* ==========================================================================
+   CATEGORY BADGES CONTRAST (LIGHT MODE)
+   Specifically Casa, Ferramentas & Lazer and others
+   ========================================================================== */
+html.light .category-badge[data-category-id="casa_lazer"] {
+  background-color: #f0fdfa !important;
+  border-color: #5eead4 !important;
+  color: #0f766e !important;
+}
+
+html.light .category-badge[data-category-id="casa_lazer"] .category-dot {
+  background-color: #0d9488 !important;
+}
+
+html.light .category-badge[data-category-id="informatica"] {
+  background-color: #f0f9ff !important;
+  border-color: #7dd3fc !important;
+  color: #0369a1 !important;
+}
+
+html.light .category-badge[data-category-id="informatica"] .category-dot {
+  background-color: #0284c7 !important;
+}
+
+html.light .category-badge[data-category-id="audio_video"] {
+  background-color: #faf5ff !important;
+  border-color: #d8b4fe !important;
+  color: #7e22ce !important;
+}
+
+html.light .category-badge[data-category-id="audio_video"] .category-dot {
+  background-color: #9333ea !important;
+}
+
+html.light .category-badge[data-category-id="impressao_escritorio"] {
+  background-color: #eef2ff !important;
+  border-color: #c7d2fe !important;
+  color: #4338ca !important;
+}
+
+html.light .category-badge[data-category-id="impressao_escritorio"] .category-dot {
+  background-color: #4f46e5 !important;
+}
+
+html.light .category-badge[data-category-id="telefonia"] {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #047857 !important;
+}
+
+html.light .category-badge[data-category-id="telefonia"] .category-dot {
+  background-color: #059669 !important;
+}
+
+html.light .category-badge[data-category-id="energia_seguranca"] {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #be123c !important;
+}
+
+html.light .category-badge[data-category-id="energia_seguranca"] .category-dot {
+  background-color: #e11d48 !important;
+}
+
+html.light .category-badge[data-category-id="outros"] {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+html.light .category-badge[data-category-id="outros"] .category-dot {
+  background-color: #64748b !important;
 }
 
 

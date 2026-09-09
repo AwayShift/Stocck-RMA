@@ -343,9 +343,51 @@ export function exportInflowRecordsToExcel(records: DailyInflowRecord[], filenam
 }
 
 /**
- * Groups daily inflow records into weeks (Monday through Sunday) and computes weekly totals
+ * Groups daily inflow records into weeks (Monday through Sunday) and computes weekly totals.
+ * When referenceWeeks is provided (e.g. from month calendar), it guarantees that every week of the month
+ * is represented in exact order, capturing any days from adjacent months falling within that week's cycle.
  */
-export function groupRecordsByWeek(records: DailyInflowRecord[]): InflowWeekSummary[] {
+export function groupRecordsByWeek(
+  records: DailyInflowRecord[],
+  referenceWeeks?: { weekNumber: number; label: string; range: string; startStr: string; endStr: string }[]
+): InflowWeekSummary[] {
+  if (referenceWeeks && referenceWeeks.length > 0) {
+    const sortedRecords = [...records].sort((a, b) => a.date.localeCompare(b.date));
+
+    return referenceWeeks.map(refWeek => {
+      const weekRecords = sortedRecords.filter(
+        rec => rec.date >= refWeek.startStr && rec.date <= refWeek.endStr
+      );
+
+      let totalRma = 0;
+      let totalEstoque = 0;
+      let totalOpenbox = 0;
+      let totalEs = 0;
+      let totalWeek = 0;
+
+      weekRecords.forEach(r => {
+        totalRma += r.rma || 0;
+        totalEstoque += r.estoque || 0;
+        totalOpenbox += r.openbox || 0;
+        totalEs += r.es || 0;
+        totalWeek += r.totalDia || 0;
+      });
+
+      return {
+        weekNumber: refWeek.weekNumber,
+        weekLabel: `Semana ${refWeek.weekNumber} (${refWeek.range})`,
+        startDate: refWeek.startStr,
+        endDate: refWeek.endStr,
+        records: weekRecords,
+        totalWeek,
+        totalRma,
+        totalEstoque,
+        totalOpenbox,
+        totalEs
+      };
+    });
+  }
+
   if (records.length === 0) return [];
 
   const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));

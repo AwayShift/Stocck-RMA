@@ -143,10 +143,10 @@ export const GENERAL_CATEGORIES: GeneralCategoryDef[] = [
     iconName: 'Wrench',
     color: {
       bg: 'bg-teal-500/10',
-      text: 'text-teal-400',
+      text: 'text-teal-800 dark:text-teal-400',
       border: 'border-teal-500/30',
-      badge: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
-      dot: 'bg-teal-400',
+      badge: 'bg-teal-500/15 text-teal-800 dark:text-teal-300 border-teal-500/30',
+      dot: 'bg-teal-600 dark:bg-teal-400',
     },
     subcategories: [
       { id: 'construcao_hidr', name: 'Construção & Hidráulica', shortLabel: 'Construção & Hidráulica', description: 'Ferramentas Elétricas, Furadeiras, Parafusadeiras, Torneiras, Bombas...' },
