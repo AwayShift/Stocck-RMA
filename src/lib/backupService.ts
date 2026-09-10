@@ -22,7 +22,8 @@ import {
   CloudBackupRecord,
   AutoBackupScheduleConfig,
   BackupTriggerType,
-  PendingItem
+  PendingItem,
+  BackupStorageStats
 } from '../types';
 import { createAuditLog } from './dbService';
 import {
@@ -67,6 +68,7 @@ export const DEFAULT_AUTO_BACKUP_CONFIG: AutoBackupScheduleConfig = {
     dayOfMonth: 1, // Todo dia 1
     time: '19:00',
   },
+  retentionKeepCount: 15,
   lastRun: {},
   lastBackupStatus: 'Pronto para execuções programadas'
 };
@@ -637,7 +639,7 @@ export const subscribeToCloudBackups = (
 };
 
 /**
- * Delete a specific Cloud Snapshot from Supabase
+ * Delete a specific Cloud Snapshot from Supabase (cascades to all chunk records)
  */
 export const deleteCloudSnapshot = async (snapshotId: string): Promise<boolean> => {
   const supabase = getSupabaseClient();
@@ -650,9 +652,425 @@ export const deleteCloudSnapshot = async (snapshotId: string): Promise<boolean> 
       console.error('Error deleting snapshot from Supabase:', error);
       throw error;
     }
+
+    // Also purge any chunk records by ID prefix in case backup_id was null
+    try {
+      await supabase
+        .from('backup_snapshots')
+        .delete()
+        .ilike('id', `${snapshotId}_chunk_%`);
+    } catch (e) {
+      console.warn('Silent catch deleting chunk prefix:', e);
+    }
+
     return true;
   }
   return false;
+};
+
+export interface FetchCloudBackupsOptions {
+  page?: number;
+  pageSize?: number;
+  triggerType?: string;
+  search?: string;
+  sortBy?: 'newest' | 'oldest' | 'largest';
+  dateFilter?: 'all' | 'today' | 'last7days' | 'last30days' | 'older30days';
+}
+
+export interface PaginatedCloudBackupsResult {
+  snapshots: CloudBackupRecord[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+  totalFilteredBytes: number;
+}
+
+/**
+ * Get comprehensive backup storage statistics from Supabase
+ */
+export const getBackupStorageStats = async (): Promise<BackupStorageStats> => {
+  const supabase = getSupabaseClient();
+  const defaultStats: BackupStorageStats = {
+    totalRows: 0,
+    masterSnapshotsCount: 0,
+    chunkRowsCount: 0,
+    orphanChunksCount: 0,
+    totalSizeBytes: 0,
+    totalSizeFormatted: '0 MB',
+    quotaBytes: 500 * 1024 * 1024,
+    quotaFormatted: '500 MB',
+    percentQuotaUsed: 0
+  };
+
+  if (!supabase) return defaultStats;
+
+  try {
+    const [totalRowsRes, mastersRes, sizesRes] = await Promise.allSettled([
+      supabase.from('backup_snapshots').select('*', { count: 'exact', head: true }).neq('id', 'config_backup_schedule'),
+      supabase.from('backup_snapshots').select('*', { count: 'exact', head: true }).eq('chunk_index', 0).neq('id', 'config_backup_schedule'),
+      supabase.from('backup_snapshots').select('size_bytes, chunk_index').neq('id', 'config_backup_schedule')
+    ]);
+
+    const totalRows = totalRowsRes.status === 'fulfilled' ? (totalRowsRes.value.count || 0) : 0;
+    const masterCount = mastersRes.status === 'fulfilled' ? (mastersRes.value.count || 0) : 0;
+    const chunkRowsCount = Math.max(0, totalRows - masterCount);
+
+    let totalSizeBytes = 0;
+    if (sizesRes.status === 'fulfilled' && sizesRes.value.data) {
+      const rows = sizesRes.value.data;
+      const chunks = rows.filter((r: any) => (r.chunk_index || 0) > 0);
+      if (chunks.length > 0) {
+        totalSizeBytes = chunks.reduce((acc: number, r: any) => acc + (Number(r.size_bytes) || 0), 0);
+      } else {
+        const masters = rows.filter((r: any) => (r.chunk_index || 0) === 0);
+        totalSizeBytes = masters.reduce((acc: number, r: any) => acc + (Number(r.size_bytes) || 0), 0);
+      }
+    }
+
+    // Realistic baseline estimation if size_bytes wasn't stored on older chunk rows
+    if (totalSizeBytes === 0 && totalRows > 0) {
+      totalSizeBytes = totalRows * 80 * 1024;
+    }
+
+    const quotaBytes = 500 * 1024 * 1024; // 500 MB Free Tier
+    const percentQuotaUsed = Math.min(100, Math.round((totalSizeBytes / quotaBytes) * 100));
+
+    return {
+      totalRows,
+      masterSnapshotsCount: masterCount,
+      chunkRowsCount,
+      orphanChunksCount: 0,
+      totalSizeBytes,
+      totalSizeFormatted: formatBytes(totalSizeBytes),
+      quotaBytes,
+      quotaFormatted: '500 MB',
+      percentQuotaUsed
+    };
+  } catch (err) {
+    console.error('Error fetching backup storage stats:', err);
+    return defaultStats;
+  }
+};
+
+/**
+ * Fetch paginated cloud backups (metadata only for low network egress)
+ */
+export const fetchPaginatedCloudBackups = async (
+  options: FetchCloudBackupsOptions = {}
+): Promise<PaginatedCloudBackupsResult> => {
+  const supabase = getSupabaseClient();
+  const page = Math.max(1, options.page || 1);
+  const pageSize = Math.max(5, options.pageSize || 25);
+  const defaultEmpty: PaginatedCloudBackupsResult = {
+    snapshots: [],
+    totalCount: 0,
+    totalPages: 1,
+    page,
+    pageSize,
+    totalFilteredBytes: 0
+  };
+
+  if (!supabase) return defaultEmpty;
+
+  try {
+    let query = supabase
+      .from('backup_snapshots')
+      .select('id, backup_id, filename, created_at, created_by, trigger_type, checksum, total_items, file_size_formatted, size_bytes, chunk_index, total_chunks', { count: 'exact' })
+      .eq('chunk_index', 0)
+      .neq('id', 'config_backup_schedule');
+
+    if (options.triggerType && options.triggerType !== 'all') {
+      query = query.eq('trigger_type', options.triggerType);
+    }
+
+    if (options.search && options.search.trim()) {
+      const term = options.search.trim();
+      query = query.or(`filename.ilike.%${term}%,id.ilike.%${term}%,trigger_type.ilike.%${term}%`);
+    }
+
+    if (options.dateFilter && options.dateFilter !== 'all') {
+      const now = new Date();
+      if (options.dateFilter === 'today') {
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        query = query.gte('created_at', startOfToday);
+      } else if (options.dateFilter === 'last7days') {
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        query = query.gte('created_at', sevenDaysAgo);
+      } else if (options.dateFilter === 'last30days') {
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        query = query.gte('created_at', thirtyDaysAgo);
+      } else if (options.dateFilter === 'older30days') {
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        query = query.lt('created_at', thirtyDaysAgo);
+      }
+    }
+
+    if (options.sortBy === 'oldest') {
+      query = query.order('created_at', { ascending: true });
+    } else if (options.sortBy === 'largest') {
+      query = query.order('size_bytes', { ascending: false, nullsFirst: false });
+    } else {
+      query = query.order('created_at', { ascending: false });
+    }
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+
+    const { data, count, error } = await query;
+    if (error) {
+      console.error('Error fetching paginated backups:', error);
+      return defaultEmpty;
+    }
+
+    const totalCount = count || 0;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+    const triggerLabels: Record<string, string> = {
+      manual: 'Manual (Sob Demanda)',
+      hourly: 'Agendado (Por Hora)',
+      end_of_day: 'Final do Expediente',
+      weekly: 'Agendado (Semanal)',
+      monthly: 'Agendado (Mensal)'
+    };
+
+    let totalFilteredBytes = 0;
+
+    const snapshots: CloudBackupRecord[] = (data || []).map((r: any) => {
+      const createdDate = new Date(r.created_at);
+      const fileBytes = Number(r.size_bytes) || 0;
+      totalFilteredBytes += fileBytes;
+
+      return {
+        id: r.id,
+        title: r.trigger_type === 'manual'
+          ? `Snapshot Manual - ${formatFilenameTimestamp(createdDate)}`
+          : `Backup Automático (${triggerLabels[r.trigger_type] || r.trigger_type})`,
+        triggerType: r.trigger_type || 'manual',
+        triggerLabel: triggerLabels[r.trigger_type] || 'Manual',
+        createdAt: r.created_at,
+        createdAtFormatted: formatBrDate(createdDate),
+        createdBy: r.created_by || { name: 'Sistema' },
+        collectionsCount: {
+          products: 0,
+          triageUnits: 0,
+          dailyInflows: 0,
+          cases: 0,
+          logs: 0
+        },
+        fileSizeBytes: fileBytes,
+        fileSizeFormatted: r.file_size_formatted || formatBytes(fileBytes),
+        integrityHash: r.checksum || '',
+        payloadJson: '',
+        chunked: (r.total_chunks || 1) > 1,
+        totalChunks: r.total_chunks || 1,
+        status: 'active'
+      };
+    });
+
+    return {
+      snapshots,
+      totalCount,
+      totalPages,
+      page,
+      pageSize,
+      totalFilteredBytes
+    };
+  } catch (err) {
+    console.error('Error executing paginated backups query:', err);
+    return defaultEmpty;
+  }
+};
+
+/**
+ * Bulk delete cloud snapshots and their corresponding chunks in safe batches
+ */
+export const bulkDeleteCloudSnapshots = async (
+  snapshotIds: string[],
+  onProgress?: (deleted: number, total: number) => void
+): Promise<{ success: boolean; deletedCount: number }> => {
+  const supabase = getSupabaseClient();
+  if (!supabase || snapshotIds.length === 0) return { success: true, deletedCount: 0 };
+
+  const BATCH_SIZE = 25;
+  let deletedCount = 0;
+
+  for (let i = 0; i < snapshotIds.length; i += BATCH_SIZE) {
+    const batch = snapshotIds.slice(i, i + BATCH_SIZE);
+
+    try {
+      // 1. Delete master rows
+      await supabase
+        .from('backup_snapshots')
+        .delete()
+        .in('id', batch);
+
+      // 2. Delete chunk rows by backup_id
+      await supabase
+        .from('backup_snapshots')
+        .delete()
+        .in('backup_id', batch);
+
+      // 3. Clean any chunk rows with id prefix
+      for (const id of batch) {
+        await supabase
+          .from('backup_snapshots')
+          .delete()
+          .ilike('id', `${id}_chunk_%`);
+      }
+    } catch (batchErr) {
+      console.warn('Error deleting batch of snapshots:', batchErr);
+    }
+
+    deletedCount += batch.length;
+    onProgress?.(deletedCount, snapshotIds.length);
+  }
+
+  return { success: true, deletedCount };
+};
+
+/**
+ * Detect and purge orphan chunks that have no corresponding master snapshot
+ */
+export const purgeOrphanBackupChunks = async (
+  onProgress?: (purged: number, total: number) => void
+): Promise<{ success: boolean; purgedCount: number }> => {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { success: true, purgedCount: 0 };
+
+  try {
+    const { data: masters } = await supabase
+      .from('backup_snapshots')
+      .select('id')
+      .eq('chunk_index', 0);
+
+    const masterIdSet = new Set((masters || []).map(m => m.id));
+
+    const { data: chunks } = await supabase
+      .from('backup_snapshots')
+      .select('id, backup_id')
+      .gt('chunk_index', 0)
+      .limit(3000);
+
+    if (!chunks || chunks.length === 0) {
+      return { success: true, purgedCount: 0 };
+    }
+
+    const orphanIds = chunks
+      .filter(c => {
+        if (!c.backup_id) {
+          const prefix = c.id.split('_chunk_')[0];
+          return !masterIdSet.has(prefix);
+        }
+        return !masterIdSet.has(c.backup_id);
+      })
+      .map(c => c.id);
+
+    if (orphanIds.length === 0) {
+      return { success: true, purgedCount: 0 };
+    }
+
+    let purgedCount = 0;
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < orphanIds.length; i += BATCH_SIZE) {
+      const batch = orphanIds.slice(i, i + BATCH_SIZE);
+      await supabase.from('backup_snapshots').delete().in('id', batch);
+      purgedCount += batch.length;
+      onProgress?.(purgedCount, orphanIds.length);
+    }
+
+    return { success: true, purgedCount };
+  } catch (err) {
+    console.error('Error purging orphan chunks:', err);
+    return { success: false, purgedCount: 0 };
+  }
+};
+
+export type QuickCleanupPolicy = 
+  | 'keep_latest_5'
+  | 'keep_latest_10'
+  | 'older_than_7_days'
+  | 'older_than_30_days'
+  | 'hourly_only'
+  | 'all_except_latest'
+  | 'delete_all';
+
+/**
+ * Execute 1-click quick cleanup rules to free database space instantly
+ */
+export const quickCleanupBackups = async (
+  policy: QuickCleanupPolicy,
+  onProgress?: (processed: number, total: number) => void
+): Promise<{ success: boolean; deletedCount: number; message: string }> => {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { success: false, deletedCount: 0, message: 'Supabase não conectado' };
+
+  try {
+    if (policy === 'delete_all') {
+      const { error } = await supabase
+        .from('backup_snapshots')
+        .delete()
+        .neq('id', 'config_backup_schedule');
+
+      if (error) throw error;
+      return { success: true, deletedCount: 9999, message: 'Todos os backups e fragmentos foram eliminados do Supabase.' };
+    }
+
+    let query = supabase
+      .from('backup_snapshots')
+      .select('id, created_at, trigger_type')
+      .eq('chunk_index', 0)
+      .neq('id', 'config_backup_schedule')
+      .order('created_at', { ascending: false });
+
+    if (policy === 'hourly_only') {
+      query = query.eq('trigger_type', 'hourly');
+    }
+
+    const { data: masters, error } = await query;
+    if (error) throw error;
+
+    if (!masters || masters.length === 0) {
+      return { success: true, deletedCount: 0, message: 'Nenhum backup encontrado para a regra selecionada.' };
+    }
+
+    let idsToDelete: string[] = [];
+
+    if (policy === 'keep_latest_5') {
+      idsToDelete = masters.slice(5).map(m => m.id);
+    } else if (policy === 'keep_latest_10') {
+      idsToDelete = masters.slice(10).map(m => m.id);
+    } else if (policy === 'all_except_latest') {
+      idsToDelete = masters.slice(1).map(m => m.id);
+    } else if (policy === 'hourly_only') {
+      idsToDelete = masters.map(m => m.id);
+    } else if (policy === 'older_than_7_days') {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      idsToDelete = masters
+        .filter(m => new Date(m.created_at).getTime() < sevenDaysAgo)
+        .map(m => m.id);
+    } else if (policy === 'older_than_30_days') {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      idsToDelete = masters
+        .filter(m => new Date(m.created_at).getTime() < thirtyDaysAgo)
+        .map(m => m.id);
+    }
+
+    if (idsToDelete.length === 0) {
+      return { success: true, deletedCount: 0, message: 'Nenhum backup precisou ser excluído (limite já respeitado).' };
+    }
+
+    const res = await bulkDeleteCloudSnapshots(idsToDelete, onProgress);
+    return {
+      success: true,
+      deletedCount: res.deletedCount,
+      message: `${res.deletedCount} ponto(s) de backup e todos os seus fragmentos foram removidos com sucesso.`
+    };
+  } catch (err: any) {
+    console.error('Error running quick cleanup:', err);
+    return { success: false, deletedCount: 0, message: err.message || 'Erro ao executar limpeza.' };
+  }
 };
 
 /**
@@ -1023,6 +1441,11 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
     if (hoursDiff >= config.hourly.intervalHours) {
       localStorage.setItem(mutexKey, String(Date.now()));
       const res = await createCloudSnapshot('hourly', undefined, userInfo);
+      config.lastRun = config.lastRun || {};
+      config.lastRun.hourly = now.toISOString();
+      config.lastBackupStatus = `Último backup por hora executado em ${formatBrDate(now)}`;
+      await saveAutoBackupConfig(config);
+      await triggerAutoPrune(config.retentionKeepCount || 15);
       return { triggered: true, type: 'hourly', snapshotId: res.snapshot.id };
     }
   }
@@ -1039,6 +1462,11 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
     if (isAfterTarget && lastEodDate !== todayYmd) {
       localStorage.setItem(mutexKey, String(Date.now()));
       const res = await createCloudSnapshot('end_of_day', undefined, userInfo);
+      config.lastRun = config.lastRun || {};
+      config.lastRun.endOfDay = now.toISOString();
+      config.lastBackupStatus = `Backup de fim do expediente executado em ${formatBrDate(now)}`;
+      await saveAutoBackupConfig(config);
+      await triggerAutoPrune(config.retentionKeepCount || 15);
       return { triggered: true, type: 'end_of_day', snapshotId: res.snapshot.id };
     }
   }
@@ -1056,6 +1484,11 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
     if (isTargetDay && isAfterTime && lastWkDate !== todayYmd) {
       localStorage.setItem(mutexKey, String(Date.now()));
       const res = await createCloudSnapshot('weekly', undefined, userInfo);
+      config.lastRun = config.lastRun || {};
+      config.lastRun.weekly = now.toISOString();
+      config.lastBackupStatus = `Backup semanal executado em ${formatBrDate(now)}`;
+      await saveAutoBackupConfig(config);
+      await triggerAutoPrune(config.retentionKeepCount || 15);
       return { triggered: true, type: 'weekly', snapshotId: res.snapshot.id };
     }
   }
@@ -1074,9 +1507,35 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
     if (isTargetDay && isAfterTime && lastMoMonth !== currentMonthPrefix) {
       localStorage.setItem(mutexKey, String(Date.now()));
       const res = await createCloudSnapshot('monthly', undefined, userInfo);
+      config.lastRun = config.lastRun || {};
+      config.lastRun.monthly = now.toISOString();
+      config.lastBackupStatus = `Backup mensal executado em ${formatBrDate(now)}`;
+      await saveAutoBackupConfig(config);
+      await triggerAutoPrune(config.retentionKeepCount || 15);
       return { triggered: true, type: 'monthly', snapshotId: res.snapshot.id };
     }
   }
 
   return { triggered: false };
+};
+
+const triggerAutoPrune = async (keepCount: number) => {
+  try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const { data: oldAutomated } = await supabase
+      .from('backup_snapshots')
+      .select('id')
+      .eq('chunk_index', 0)
+      .neq('trigger_type', 'manual')
+      .neq('id', 'config_backup_schedule')
+      .order('created_at', { ascending: false })
+      .range(keepCount, keepCount + 50);
+
+    if (oldAutomated && oldAutomated.length > 0) {
+      await bulkDeleteCloudSnapshots(oldAutomated.map((r: any) => r.id));
+    }
+  } catch (err) {
+    console.warn('Silent catch during triggerAutoPrune:', err);
+  }
 };

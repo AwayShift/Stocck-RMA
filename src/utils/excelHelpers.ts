@@ -349,12 +349,20 @@ export function exportInflowRecordsToExcel(records: DailyInflowRecord[], filenam
  */
 export function groupRecordsByWeek(
   records: DailyInflowRecord[],
-  referenceWeeks?: { weekNumber: number; label: string; range: string; startStr: string; endStr: string }[]
+  referenceWeeks?: { 
+    weekNumber?: number; 
+    index?: number;
+    title?: string;
+    label?: string; 
+    range?: string; 
+    startStr: string; 
+    endStr: string 
+  }[]
 ): InflowWeekSummary[] {
   if (referenceWeeks && referenceWeeks.length > 0) {
     const sortedRecords = [...records].sort((a, b) => a.date.localeCompare(b.date));
 
-    return referenceWeeks.map(refWeek => {
+    return referenceWeeks.map((refWeek, idx) => {
       const weekRecords = sortedRecords.filter(
         rec => rec.date >= refWeek.startStr && rec.date <= refWeek.endStr
       );
@@ -373,9 +381,28 @@ export function groupRecordsByWeek(
         totalWeek += r.totalDia || 0;
       });
 
+      // Safely resolve the week number without undefined
+      const weekNum = (typeof refWeek.weekNumber === 'number' && !isNaN(refWeek.weekNumber) && refWeek.weekNumber > 0)
+        ? refWeek.weekNumber
+        : ((typeof refWeek.index === 'number' && !isNaN(refWeek.index)) ? refWeek.index + 1 : idx + 1);
+
+      // Determine clean week label without any 'undefined' strings
+      let weekLabel = '';
+      const validTitle = refWeek.title && refWeek.title !== 'undefined' && !refWeek.title.includes('undefined');
+      const validLabel = refWeek.label && refWeek.label !== 'undefined' && !refWeek.label.includes('undefined');
+      const validRange = refWeek.range && refWeek.range !== 'undefined' && !refWeek.range.includes('undefined');
+
+      if (validTitle) {
+        weekLabel = validRange ? `${refWeek.title} (${refWeek.range})` : (refWeek.title as string);
+      } else if (validLabel) {
+        weekLabel = refWeek.label as string;
+      } else {
+        weekLabel = validRange ? `Semana ${weekNum} (${refWeek.range})` : `Semana ${weekNum}`;
+      }
+
       return {
-        weekNumber: refWeek.weekNumber,
-        weekLabel: `Semana ${refWeek.weekNumber} (${refWeek.range})`,
+        weekNumber: weekNum,
+        weekLabel,
         startDate: refWeek.startStr,
         endDate: refWeek.endStr,
         records: weekRecords,
@@ -439,9 +466,10 @@ export function groupRecordsByWeek(
       totalWeek += r.totalDia;
     });
 
+    const currentNum = weekCounter++;
     summaries.push({
-      weekNumber: weekCounter++,
-      weekLabel: `Semana (${startStr} a ${endStr})`,
+      weekNumber: currentNum,
+      weekLabel: `Semana ${currentNum} (${startStr} a ${endStr})`,
       startDate: monKey,
       endDate: `${sunDate.getFullYear()}-${String(sunDate.getMonth() + 1).padStart(2, '0')}-${String(sunDate.getDate()).padStart(2, '0')}`,
       records: weekRecords,

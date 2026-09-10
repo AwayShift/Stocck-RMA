@@ -164,13 +164,22 @@ html.light button.bg-rose-600,
 html.light button.bg-rose-500,
 html.light button.bg-blue-600,
 html.light button.bg-blue-500,
+html.light button.bg-amber-600,
+html.light button.bg-amber-500,
+html.light button.bg-orange-600,
+html.light button.bg-orange-500,
 html.light a.bg-emerald-600,
 html.light a.bg-emerald-500,
 html.light a.bg-sky-600,
 html.light a.bg-sky-500,
+html.light a.bg-amber-600,
+html.light a.bg-amber-500,
 html.light .bg-sky-500.text-white,
 html.light .bg-emerald-500.text-white,
-html.light .bg-rose-500.text-white {
+html.light .bg-rose-500.text-white,
+html.light .bg-amber-600.text-white,
+html.light .bg-amber-500.text-white,
+html.light #btn-confirm-restore-cloud-snapshot {
   color: #ffffff !important;
 }
 
@@ -183,7 +192,10 @@ html.light button.bg-indigo-500 *,
 html.light button.bg-rose-600 *,
 html.light button.bg-rose-500 *,
 html.light button.bg-blue-600 *,
-html.light button.bg-blue-500 * {
+html.light button.bg-blue-500 *,
+html.light button.bg-amber-600 *,
+html.light button.bg-amber-500 *,
+html.light #btn-confirm-restore-cloud-snapshot * {
   color: #ffffff !important;
 }
 
@@ -1500,6 +1512,74 @@ html.light #section-auto-schedule h5 {
 
 html.light #section-auto-schedule p {
   color: #475569 !important;
+}
+
+/* =========================================================================
+   BACKUP & RESTORATION MODAL LIGHT MODE CONTRAST
+   ========================================================================= */
+html.light #backup-modal {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25) !important;
+}
+
+html.light #cloud-restore-confirmation-panel {
+  background-color: #fffbeb !important;
+  border-color: #fcd34d !important;
+  color: #0f172a !important;
+}
+
+html.light #cloud-restore-confirmation-panel h4 {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+html.light #cloud-restore-confirmation-panel p {
+  color: #78350f !important;
+  font-weight: 600 !important;
+}
+
+html.light #btn-restore-mode-replace.bg-rose-50 {
+  background-color: #fff1f2 !important;
+  border-color: #fb7185 !important;
+}
+
+html.light #btn-restore-mode-replace.bg-rose-50 span {
+  color: #881337 !important;
+}
+
+html.light #btn-restore-mode-replace.bg-rose-50 p {
+  color: #9f1239 !important;
+}
+
+html.light #btn-restore-mode-merge.bg-emerald-50 {
+  background-color: #f0fdf4 !important;
+  border-color: #4ade80 !important;
+}
+
+html.light #btn-restore-mode-merge.bg-emerald-50 span {
+  color: #14532d !important;
+}
+
+html.light #btn-restore-mode-merge.bg-emerald-50 p {
+  color: #166534 !important;
+}
+
+html.light #btn-confirm-restore-cloud-snapshot {
+  background-color: #d97706 !important;
+  color: #ffffff !important;
+}
+
+html.light #btn-confirm-restore-cloud-snapshot:hover {
+  background-color: #b45309 !important;
+  color: #ffffff !important;
+}
+
+html.light #delete-snapshot-dialog-card {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
 }
 
 /* =========================================================================
@@ -3357,6 +3437,119 @@ html.light .category-badge[data-category-id="outros"] {
 html.light .category-badge[data-category-id="outros"] .category-dot {
   background-color: #64748b !important;
 }
+
+/* =========================================================
+   STOCCK-RMA: Fluxo de Entradas - Tabela Consolidada (Light Mode)
+   ========================================================= */
+html.light #inflow-consolidated-table-container {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light #inflow-table-header-bar {
+  background-color: #f8fafc !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+html.light #inflow-consolidated-table th {
+  color: #334155 !important;
+  background-color: #f1f5f9 !important;
+  border-bottom-color: #cbd5e1 !important;
+}
+
+html.light #inflow-consolidated-table th.text-rose-400,
+html.light #inflow-consolidated-table th.text-rose-600 {
+  color: #e11d48 !important;
+}
+
+html.light #inflow-consolidated-table th.text-emerald-400,
+html.light #inflow-consolidated-table th.text-emerald-600 {
+  color: #059669 !important;
+}
+
+html.light #inflow-consolidated-table th.text-amber-400,
+html.light #inflow-consolidated-table th.text-amber-600 {
+  color: #d97706 !important;
+}
+
+html.light #inflow-consolidated-table th.text-purple-400,
+html.light #inflow-consolidated-table th.text-purple-600 {
+  color: #9333ea !important;
+}
+
+html.light #inflow-consolidated-table .inflow-week-header-row {
+  background-color: #f1f5f9 !important;
+  border-top-color: #cbd5e1 !important;
+  border-bottom-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light #inflow-consolidated-table .inflow-week-header-row strong {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light #inflow-consolidated-table tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+
+html.light #inflow-consolidated-table td {
+  border-color: #e2e8f0 !important;
+}
+
+/* ==========================================================================
+   BACKUP STORAGE MANAGER MODAL - LIGHT MODE HIGH CONTRAST
+   ========================================================================== */
+html.light #backup-storage-manager-modal {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light #backup-storage-manager-modal table {
+  background-color: #ffffff !important;
+}
+
+html.light #backup-storage-manager-modal table th {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light #backup-storage-manager-modal table td {
+  color: #1e293b !important;
+}
+
+html.light #backup-storage-manager-modal table tr {
+  background-color: #ffffff !important;
+}
+
+html.light #backup-storage-manager-modal table tr:hover {
+  background-color: #f8fafc !important;
+}
+
+html.light #backup-storage-manager-modal table tr.bg-amber-100\/60,
+html.light #backup-storage-manager-modal table tr.bg-amber-50\/70 {
+  background-color: #fef3c7 !important;
+}
+
+/* RMA Entry Summary Modal in Light Mode */
+html.light #rma-summary-modal {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25) !important;
+}
+
+html.light #rma-summary-modal h3,
+html.light #rma-summary-modal h4 {
+  color: #0f172a !important;
+}
+
+
+
 
 
 

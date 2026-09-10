@@ -875,6 +875,7 @@ export default function App() {
                 units={triageUnits}
                 onSaveTriage={handleSaveTriage}
                 onNavigateToStock={() => setActiveTab('stock')}
+                isLight={isLight}
               />
             )}
 
@@ -977,6 +978,7 @@ export default function App() {
         userEmail={user?.email || ''}
         userName={userName}
         userRole={userRole}
+        isLight={isLight}
         currentCounts={{
           products: products.length,
           triageUnits: triageUnits.length,

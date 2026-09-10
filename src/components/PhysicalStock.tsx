@@ -2331,6 +2331,8 @@ export default function PhysicalStock({
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
                       >
                         <option value="Perfeita">Perfeita / Na Caixa</option>
+                        <option value="Usada">Usada</option>
+                        <option value="Sem Caixa">Sem Caixa</option>
                         <option value="Danificada">Danificada</option>
                         <option value="Sem Embalagem">Sem Embalagem / Fora da Caixa</option>
                       </select>

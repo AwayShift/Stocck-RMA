@@ -253,7 +253,7 @@ export default function Dashboard({
           </div>
           <div className="mt-5 flex items-center justify-between text-sm text-slate-400">
             <div>
-              <span className="text-emerald-400 font-bold">+{sectorCountsToday.Principal} hoje</span> direcionados
+              <span className="text-emerald-400 font-bold">+{sectorCountsToday.Principal} hoje</span>
             </div>
             <button
               type="button"
@@ -301,7 +301,7 @@ export default function Dashboard({
           </div>
           <div className="mt-5 flex items-center justify-between text-sm text-slate-400">
             <div>
-              <span className="text-amber-400 font-bold">+{sectorCountsToday.Openbox} hoje</span> marcas leves
+              <span className="text-amber-400 font-bold">+{sectorCountsToday.Openbox} hoje</span>
             </div>
             <button
               type="button"
@@ -349,7 +349,7 @@ export default function Dashboard({
           </div>
           <div className="mt-5 flex items-center justify-between text-sm text-slate-400">
             <div>
-              <span className="text-rose-400 font-bold">+{sectorCountsToday.RMA} hoje</span> falhas técnicas
+              <span className="text-rose-400 font-bold">+{sectorCountsToday.RMA} hoje</span>
             </div>
             <button
               type="button"

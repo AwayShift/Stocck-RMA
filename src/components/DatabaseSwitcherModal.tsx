@@ -27,8 +27,10 @@ import {
   EyeOff,
   ChevronDown,
   ChevronUp,
-  Cloud
+  Cloud,
+  Trash2
 } from 'lucide-react';
+import BackupStorageManagerModal from './BackupStorageManagerModal';
 import {
   getSupabaseClient,
   getSupabaseConfig,
@@ -100,6 +102,7 @@ export default function DatabaseSwitcherModal({
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
   const [activeViewMode, setActiveViewMode] = useState<'official' | 'tables'>('official');
+  const [showStorageManager, setShowStorageManager] = useState<boolean>(false);
   
   // PAT Token management state
   const [managementToken, setManagementToken] = useState<string>(() => getSupabaseManagementToken());
@@ -775,6 +778,23 @@ export default function DatabaseSwitcherModal({
                     style={{ width: `${Math.max(4, metrics.databaseSizePercent)}%` }}
                   />
                 </div>
+
+                {/* Storage Manager shortcut to free space */}
+                <div className="mt-3 pt-2 border-t border-[#262626] flex items-center justify-between">
+                  <span className="text-[11px] text-[#888888]">Ocupando espaço?</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowStorageManager(true);
+                    }}
+                    className="px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 rounded text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                    id="btn-db-switcher-open-storage-manager"
+                  >
+                    <Trash2 className="w-3 h-3 text-amber-400" />
+                    <span>Gerenciar Backups (~400MB)</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1023,12 +1043,26 @@ export default function DatabaseSwitcherModal({
                 Distribuição de Registros por Tabela do Banco
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {metrics.tableBreakdown.map((t, idx) => (
-                  <div key={idx} className="p-2.5 bg-[#0f1114] border border-[#222830] rounded-lg flex items-center justify-between text-xs">
-                    <span className="text-[#a0a0a0] font-mono">{t.name}</span>
-                    <strong className="text-white font-mono bg-[#1c222b] px-2 py-0.5 rounded">{t.count} linhas</strong>
-                  </div>
-                ))}
+                {metrics.tableBreakdown.map((t, idx) => {
+                  const isBackupTable = t.name.toLowerCase().includes('backup_snapshots');
+                  return (
+                    <div key={idx} className="p-2.5 bg-[#0f1114] border border-[#222830] rounded-lg flex items-center justify-between text-xs">
+                      <span className="text-[#a0a0a0] font-mono">{t.name}</span>
+                      <div className="flex items-center gap-2">
+                        <strong className="text-white font-mono bg-[#1c222b] px-2 py-0.5 rounded">{t.count} linhas</strong>
+                        {isBackupTable && (
+                          <button
+                            type="button"
+                            onClick={() => setShowStorageManager(true)}
+                            className="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                          >
+                            Limpar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1139,6 +1173,16 @@ export default function DatabaseSwitcherModal({
           </button>
         </div>
       </div>
+
+      {/* Dedicated Backup Storage Manager & Quick Cleanup Modal */}
+      <BackupStorageManagerModal
+        isOpen={showStorageManager}
+        onClose={() => {
+          setShowStorageManager(false);
+          fetchSupabaseUsage();
+        }}
+        isLight={false}
+      />
     </div>
   );
 }

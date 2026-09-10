@@ -24,7 +24,7 @@ export interface BaseProduct {
 export type PlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Amazon Ta Novo' | 'Kabum';
 export type CasePlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Amazon Ta Novo';
 export type DeviceStatusType = 'Novo' | 'Usado' | 'Danificado' | string;
-export type PackageStatusType = 'Perfeita' | 'Danificada' | 'Sem Embalagem' | string;
+export type PackageStatusType = 'Perfeita' | 'Usada' | 'Sem Caixa' | 'Danificada' | 'Sem Embalagem' | string;
 export type DestinationSectorType = 'Principal' | 'Openbox' | 'RMA';
 
 export interface CaseTracking {
@@ -268,7 +268,20 @@ export interface AutoBackupScheduleConfig {
     monthly?: string;
     manual?: string;
   };
+  retentionKeepCount?: number; // e.g. keep max 10 backups
   lastBackupStatus?: string;
+}
+
+export interface BackupStorageStats {
+  totalRows: number;
+  masterSnapshotsCount: number;
+  chunkRowsCount: number;
+  orphanChunksCount: number;
+  totalSizeBytes: number;
+  totalSizeFormatted: string;
+  quotaBytes: number;
+  quotaFormatted: string;
+  percentQuotaUsed: number;
 }
 
 export interface SystemBackupPayload {

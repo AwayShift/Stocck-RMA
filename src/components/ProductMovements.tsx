@@ -223,6 +223,7 @@ export default function ProductMovements({
   const monthWeeks = useMemo(() => {
     const weeks: {
       index: number;
+      weekNumber: number;
       title: string;
       range: string;
       startDate: Date;
@@ -264,9 +265,11 @@ export default function ProductMovements({
         rangeStr = `${String(startMonNum).padStart(2, '0')}/${m1} a ${String(endFriNum).padStart(2, '0')}/${m2}`;
       }
 
+      const currentNumber = weekNumber++;
       weeks.push({
         index: weeks.length,
-        title: `Semana ${weekNumber++}`,
+        weekNumber: currentNumber,
+        title: `Semana ${currentNumber}`,
         range: rangeStr,
         startDate: new Date(currMon),
         endDate: new Date(sunDate),
@@ -791,7 +794,11 @@ export default function ProductMovements({
           {enableSpreadsheetExport && (
             <button
               onClick={() => exportInflowRecordsToExcel(monthDailyInflows.length > 0 ? monthDailyInflows : dailyInflows, `fluxo_entradas_${selectedMonth}.xlsx`)}
-              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
+              className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+                isLight 
+                  ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300 shadow-sm' 
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
               title="Exportar dados para Excel (.xlsx)"
             >
               <Download className="w-3.5 h-3.5" />
@@ -802,7 +809,11 @@ export default function ProductMovements({
           {/* Action: Download Template */}
           <button
             onClick={downloadInflowTemplate}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs rounded-xl border border-slate-700 transition-all cursor-pointer"
+            className={`p-2 text-xs rounded-xl border transition-all cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border-slate-300 shadow-sm'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+            }`}
             title="Baixar Modelo de Planilha (.xlsx)"
           >
             <Download className="w-4 h-4" />
@@ -811,14 +822,18 @@ export default function ProductMovements({
       </div>
 
       {/* View Switcher Tabs */}
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-        <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+      <div className={`flex items-center justify-between border-b pb-3 ${
+        isLight ? 'border-slate-200' : 'border-slate-800/80'
+      }`}>
+        <div className={`flex items-center gap-2 p-1 rounded-xl border ${
+          isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-950 border-slate-800'
+        }`}>
           <button
             onClick={() => setActiveView('spreadsheet')}
             className={`px-4 py-2 rounded-lg text-xs font-black tracking-wide flex items-center gap-2 transition-all cursor-pointer ${
               activeView === 'spreadsheet'
                 ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
+                : (isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white')
             }`}
           >
             <TableIcon className="w-4 h-4" />
@@ -830,7 +845,7 @@ export default function ProductMovements({
             className={`px-4 py-2 rounded-lg text-xs font-black tracking-wide flex items-center gap-2 transition-all cursor-pointer ${
               activeView === 'visual'
                 ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
+                : (isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white')
             }`}
           >
             <BarChart3 className="w-4 h-4" />
@@ -838,9 +853,11 @@ export default function ProductMovements({
           </button>
         </div>
 
-        <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 font-medium">
-          <Calendar className="w-4 h-4 text-blue-400" />
-          <span>Período: <strong className="text-white">{monthName} / {selectedYear}</strong></span>
+        <div className={`hidden sm:flex items-center gap-2 text-xs font-medium ${
+          isLight ? 'text-slate-500' : 'text-slate-400'
+        }`}>
+          <Calendar className={`w-4 h-4 ${isLight ? 'text-blue-600' : 'text-blue-400'}`} />
+          <span>Período: <strong className={isLight ? 'text-slate-900 font-extrabold' : 'text-white'}>{monthName} / {selectedYear}</strong></span>
         </div>
       </div>
 
@@ -849,79 +866,127 @@ export default function ProductMovements({
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Monthly KPI Statistics */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Entradas</span>
+            <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
+            }`}>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                isLight ? 'text-slate-600' : 'text-slate-400'
+              }`}>Total Entradas</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-emerald-400">{weeksGrandTotal.totalGeral}</span>
-                <span className="text-[10px] text-slate-500 font-bold">un</span>
+                <span className={`text-2xl font-black ${
+                  isLight ? 'text-emerald-600' : 'text-emerald-400'
+                }`}>{weeksGrandTotal.totalGeral}</span>
+                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">
+              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
                 {weeksGrandTotal.totalGeral !== monthTotals.totalGeral 
                   ? `Semanas (${monthTotals.totalGeral} no mês civil)` 
                   : `${weeksGrandTotal.activeDaysCount} dias registrados`}
               </span>
             </div>
 
-            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">RMA (Triagem)</span>
+            <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
+            }`}>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                isLight ? 'text-slate-600' : 'text-slate-400'
+              }`}>RMA (Triagem)</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-rose-400">{weeksGrandTotal.totalRma}</span>
-                <span className="text-[10px] text-slate-500 font-bold">un</span>
+                <span className={`text-2xl font-black ${
+                  isLight ? 'text-rose-600' : 'text-rose-400'
+                }`}>{weeksGrandTotal.totalRma}</span>
+                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">Garantia / Devoluções</span>
+              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Garantia / Devoluções</span>
             </div>
 
-            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estoque Geral</span>
+            <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
+            }`}>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                isLight ? 'text-slate-600' : 'text-slate-400'
+              }`}>Estoque Geral</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-emerald-400">{weeksGrandTotal.totalEstoque}</span>
-                <span className="text-[10px] text-slate-500 font-bold">un</span>
+                <span className={`text-2xl font-black ${
+                  isLight ? 'text-emerald-600' : 'text-emerald-400'
+                }`}>{weeksGrandTotal.totalEstoque}</span>
+                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">Almoxarifado</span>
+              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Almoxarifado</span>
             </div>
 
-            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Openbox</span>
+            <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
+            }`}>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                isLight ? 'text-slate-600' : 'text-slate-400'
+              }`}>Openbox</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-amber-400">{weeksGrandTotal.totalOpenbox}</span>
-                <span className="text-[10px] text-slate-500 font-bold">un</span>
+                <span className={`text-2xl font-black ${
+                  isLight ? 'text-amber-600' : 'text-amber-400'
+                }`}>{weeksGrandTotal.totalOpenbox}</span>
+                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">Reembalados / Testados</span>
+              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Reembalados / Testados</span>
             </div>
 
-            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ES (Espírito Santo)</span>
+            <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
+            }`}>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                isLight ? 'text-slate-600' : 'text-slate-400'
+              }`}>ES (Espírito Santo)</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-purple-400">{weeksGrandTotal.totalEs}</span>
-                <span className="text-[10px] text-slate-500 font-bold">un</span>
+                <span className={`text-2xl font-black ${
+                  isLight ? 'text-purple-600' : 'text-purple-400'
+                }`}>{weeksGrandTotal.totalEs}</span>
+                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">Filial Espírito Santo</span>
+              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Filial Espírito Santo</span>
             </div>
 
-            <div className="bg-slate-900/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Média Diária</span>
+            <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
+            }`}>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                isLight ? 'text-slate-600' : 'text-slate-400'
+              }`}>Média Diária</span>
               <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-sky-400">{weeksGrandTotal.avgDaily}</span>
-                <span className="text-[10px] text-slate-500 font-bold">un/dia</span>
+                <span className={`text-2xl font-black ${
+                  isLight ? 'text-sky-600' : 'text-sky-400'
+                }`}>{weeksGrandTotal.avgDaily}</span>
+                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un/dia</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">No ciclo das semanas</span>
+              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>No ciclo das semanas</span>
             </div>
           </div>
 
           {/* Spreadsheet Table Container */}
-          <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-lg">
+          <div 
+            id="inflow-consolidated-table-container"
+            className={`border rounded-2xl overflow-hidden transition-colors ${
+              isLight 
+                ? 'bg-white border-slate-200 shadow-sm' 
+                : 'bg-slate-900/90 border-slate-800/80 shadow-lg'
+            }`}
+          >
             {/* Table Header Controls */}
-            <div className="p-4 bg-slate-950/80 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div 
+              id="inflow-table-header-bar"
+              className={`p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                isLight ? 'bg-slate-50/90 border-slate-200' : 'bg-slate-950/80 border-slate-800/80'
+              }`}
+            >
               <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-sm font-black text-white">
+                <FileSpreadsheet className={`w-5 h-5 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />
+                <h3 className={`text-sm font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
                   Planilha Consolidada de Entradas • {monthName} / {selectedYear}
                 </h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleOpenManualEntry()}
-                  className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Novo Lançamento Diário</span>
@@ -962,23 +1027,31 @@ export default function ProductMovements({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left text-xs border-collapse" id="inflow-consolidated-table">
                   {/* Table Column Headers */}
                   <thead>
-                    <tr className="bg-slate-950 text-slate-300 font-extrabold uppercase tracking-wider text-[11px] border-b border-slate-800">
+                    <tr className={`font-extrabold uppercase tracking-wider text-[11px] border-b ${
+                      isLight 
+                        ? 'bg-slate-100 text-slate-700 border-slate-300' 
+                        : 'bg-slate-950 text-slate-300 border-slate-800'
+                    }`}>
                       <th className="py-3 px-4 w-44">DATA</th>
-                      <th className="py-3 px-4 text-center w-24 text-rose-400">RMA</th>
-                      <th className="py-3 px-4 text-center w-28 text-emerald-400">ESTOQUE</th>
-                      <th className="py-3 px-4 text-center w-28 text-amber-400">OPENBOX</th>
-                      <th className="py-3 px-4 text-center w-24 text-purple-400">ES</th>
-                      <th className="py-3 px-4 text-center w-28 bg-slate-900/90 text-white font-black">TOTAL DIA</th>
-                      <th className="py-3 px-4 text-center w-36 bg-blue-950/40 text-sky-300 font-black">TOTAL SEMANA</th>
+                      <th className={`py-3 px-4 text-center w-24 ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>RMA</th>
+                      <th className={`py-3 px-4 text-center w-28 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>ESTOQUE</th>
+                      <th className={`py-3 px-4 text-center w-28 ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>OPENBOX</th>
+                      <th className={`py-3 px-4 text-center w-24 ${isLight ? 'text-purple-600' : 'text-purple-400'}`}>ES</th>
+                      <th className={`py-3 px-4 text-center w-28 font-black ${
+                        isLight ? 'bg-slate-200/80 text-slate-900 border-x border-slate-300' : 'bg-slate-900/90 text-white'
+                      }`}>TOTAL DIA</th>
+                      <th className={`py-3 px-4 text-center w-36 font-black ${
+                        isLight ? 'bg-sky-100/90 text-sky-900 border-r border-sky-200' : 'bg-blue-950/40 text-sky-300'
+                      }`}>TOTAL SEMANA</th>
                       <th className="py-3 px-4 text-right w-24">AÇÕES</th>
                     </tr>
                   </thead>
 
                   {/* Table Body Grouped By Weeks */}
-                  <tbody className="divide-y divide-slate-800/60">
+                  <tbody className={`divide-y ${isLight ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
                     {weekSummaries.map((week, weekIdx) => {
                       const weekRowCount = week.records.length;
                       const middleRowIdx = Math.floor(weekRowCount / 2);
@@ -986,19 +1059,37 @@ export default function ProductMovements({
                       return (
                         <React.Fragment key={week.startDate}>
                           {/* Week Group Banner */}
-                          <tr className="bg-slate-950/60 border-t-2 border-slate-800">
-                            <td colSpan={8} className="py-2 px-4">
+                          <tr className={`inflow-week-header-row border-t-2 ${
+                            isLight 
+                              ? 'bg-slate-100/95 border-slate-300 text-slate-800' 
+                              : 'bg-slate-950/60 border-slate-800 text-slate-300'
+                          }`}>
+                            <td colSpan={8} className="py-2.5 px-4">
                               <div className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-2">
-                                  <span className="px-2 py-0.5 rounded bg-blue-600/20 text-blue-400 font-black text-[10px] uppercase tracking-wider border border-blue-500/20">
-                                    {week.weekLabel}
+                                  <span className={`px-2.5 py-0.5 rounded font-black text-[10px] uppercase tracking-wider border ${
+                                    isLight 
+                                      ? 'bg-blue-100 text-blue-900 border-blue-300' 
+                                      : 'bg-blue-600/20 text-blue-400 border-blue-500/30'
+                                  }`}>
+                                    {(week.weekLabel && week.weekLabel !== 'undefined' && !week.weekLabel.includes('undefined'))
+                                      ? week.weekLabel
+                                      : `Semana ${week.weekNumber || weekIdx + 1}${week.startDate && week.endDate ? ` (${week.startDate.slice(8, 10)}/${week.startDate.slice(5, 7)} a ${week.endDate.slice(8, 10)}/${week.endDate.slice(5, 7)})` : ''}`}
                                   </span>
-                                  <span className="text-slate-400 text-[11px]">
+                                  <span className={`text-[11px] font-semibold ${
+                                    isLight ? 'text-slate-600' : 'text-slate-400'
+                                  }`}>
                                     {week.records.length} dia(s) registrado(s)
                                   </span>
                                 </div>
-                                <div className="font-mono text-xs text-sky-400 font-black">
-                                  Subtotal da Semana: <strong className="text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">{week.totalWeek} un</strong>
+                                <div className={`font-mono text-xs font-black ${
+                                  isLight ? 'text-sky-800' : 'text-sky-400'
+                                }`}>
+                                  Subtotal da Semana: <strong className={`px-2.5 py-0.5 rounded border ${
+                                    isLight 
+                                      ? 'text-slate-900 bg-white border-slate-300 shadow-xs' 
+                                      : 'text-white bg-slate-900 border-slate-800'
+                                  }`}>{week.totalWeek} un</strong>
                                 </div>
                               </div>
                             </td>
@@ -1011,18 +1102,28 @@ export default function ProductMovements({
                             return (
                               <tr 
                                 key={record.id}
-                                className="hover:bg-slate-800/30 transition-colors group"
+                                className={`transition-colors group ${
+                                  isLight ? 'hover:bg-slate-50' : 'hover:bg-slate-800/30'
+                                }`}
                               >
                                 {/* DATA */}
-                                <td className="py-3 px-4 font-mono font-bold text-slate-200">
+                                <td className={`py-3 px-4 font-mono font-bold ${
+                                  isLight ? 'text-slate-800' : 'text-slate-200'
+                                }`}>
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <div className={`w-2 h-2 rounded-full shrink-0 ${record.date.startsWith(selectedMonth) ? 'bg-blue-500' : 'bg-amber-400 ring-2 ring-amber-400/20'}`} />
+                                    <div className={`w-2 h-2 rounded-full shrink-0 ${record.date.startsWith(selectedMonth) ? (isLight ? 'bg-blue-600' : 'bg-blue-500') : (isLight ? 'bg-amber-500 ring-2 ring-amber-500/20' : 'bg-amber-400 ring-2 ring-amber-400/20')}`} />
                                     <span>{formatBrDate(record.date)}</span>
-                                    <span className="text-[10px] font-sans font-normal text-slate-400">
+                                    <span className={`text-[10px] font-sans font-normal ${
+                                      isLight ? 'text-slate-500' : 'text-slate-400'
+                                    }`}>
                                       ({getWeekdayName(record.date)})
                                     </span>
                                     {!record.date.startsWith(selectedMonth) && (
-                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap">
+                                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold border whitespace-nowrap ${
+                                        isLight 
+                                          ? 'bg-amber-100 text-amber-900 border-amber-300' 
+                                          : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                      }`}>
                                         {record.date < selectedMonth ? 'Mês Anterior' : 'Próximo Mês'}
                                       </span>
                                     )}
@@ -1035,38 +1136,54 @@ export default function ProductMovements({
                                 </td>
 
                                 {/* RMA */}
-                                <td className="py-3 px-4 text-center font-mono font-bold text-rose-400">
+                                <td className={`py-3 px-4 text-center font-mono font-bold ${
+                                  isLight ? 'text-rose-600' : 'text-rose-400'
+                                }`}>
                                   {record.rma}
                                 </td>
 
                                 {/* ESTOQUE */}
-                                <td className="py-3 px-4 text-center font-mono font-bold text-emerald-400">
+                                <td className={`py-3 px-4 text-center font-mono font-bold ${
+                                  isLight ? 'text-emerald-600' : 'text-emerald-400'
+                                }`}>
                                   {record.estoque}
                                 </td>
 
                                 {/* OPENBOX */}
-                                <td className="py-3 px-4 text-center font-mono font-bold text-amber-400">
+                                <td className={`py-3 px-4 text-center font-mono font-bold ${
+                                  isLight ? 'text-amber-600' : 'text-amber-400'
+                                }`}>
                                   {record.openbox}
                                 </td>
 
                                 {/* ES */}
-                                <td className="py-3 px-4 text-center font-mono font-bold text-purple-400">
+                                <td className={`py-3 px-4 text-center font-mono font-bold ${
+                                  isLight ? 'text-purple-600' : 'text-purple-400'
+                                }`}>
                                   {record.es}
                                 </td>
 
                                 {/* TOTAL DIA */}
-                                <td className="py-3 px-4 text-center font-mono font-black text-white bg-slate-950/40 text-sm">
+                                <td className={`py-3 px-4 text-center font-mono font-black text-sm ${
+                                  isLight ? 'text-slate-900 bg-slate-100/60 border-x border-slate-200' : 'text-white bg-slate-950/40'
+                                }`}>
                                   {record.totalDia}
                                 </td>
 
-                                {/* TOTAL SEMANA (Rendered across the week or in middle row matching image) */}
-                                <td className="py-3 px-4 text-center font-mono font-black bg-blue-950/20 text-sky-300">
+                                {/* TOTAL SEMANA */}
+                                <td className={`py-3 px-4 text-center font-mono font-black ${
+                                  isLight ? 'bg-sky-50/60 border-r border-sky-100 text-sky-900' : 'bg-blue-950/20 text-sky-300'
+                                }`}>
                                   {isMiddleRow ? (
-                                    <span className="px-2.5 py-1 rounded-lg bg-blue-600/30 border border-blue-500/30 text-white font-extrabold text-sm shadow-sm inline-block">
+                                    <span className={`px-2.5 py-1 rounded-lg font-extrabold text-sm shadow-sm inline-block ${
+                                      isLight 
+                                        ? 'bg-blue-600 text-white border border-blue-700 shadow-sm' 
+                                        : 'bg-blue-600/30 border border-blue-500/30 text-white'
+                                    }`}>
                                       {week.totalWeek}
                                     </span>
                                   ) : (
-                                    <span className="text-slate-600 text-xs">-</span>
+                                    <span className={isLight ? 'text-slate-400 text-xs font-semibold' : 'text-slate-600 text-xs'}>-</span>
                                   )}
                                 </td>
 
@@ -1075,14 +1192,22 @@ export default function ProductMovements({
                                   <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
                                     <button
                                       onClick={() => handleOpenManualEntry(record.date, record)}
-                                      className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-blue-400 rounded-lg transition-colors cursor-pointer"
+                                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                        isLight 
+                                          ? 'hover:bg-slate-200 text-slate-500 hover:text-blue-600' 
+                                          : 'hover:bg-slate-800 text-slate-400 hover:text-blue-400'
+                                      }`}
                                       title="Editar Lançamento"
                                     >
                                       <Edit2 className="w-3.5 h-3.5" />
                                     </button>
                                     <button
                                       onClick={() => handleDeleteInflowRecord(record.id)}
-                                      className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                        isLight 
+                                          ? 'hover:bg-slate-200 text-slate-500 hover:text-rose-600' 
+                                          : 'hover:bg-slate-800 text-slate-400 hover:text-rose-400'
+                                      }`}
                                       title="Excluir Lançamento"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
@@ -1097,24 +1222,40 @@ export default function ProductMovements({
                     })}
 
                     {/* Table Footer Grand Totals */}
-                    <tr className="bg-slate-950 text-white font-black border-t-2 border-slate-700 text-xs">
+                    <tr className={`font-black border-t-2 text-xs ${
+                      isLight 
+                        ? 'bg-slate-100 text-slate-900 border-slate-300' 
+                        : 'bg-slate-950 text-white border-slate-700'
+                    }`}>
                       <td className="py-4 px-4 uppercase tracking-wider">
                         <div className="flex flex-col">
-                          <span>TOTAL GERAL DAS SEMANAS</span>
-                          <span className="text-[10px] text-slate-400 font-normal">Ciclo semanal completo com dias adjacentes</span>
+                          <span className={isLight ? 'text-slate-900' : 'text-white'}>TOTAL GERAL DAS SEMANAS</span>
+                          <span className={`text-[10px] font-normal ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Ciclo semanal completo com dias adjacentes</span>
                         </div>
                       </td>
-                      <td className="py-4 px-4 text-center font-mono text-rose-400 text-sm">{weeksGrandTotal.totalRma}</td>
-                      <td className="py-4 px-4 text-center font-mono text-emerald-400 text-sm">{weeksGrandTotal.totalEstoque}</td>
-                      <td className="py-4 px-4 text-center font-mono text-amber-400 text-sm">{weeksGrandTotal.totalOpenbox}</td>
-                      <td className="py-4 px-4 text-center font-mono text-purple-400 text-sm">{weeksGrandTotal.totalEs}</td>
-                      <td className="py-4 px-4 text-center font-mono text-emerald-400 text-base bg-slate-900">{weeksGrandTotal.totalGeral}</td>
-                      <td className="py-4 px-4 text-center font-mono text-sky-400 text-base bg-blue-950/60 shadow-inner">{weeksGrandTotal.totalGeral}</td>
+                      <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>{weeksGrandTotal.totalRma}</td>
+                      <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>{weeksGrandTotal.totalEstoque}</td>
+                      <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>{weeksGrandTotal.totalOpenbox}</td>
+                      <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-purple-600' : 'text-purple-400'}`}>{weeksGrandTotal.totalEs}</td>
+                      <td className={`py-4 px-4 text-center font-mono text-base ${
+                        isLight 
+                          ? 'text-emerald-700 bg-emerald-50 border-x border-emerald-200' 
+                          : 'text-emerald-400 bg-slate-900'
+                      }`}>{weeksGrandTotal.totalGeral}</td>
+                      <td className={`py-4 px-4 text-center font-mono text-base ${
+                        isLight 
+                          ? 'text-sky-900 bg-sky-100 border-r border-sky-300 shadow-inner' 
+                          : 'text-sky-400 bg-blue-950/60 shadow-inner'
+                      }`}>{weeksGrandTotal.totalGeral}</td>
                       <td className="py-4 px-4 text-right">
                         {enableSpreadsheetExport && (
                           <button
                             onClick={() => exportInflowRecordsToExcel(extendedDailyInflows, `fluxo_entradas_${selectedMonth}.xlsx`)}
-                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded border border-slate-700"
+                            className={`px-2 py-1 text-[10px] font-bold rounded border transition-colors ${
+                              isLight 
+                                ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300 shadow-xs' 
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                            }`}
                           >
                             Exportar
                           </button>
@@ -1124,19 +1265,29 @@ export default function ProductMovements({
 
                     {/* Secondary row if there are adjacent month days */}
                     {weeksGrandTotal.totalGeral !== monthTotals.totalGeral && (
-                      <tr className="bg-slate-950/40 text-slate-400 border-t border-slate-800/80 text-[11px]">
-                        <td className="py-2.5 px-4 font-semibold text-slate-300">
+                      <tr className={`border-t text-[11px] ${
+                        isLight 
+                          ? 'bg-slate-50 text-slate-600 border-slate-200' 
+                          : 'bg-slate-950/40 text-slate-400 border-slate-800/80'
+                      }`}>
+                        <td className={`py-2.5 px-4 font-semibold ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
                           Mês Civil Estrito ({monthName})
                         </td>
-                        <td className="py-2.5 px-4 text-center font-mono text-rose-400/80">{monthTotals.totalRma}</td>
-                        <td className="py-2.5 px-4 text-center font-mono text-emerald-400/80">{monthTotals.totalEstoque}</td>
-                        <td className="py-2.5 px-4 text-center font-mono text-amber-400/80">{monthTotals.totalOpenbox}</td>
-                        <td className="py-2.5 px-4 text-center font-mono text-purple-400/80">{monthTotals.totalEs}</td>
-                        <td className="py-2.5 px-4 text-center font-mono text-slate-200 bg-slate-900/60">{monthTotals.totalGeral}</td>
-                        <td className="py-2.5 px-4 text-center font-mono text-slate-400 bg-blue-950/20">
+                        <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-rose-600' : 'text-rose-400/80'}`}>{monthTotals.totalRma}</td>
+                        <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-emerald-600' : 'text-emerald-400/80'}`}>{monthTotals.totalEstoque}</td>
+                        <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-amber-600' : 'text-amber-400/80'}`}>{monthTotals.totalOpenbox}</td>
+                        <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-purple-600' : 'text-purple-400/80'}`}>{monthTotals.totalEs}</td>
+                        <td className={`py-2.5 px-4 text-center font-mono font-bold ${
+                          isLight ? 'text-slate-900 bg-slate-100/80 border-x border-slate-200' : 'text-slate-200 bg-slate-900/60'
+                        }`}>{monthTotals.totalGeral}</td>
+                        <td className={`py-2.5 px-4 text-center font-mono font-bold ${
+                          isLight ? 'text-sky-800 bg-sky-50 border-r border-sky-100' : 'text-slate-400 bg-blue-950/20'
+                        }`}>
                           {monthTotals.totalGeral}
                         </td>
-                        <td className="py-2.5 px-4 text-right text-[10px] text-amber-400">
+                        <td className={`py-2.5 px-4 text-right text-[10px] font-bold ${
+                          isLight ? 'text-amber-700' : 'text-amber-400'
+                        }`}>
                           +{weeksGrandTotal.totalGeral - monthTotals.totalGeral} adj.
                         </td>
                       </tr>
@@ -1147,15 +1298,19 @@ export default function ProductMovements({
             )}
 
             {/* Explanatory note about complete week cycle */}
-            <div className="px-4 py-2.5 bg-slate-950/60 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 flex-wrap gap-2">
+            <div className={`px-4 py-2.5 border-t flex items-center justify-between text-[11px] flex-wrap gap-2 ${
+              isLight 
+                ? 'bg-slate-50 border-slate-200 text-slate-600' 
+                : 'bg-slate-950/60 border-slate-800/80 text-slate-400'
+            }`}>
               <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+                <span className={`w-2 h-2 rounded-full inline-block ${isLight ? 'bg-blue-600' : 'bg-blue-500'}`}></span>
                 <span>A contagem das semanas inclui todos os dias pertencentes ao ciclo semanal (mesmo de meses adjacentes), garantindo que a soma semanal bata 100% com os registros diários.</span>
               </span>
               <div className="flex items-center gap-3 font-mono text-[11px]">
-                <span className="text-sky-300 font-bold">Total Ciclo Semanal: {weeksGrandTotal.totalGeral} un</span>
-                <span className="text-slate-500">|</span>
-                <span className="text-slate-400">Mês Civil: {monthTotals.totalGeral} un</span>
+                <span className={`font-bold ${isLight ? 'text-sky-700' : 'text-sky-300'}`}>Total Ciclo Semanal: {weeksGrandTotal.totalGeral} un</span>
+                <span className={isLight ? 'text-slate-300' : 'text-slate-500'}>|</span>
+                <span className={isLight ? 'text-slate-600 font-semibold' : 'text-slate-400'}>Mês Civil: {monthTotals.totalGeral} un</span>
               </div>
             </div>
           </div>
@@ -1205,9 +1360,9 @@ export default function ProductMovements({
                       <div className="flex justify-between items-center text-xs">
                         <div className="flex items-center gap-1.5">
                           <span className={`font-black tracking-tight ${isSelected ? 'text-indigo-400' : 'text-slate-300'}`}>
-                            {label.title}
+                            {(label.title && label.title !== 'undefined' && !label.title.includes('undefined')) ? label.title : `Semana ${idx + 1}`}
                           </span>
-                          <span className="text-[10px] text-slate-500 font-medium">({label.range})</span>
+                          <span className="text-[10px] text-slate-500 font-medium">({label.range && label.range !== 'undefined' ? label.range : ''})</span>
                         </div>
                         <span className="font-mono font-bold text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800/50">
                           {val} un

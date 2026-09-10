@@ -15,14 +15,15 @@ import {
   AlertCircle, 
   Eye, 
   Plus,
-  Zap,
   Search,
   Check,
   ChevronDown,
   X,
   Link as LinkIcon,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  ArrowRight,
+  Clock
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType } from '../types';
 import { PlatformSelector } from './PlatformSelector';
@@ -31,19 +32,40 @@ import { RichTextEditor } from './RichTextEditor';
 import { getBaseProductImages } from '../utils/productImages';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 
+export interface TriageSummaryData {
+  product: BaseProduct;
+  unitsCount: number;
+  serials: string[];
+  trackingCode: string;
+  orderNumber: string;
+  platform: PlatformType;
+  destinationSector: DestinationSectorType;
+  customerReason: string;
+  deviceStatus: string;
+  packageStatus: string;
+  accessoriesInclusion: string;
+  createdAt: string;
+  photoThumbnail?: string;
+}
+
 interface RmaEntryProps {
   products: BaseProduct[];
   units?: TriageUnit[];
   onSaveTriage: (unit: TriageUnit) => Promise<void>;
   onNavigateToStock: () => void;
+  isLight?: boolean;
 }
 
-export default function RmaEntry({ products, units = [], onSaveTriage, onNavigateToStock }: RmaEntryProps) {
+export default function RmaEntry({ products, units = [], onSaveTriage, onNavigateToStock, isLight = false }: RmaEntryProps) {
   // Select Base Product state & search query
   const [selectedProductId, setSelectedProductId] = useState('');
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
   const productDropdownRef = useRef<HTMLDivElement>(null);
+
+  // New RMA Entry Summary Modal & Countdown state
+  const [summaryModalData, setSummaryModalData] = useState<TriageSummaryData | null>(null);
+  const [countdown, setCountdown] = useState<number>(8);
 
   // Frequency map of triage entries per product
   const productInflowCounts = useMemo(() => {
@@ -123,18 +145,18 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
   };
 
   // Fields of Analysis
-  const [deviceStatus, setDeviceStatus] = useState<DeviceStatusType>('Usado');
+  const [deviceStatus, setDeviceStatus] = useState<DeviceStatusType>('Novo');
   const [isCustomDeviceStatus, setIsCustomDeviceStatus] = useState(false);
   const [customDeviceStatusText, setCustomDeviceStatusText] = useState('');
 
-  const [packageStatus, setPackageStatus] = useState<PackageStatusType>('Danificada');
+  const [packageStatus, setPackageStatus] = useState<PackageStatusType>('Perfeita');
   const [isCustomPackageStatus, setIsCustomPackageStatus] = useState(false);
   const [customPackageStatusText, setCustomPackageStatusText] = useState('');
 
-  const [accessoriesInclusion, setAccessoriesInclusion] = useState('');
+  const [accessoriesInclusion, setAccessoriesInclusion] = useState('Todos os acessórios inclusos.');
 
-  // Sector Destination
-  const [destinationSector, setDestinationSector] = useState<DestinationSectorType>('Openbox');
+  // Sector Destination (default to Principal)
+  const [destinationSector, setDestinationSector] = useState<DestinationSectorType>('Principal');
 
   // Helper to change destination sector and automatically standardize conditions
   const handleSelectDestinationSector = (sector: DestinationSectorType) => {
@@ -150,11 +172,11 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
       setAccessoriesInclusion('Todos os acessórios inclusos.');
     } else if (sector === 'Openbox') {
       setDeviceStatus('Usado');
-      setPackageStatus('Danificada');
+      setPackageStatus('Usada');
       setAccessoriesInclusion('');
     } else if (sector === 'RMA') {
       setDeviceStatus('Danificado');
-      setPackageStatus('Danificada');
+      setPackageStatus('Sem Caixa');
       setAccessoriesInclusion('');
     }
   };
@@ -179,6 +201,56 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Helper to completely reset the RMA entry form for new insertions
+  const resetFormFields = () => {
+    setSelectedProductId('');
+    setProductSearchTerm('');
+    setCustomerReason('');
+    setExcludeFromDailyCount(false);
+    handleSelectDestinationSector('Principal');
+    setPhotosProduct([]);
+    setPhotosBox([]);
+    setPhotosAccessories([]);
+    setNotes('');
+    setTrackingCode('');
+    setOrderNumber('');
+    setSerials(['']);
+    setUrlPhotoInput('');
+    setUrlPhotoError(null);
+    setErrorMessage('');
+    setSuccessMessage('');
+  };
+
+  // Countdown timer for the RMA Entry brief summary modal
+  useEffect(() => {
+    if (!summaryModalData) return;
+
+    setCountdown(8);
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          // If no action taken to go to stock, window closes and RMA entry is restored for new items
+          setSummaryModalData(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSummaryModalData(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [summaryModalData]);
 
   // Handle URL photo addition with sanitization and Cloudinary upload
   const handleAddPhotoByUrl = async (category: 'product' | 'box' | 'accessories') => {
@@ -413,8 +485,8 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
     }
 
     // Determine final device status and package status (presets vs manual description)
-    const finalDeviceStatus = (isCustomDeviceStatus ? customDeviceStatusText.trim() : deviceStatus) || 'Usado';
-    const finalPackageStatus = (isCustomPackageStatus ? customPackageStatusText.trim() : packageStatus) || 'Danificada';
+    const finalDeviceStatus = (isCustomDeviceStatus ? customDeviceStatusText.trim() : deviceStatus) || 'Novo';
+    const finalPackageStatus = (isCustomPackageStatus ? customPackageStatusText.trim() : packageStatus) || 'Perfeita';
 
     const refProduct = products.find(p => p.id === selectedProductId) || products.find(
       p => p.sku.toLowerCase() === productSearchTerm.trim().toLowerCase() ||
@@ -490,36 +562,31 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
         await onSaveTriage(newTriage);
       }
 
-      if (targetSerials.length === 1) {
-        setSuccessMessage(`1 unidade do produto [${refProduct.sku}] cadastrada com sucesso no estoque físico!`);
-      } else {
-        setSuccessMessage(`${targetSerials.length} unidades do produto [${refProduct.sku}] adicionadas ao estoque com sucesso! Cada uma com seu serial exclusivo.`);
-      }
-      
-      // Reset form fields
-      setSelectedProductId('');
-      setProductSearchTerm('');
-      setCustomerReason('');
-      setExcludeFromDailyCount(false);
-      handleSelectDestinationSector('Openbox');
-      setPhotosProduct([]);
-      setPhotosBox([]);
-      setPhotosAccessories([]);
-      setNotes('');
-      
-      // Reset tracking code, order number & serial numbers list
-      setTrackingCode('');
-      setOrderNumber('');
-      setSerials(['']);
+      // Prepare brief summary data with relevant information for the user
+      const summaryInfo: TriageSummaryData = {
+        product: refProduct,
+        unitsCount: targetSerials.length,
+        serials: targetSerials.filter(s => s && s.trim() !== ''),
+        trackingCode: finalTrackingCode,
+        orderNumber: orderNumber.trim(),
+        platform,
+        destinationSector,
+        customerReason: customerReason.trim() || 'Entrada de Estoque',
+        deviceStatus: finalDeviceStatus,
+        packageStatus: finalPackageStatus,
+        accessoriesInclusion: accessoriesInclusion.trim(),
+        createdAt: new Date().toISOString(),
+        photoThumbnail: finalPhotosProduct[0] || finalPhotosBox[0] || (refProduct.images && refProduct.images[0]) || ''
+      };
+
+      // Reset form fields immediately so RMA entry tab is completely restored and clean for new products
+      resetFormFields();
 
       // Scroll to top
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
-      // Clean success message and navigate to Stock
-      setTimeout(() => {
-        setSuccessMessage('');
-        onNavigateToStock();
-      }, 1500);
+      // Open the brief summary modal with countdown
+      setSummaryModalData(summaryInfo);
 
     } catch (err) {
       setErrorMessage('Erro ao gravar triagem no banco de dados.');
@@ -964,7 +1031,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado da Caixa / Embalagem</label>
                     <div className="grid grid-cols-4 gap-1.5" id="pills-package-status">
-                      {(['Perfeita', 'Danificada', 'Sem Embalagem', 'Descrever'] as const).map((pkg) => {
+                      {(['Perfeita', 'Usada', 'Sem Caixa', 'Descrever'] as const).map((pkg) => {
                         const isSelected = packageStatus === pkg;
                         return (
                           <button
@@ -988,7 +1055,7 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                             title={pkg}
                           >
                             {isSelected && <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />}
-                            <span>{pkg === 'Sem Embalagem' ? 'Sem Caixa' : pkg}</span>
+                            <span>{pkg}</span>
                           </button>
                         );
                       })}
@@ -1068,43 +1135,6 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                     <span>Ctrl+V Ativo</span>
                   </div>
                 </div>
-
-                {/* Estoque Principal Instant Copy */}
-                {(() => {
-                  const refProduct = products.find(p => p.id === selectedProductId);
-                  const hasCatalogImages = !!(refProduct && ((refProduct.images && refProduct.images.length > 0) || refProduct.imageUrl));
-                  
-                  if (destinationSector === 'Principal' && selectedProductId) {
-                    return (
-                      <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between gap-2" id="catalog-images-import-panel">
-                        <div className="flex items-center gap-1.5 text-xs text-emerald-300 font-medium">
-                          <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>Usar imagens oficiais do catálogo</span>
-                        </div>
-                        {hasCatalogImages && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (refProduct.imagesProduct && refProduct.imagesProduct.length > 0) {
-                                setPhotosProduct(refProduct.imagesProduct);
-                              } else if (refProduct.images && refProduct.images.length > 0) {
-                                setPhotosProduct(refProduct.images);
-                              } else if (refProduct.imageUrl) {
-                                setPhotosProduct([refProduct.imageUrl]);
-                              }
-                              if (refProduct.imagesBox && refProduct.imagesBox.length > 0) setPhotosBox(refProduct.imagesBox);
-                              if (refProduct.imagesAccessories && refProduct.imagesAccessories.length > 0) setPhotosAccessories(refProduct.imagesAccessories);
-                            }}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-bold transition-all cursor-pointer shadow-sm"
-                          >
-                            Copiar Fotos
-                          </button>
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
 
                 {/* Category Selector Tabs */}
                 <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg text-center text-xs" id="ctrl-v-category-selector">
@@ -1311,6 +1341,284 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
             </div>
           </div>
         </form>
+      )}
+
+      {/* Modal de Resumo do Pedido com Contagem Regressiva */}
+      {summaryModalData && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          id="rma-summary-modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSummaryModalData(null);
+            }
+          }}
+        >
+          <div 
+            className={`w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col transition-all transform animate-scaleUp ${
+              isLight 
+                ? 'bg-white border-slate-300 text-slate-900 shadow-slate-400/30' 
+                : 'bg-slate-900 border-slate-700 text-white shadow-black/60'
+            }`}
+            id="rma-summary-modal"
+          >
+            {/* Cabeçalho de Sucesso */}
+            <div className={`p-4 sm:p-5 border-b flex items-center justify-between ${
+              isLight ? 'bg-emerald-50 border-slate-200' : 'bg-emerald-950/50 border-slate-800'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center border border-emerald-500/30 shrink-0">
+                  <CheckCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className={`text-base sm:text-lg font-black tracking-tight flex items-center gap-2 ${
+                    isLight ? 'text-slate-900' : 'text-white'
+                  }`}>
+                    Entrada Registrada com Sucesso!
+                  </h3>
+                  <p className={`text-xs ${isLight ? 'text-slate-600 font-medium' : 'text-slate-400'}`}>
+                    Resumo do pedido e destino no estoque físico
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSummaryModalData(null)}
+                className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                  isLight 
+                    ? 'bg-white hover:bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-800' 
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-400 hover:text-white'
+                }`}
+                title="Fechar e Inserir Novo Produto"
+                id="btn-close-rma-summary"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Barra de Progresso da Contagem Regressiva */}
+            <div className={`w-full h-1.5 overflow-hidden ${isLight ? 'bg-slate-200' : 'bg-slate-800'}`}>
+              <div 
+                className="bg-emerald-500 h-full transition-all duration-1000 ease-linear"
+                style={{ width: `${(countdown / 8) * 100}%` }}
+              />
+            </div>
+
+            {/* Corpo do Resumo */}
+            <div className="p-4 sm:p-5 space-y-4 max-h-[68vh] overflow-y-auto">
+              {/* Card do Produto */}
+              <div className={`p-3.5 rounded-xl border flex items-center gap-3.5 ${
+                isLight ? 'bg-slate-50 border-slate-200 shadow-sm' : 'bg-slate-800/60 border-slate-700/60'
+              }`}>
+                {summaryModalData.photoThumbnail ? (
+                  <img 
+                    src={summaryModalData.photoThumbnail} 
+                    alt={summaryModalData.product.name}
+                    className="w-14 h-14 object-cover rounded-xl border border-slate-300 dark:border-slate-700 bg-white shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-500 flex items-center justify-center shrink-0">
+                    <Package className="w-7 h-7" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                      SKU: {summaryModalData.product.sku}
+                    </span>
+                    {summaryModalData.product.voltage && (
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                        isLight ? 'bg-slate-200 text-slate-800' : 'bg-slate-700 text-slate-200'
+                      }`}>
+                        {summaryModalData.product.voltage}
+                      </span>
+                    )}
+                  </div>
+                  <h4 className={`text-sm font-bold truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                    {summaryModalData.product.name}
+                  </h4>
+                </div>
+              </div>
+
+              {/* Grid de Destaques: Destino, Plataforma, Quantidade */}
+              <div className="grid grid-cols-3 gap-2.5 text-xs">
+                {/* Destino */}
+                <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/40 border-slate-800'
+                }`}>
+                  <span className={`text-[10px] uppercase font-bold tracking-wider ${
+                    isLight ? 'text-slate-500' : 'text-slate-400'
+                  }`}>
+                    Destino
+                  </span>
+                  <div className="mt-1.5 font-bold truncate">
+                    {summaryModalData.destinationSector === 'Principal' && (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-extrabold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                        Principal
+                      </span>
+                    )}
+                    {summaryModalData.destinationSector === 'Openbox' && (
+                      <span className="text-amber-600 dark:text-amber-400 font-extrabold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                        Openbox
+                      </span>
+                    )}
+                    {summaryModalData.destinationSector === 'RMA' && (
+                      <span className="text-rose-600 dark:text-rose-400 font-extrabold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
+                        RMA
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Plataforma */}
+                <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/40 border-slate-800'
+                }`}>
+                  <span className={`text-[10px] uppercase font-bold tracking-wider ${
+                    isLight ? 'text-slate-500' : 'text-slate-400'
+                  }`}>
+                    Canal / Plataforma
+                  </span>
+                  <div className={`mt-1.5 font-bold truncate ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                    {summaryModalData.platform}
+                  </div>
+                </div>
+
+                {/* Quantidade */}
+                <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/40 border-slate-800'
+                }`}>
+                  <span className={`text-[10px] uppercase font-bold tracking-wider ${
+                    isLight ? 'text-slate-500' : 'text-slate-400'
+                  }`}>
+                    Quantidade
+                  </span>
+                  <div className="mt-1.5 font-black text-sky-600 dark:text-sky-400 text-sm">
+                    {summaryModalData.unitsCount} {summaryModalData.unitsCount === 1 ? 'unidade' : 'unidades'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Informações Relevantes do Pedido */}
+              <div className={`p-3.5 rounded-xl border space-y-2 text-xs divide-y ${
+                isLight 
+                  ? 'bg-slate-50 border-slate-200 divide-slate-200 text-slate-700' 
+                  : 'bg-slate-800/40 border-slate-800 divide-slate-800 text-slate-300'
+              }`}>
+                {summaryModalData.orderNumber && (
+                  <div className="flex justify-between items-center pb-2">
+                    <span className={`font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Número do Pedido:</span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{summaryModalData.orderNumber}</span>
+                  </div>
+                )}
+
+                {summaryModalData.trackingCode && (
+                  <div className="flex justify-between items-center py-2">
+                    <span className={`font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Código de Rastreio:</span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{summaryModalData.trackingCode}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-start py-2">
+                  <span className={`font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Motivo / Entrada:</span>
+                  <span className="font-medium text-right max-w-[65%] text-slate-900 dark:text-slate-100">
+                    {summaryModalData.customerReason || 'Entrada de Estoque'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center py-2">
+                  <span className={`font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Condição / Triagem:</span>
+                  <span className="font-medium text-right text-slate-900 dark:text-slate-100">
+                    {summaryModalData.deviceStatus} • {summaryModalData.packageStatus}
+                  </span>
+                </div>
+
+                {summaryModalData.accessoriesInclusion && (
+                  <div className="flex justify-between items-start py-2">
+                    <span className={`font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Acessórios:</span>
+                    <span className="font-medium text-right max-w-[65%] text-slate-900 dark:text-slate-100">
+                      {summaryModalData.accessoriesInclusion}
+                    </span>
+                  </div>
+                )}
+
+                {/* Números de série gravados */}
+                {summaryModalData.serials.length > 0 && (
+                  <div className="pt-2">
+                    <span className={`block font-bold mb-1.5 text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Número(s) de Série Cadastrados:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                      {summaryModalData.serials.map((serial, idx) => (
+                        <span 
+                          key={idx}
+                          className={`font-mono text-[11px] px-2.5 py-0.5 rounded-lg border font-bold ${
+                            isLight 
+                              ? 'bg-white border-slate-300 text-slate-800' 
+                              : 'bg-slate-900 border-slate-700 text-slate-200'
+                          }`}
+                        >
+                          {serial}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Rodapé com Temporizador e Ações */}
+            <div className={`p-4 border-t flex flex-col sm:flex-row items-center justify-between gap-3 ${
+              isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-800'
+            }`}>
+              <div className="flex items-center gap-2 text-xs">
+                <Clock className="w-4 h-4 text-emerald-500 animate-pulse" />
+                <span className={isLight ? 'text-slate-600 font-medium' : 'text-slate-400'}>
+                  Fechando em <strong className="text-emerald-500 font-bold text-sm">{countdown}s</strong> para nova inserção
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {/* Botão: Inserir Novo Produto (Restaura e fecha) */}
+                <button
+                  type="button"
+                  onClick={() => setSummaryModalData(null)}
+                  className={`flex-1 sm:flex-none px-4 py-2.5 text-xs font-bold rounded-xl border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                    isLight
+                      ? 'bg-white hover:bg-slate-200 border-slate-300 text-slate-800'
+                      : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
+                  }`}
+                  id="btn-summary-new-product"
+                >
+                  <Plus className="w-4 h-4 text-sky-500" />
+                  <span>Inserir Novo Produto</span>
+                </button>
+
+                {/* Botão: Ir para o Estoque com contagem */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSummaryModalData(null);
+                    onNavigateToStock();
+                  }}
+                  className="flex-1 sm:flex-none px-4 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all cursor-pointer flex items-center justify-center gap-2 group"
+                  id="btn-summary-go-to-stock"
+                >
+                  <span>Ir para o Estoque</span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-700 font-mono text-[10px]">
+                    {countdown}s
+                  </span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
