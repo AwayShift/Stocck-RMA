@@ -71,6 +71,20 @@ interface PhysicalStockProps {
   initialSectorFilter?: DestinationSectorType | null;
 }
 
+const stripHtml = (html?: string): string => {
+  if (!html) return '';
+  return html
+    .replace(/<[^>]*>?/gm, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 export default function PhysicalStock({ 
   units, 
   products = [],
@@ -1847,7 +1861,12 @@ export default function PhysicalStock({
                     {/* Image / Thumbnail - click here opens unit details */}
                     <div 
                       onClick={() => setSelectedUnitId(unit.id)}
-                      className="w-full h-32 rounded-lg bg-slate-950 border border-slate-800 hover:border-sky-500/60 overflow-hidden flex items-center justify-center relative p-1.5 cursor-pointer transition-all group/thumb shadow-sm hover:shadow-sky-500/10"
+                      className={`w-full h-36 rounded-lg ${
+                        isLight 
+                          ? 'photo-container-clean !bg-white border-slate-200 shadow-sm' 
+                          : 'bg-slate-950 border-slate-800'
+                      } hover:border-sky-500/60 overflow-hidden flex items-center justify-center relative p-2 cursor-pointer transition-all group/thumb hover:shadow-sky-500/10`}
+                      style={{ backgroundColor: isLight ? '#ffffff' : undefined }}
                       title="Clique na foto ou ícone para ver os detalhes do produto"
                       role="button"
                       tabIndex={0}
@@ -1873,13 +1892,23 @@ export default function PhysicalStock({
                     </div>
 
                     {/* Metadata details */}
-                    <div>
+                    <div className="space-y-1.5 pt-0.5">
                       <h4 className="font-bold text-white text-sm line-clamp-1 group-hover:text-sky-400 transition-colors">
                         {unit.baseProductName}
                       </h4>
-                      <p className="text-xs text-slate-400 line-clamp-1 mt-1">
-                        Motivo: {unit.customerReason}
+                      <p className="text-xs text-slate-400 line-clamp-1">
+                        <span className="font-medium text-slate-400">Motivo:</span> {unit.customerReason}
                       </p>
+
+                      {/* Laudo do Produto para itens do estoque Openbox */}
+                      {(activeTab === 'Openbox' || unit.destinationSector === 'Openbox') && (
+                        <div className="mt-1.5 mb-2">
+                          <p className="text-xs text-slate-300 line-clamp-4 leading-relaxed" title={stripHtml(unit.notes) || undefined}>
+                            <span className="text-amber-400 font-bold">Laudo:</span>{' '}
+                            {stripHtml(unit.notes) || <span className="text-slate-500 italic">Sem laudo informado</span>}
+                          </p>
+                        </div>
+                      )}
 
                       {/* Brand, Category, Voltage attributes */}
                       {(() => {
@@ -1891,7 +1920,7 @@ export default function PhysicalStock({
                         if (!bBrand && !bCat && (!bVolt || bVolt === 'N/A')) return null;
 
                         return (
-                          <div className="flex items-center gap-1.5 flex-wrap pt-2">
+                          <div className="flex items-center gap-1.5 flex-wrap pt-1.5">
                             {bBrand && (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30 flex items-center gap-1" title={`Marca: ${bBrand}`}>
                                 <Sliders className="w-2.5 h-2.5" />
@@ -1910,41 +1939,44 @@ export default function PhysicalStock({
                           </div>
                         );
                       })()}
-
-                      <p className="text-[10px] text-slate-450 font-medium mt-2 flex items-center gap-1 font-mono">
-                        <Clock className="w-3.5 h-3.5 text-sky-450 shrink-0" />
-                        <span>Entrada:</span>
-                        <span className="text-slate-300 font-semibold">
-                          {new Date(unit.createdAt).toLocaleDateString('pt-BR')} {new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </p>
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
-                    {unit.platform ? (
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
-                        {unit.platform}
+                  {/* Bottom section: Entrada and Actions */}
+                  <div className="mt-5 pt-3 border-t border-slate-800">
+                    <p className="text-[10px] text-slate-450 font-medium mb-2.5 flex items-center gap-1.5 font-mono">
+                      <Clock className="w-3.5 h-3.5 text-sky-450 shrink-0" />
+                      <span>Entrada:</span>
+                      <span className="text-slate-300 font-semibold">
+                        {new Date(unit.createdAt).toLocaleDateString('pt-BR')} {new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                       </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-500 italic">Sem Plataforma</span>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
-                        {unit.destinationSector}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEdit(unit);
-                        }}
-                        className="px-2 py-0.5 bg-slate-800 hover:bg-sky-600/30 text-sky-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/50 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Editar nome, fotos, descrição e laudo do produto"
-                      >
-                        <Pencil className="w-3 h-3" />
-                        <span>Editar</span>
-                      </button>
+                    </p>
+
+                    <div className="flex justify-between items-center text-xs">
+                      {unit.platform ? (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
+                          {unit.platform}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 italic">Sem Plataforma</span>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
+                          {unit.destinationSector}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEdit(unit);
+                          }}
+                          className="px-2 py-0.5 bg-slate-800 hover:bg-sky-600/30 text-sky-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/50 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Editar nome, fotos, descrição e laudo do produto"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>Editar</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1997,7 +2029,12 @@ export default function PhysicalStock({
                     {/* Thumbnail - click opens unit details */}
                     <div 
                       onClick={() => setSelectedUnitId(unit.id)}
-                      className="w-12 h-12 rounded-lg bg-slate-950 border border-slate-800 hover:border-sky-500/60 overflow-hidden flex items-center justify-center shrink-0 relative cursor-pointer group/listthumb transition-all shadow-sm hover:shadow-sky-500/10"
+                      className={`w-12 h-12 rounded-lg ${
+                        isLight 
+                          ? 'photo-container-clean !bg-white border-slate-200 shadow-sm' 
+                          : 'bg-slate-950 border-slate-800'
+                      } hover:border-sky-500/60 overflow-hidden flex items-center justify-center shrink-0 relative cursor-pointer group/listthumb transition-all shadow-sm hover:shadow-sky-500/10`}
+                      style={{ backgroundColor: isLight ? '#ffffff' : undefined }}
                       title="Clique na foto ou ícone para ver os detalhes do produto"
                       role="button"
                       tabIndex={0}
@@ -2126,6 +2163,14 @@ export default function PhysicalStock({
                         <p className="text-xs text-slate-400 line-clamp-1">
                           Motivo: {unit.customerReason}
                         </p>
+
+                        {(activeTab === 'Openbox' || unit.destinationSector === 'Openbox') && (
+                          <p className="text-xs text-slate-300 line-clamp-1 flex items-center gap-1" title={stripHtml(unit.notes) || undefined}>
+                            <span className="text-slate-600">•</span>
+                            <span className="text-amber-400 font-semibold">Laudo:</span>{' '}
+                            <span>{stripHtml(unit.notes) || <span className="text-slate-500 italic">Sem laudo</span>}</span>
+                          </p>
+                        )}
 
                         {(() => {
                           const baseProd = findBaseProduct(unit, products);

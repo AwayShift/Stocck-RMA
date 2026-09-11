@@ -113,6 +113,13 @@ html.light [class*="bg-[#"] {
   background-color: #ffffff !important;
 }
 
+/* Photo containers must remain pure white without bluish tint */
+.photo-container-clean,
+html.light .photo-container-clean,
+html.light div.photo-container-clean {
+  background-color: #ffffff !important;
+}
+
 html.light [class*="border-[#"] {
   border-color: #e2e8f0 !important;
 }
