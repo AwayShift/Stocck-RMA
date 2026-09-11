@@ -29,6 +29,9 @@ import {
   getTriageColumns,
   getPendingColumns,
   setHasExcludeDailyCol,
+  getHasExcludeDailyCol,
+  setHasTriageCreatedByCol,
+  getHasTriageCreatedByCol,
   setHasPendingExtendedCols
 } from './supabase';
 import {
@@ -1308,11 +1311,29 @@ export const deleteBaseProduct = async (id: string, sku?: string, name?: string)
 
 export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
   const now = new Date().toISOString();
+
+  let creator = unit.createdBy;
+  if (!creator || (!creator.name && !creator.email)) {
+    try {
+      const authUser = await getCurrentActiveAuthUser();
+      if (authUser) {
+        creator = {
+          uid: authUser.uid,
+          email: authUser.email,
+          name: authUser.name
+        };
+      }
+    } catch (e) {
+      console.warn('Silent auth user fetch error in saveTriageUnit:', e);
+    }
+  }
+
   const savedUnit: TriageUnit = {
     ...unit,
     id: (unit.id && unit.id.trim()) ? unit.id.trim() : generateUUID(),
     createdAt: unit.createdAt || now,
-    updatedAt: now
+    updatedAt: now,
+    createdBy: creator || unit.createdBy
   };
 
   updateLocalCacheItem('triage_units', savedUnit);
@@ -1322,16 +1343,23 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
     const row = mapTriageUnitToSupabase(savedUnit);
     let { error } = await supabase.from('triage_units').upsert(row);
 
-    // If upsert failed due to missing column (e.g. exclude_from_daily_count), mark feature disabled and retry immediately
+    // If upsert failed due to missing column (e.g. exclude_from_daily_count or created_by), mark feature disabled and retry immediately
     if (error && (
       error.message?.includes('exclude_from_daily_count') || 
+      error.message?.includes('created_by') ||
       error.code === 'PGRST204' || 
       error.code === '42703'
     )) {
-      setHasExcludeDailyCol(false);
-      const rowWithoutExclude = { ...row };
-      delete rowWithoutExclude.exclude_from_daily_count;
-      const retryRes = await supabase.from('triage_units').upsert(rowWithoutExclude);
+      if (error.message?.includes('created_by')) {
+        setHasTriageCreatedByCol(false);
+      }
+      if (error.message?.includes('exclude_from_daily_count')) {
+        setHasExcludeDailyCol(false);
+      }
+      const retryRow = { ...row };
+      if (getHasExcludeDailyCol() === false) delete retryRow.exclude_from_daily_count;
+      if (getHasTriageCreatedByCol() === false) delete retryRow.created_by;
+      const retryRes = await supabase.from('triage_units').upsert(retryRow);
       error = retryRes.error;
     }
 
@@ -1368,9 +1396,10 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
     }
     recordDbOperation('write', 1);
     try {
+      const creatorName = savedUnit.createdBy?.name || savedUnit.createdBy?.email || 'Operador';
       await createAuditLog(
         'SAVE_TRIAGE',
-        `Salvou entrada de RMA (Supabase) de ${unit.platform}. Rastreamento: ${unit.trackingCode} (${unit.baseProductName})`
+        `Salvou entrada de RMA (Supabase) de ${unit.platform} por ${creatorName}. Rastreamento: ${unit.trackingCode} (${unit.baseProductName})`
       );
     } catch (e) {
       console.warn('Audit log write error:', e);

@@ -39,7 +39,8 @@ import {
   RefreshCw,
   RotateCcw,
   Calendar,
-  ShoppingCart
+  ShoppingCart,
+  User
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
 import ExcelImportModal from './ExcelImportModal';
@@ -225,6 +226,10 @@ export default function PhysicalStock({
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isSanitizingUrl, setIsSanitizingUrl] = useState(false);
   const [urlInputCategory, setUrlInputCategory] = useState<'photosProduct' | 'photosBox' | 'photosAccessories'>('photosProduct');
+  const [isCustomEditDeviceStatus, setIsCustomEditDeviceStatus] = useState(false);
+  const [customEditDeviceStatusText, setCustomEditDeviceStatusText] = useState('');
+  const [isCustomEditPackageStatus, setIsCustomEditPackageStatus] = useState(false);
+  const [customEditPackageStatusText, setCustomEditPackageStatusText] = useState('');
 
   // If initialSelectedUnit changed from parent, keep local state in sync
   React.useEffect(() => {
@@ -242,6 +247,10 @@ export default function PhysicalStock({
     setIsEditingUnit(false);
     setEditForm(null);
     setOriginalUnitPhotos(null);
+    setIsCustomEditDeviceStatus(false);
+    setCustomEditDeviceStatusText('');
+    setIsCustomEditPackageStatus(false);
+    setCustomEditPackageStatusText('');
   };
 
   const handleStartEdit = (unit: TriageUnit) => {
@@ -255,6 +264,17 @@ export default function PhysicalStock({
       photosBox: [...(unit.photosBox || [])],
       photosAccessories: [...(unit.photosAccessories || [])]
     });
+
+    const STANDARD_DEVICE_STATUSES = ['Novo', 'Usado', 'Com Avaria', 'Peças'];
+    const isCustomDev = Boolean(unit.deviceStatus) && !STANDARD_DEVICE_STATUSES.includes(unit.deviceStatus);
+    setIsCustomEditDeviceStatus(isCustomDev);
+    setCustomEditDeviceStatusText(isCustomDev ? unit.deviceStatus : '');
+
+    const STANDARD_PACKAGE_STATUSES = ['Perfeita', 'Usada', 'Sem Caixa', 'Danificada', 'Sem Embalagem'];
+    const isCustomPkg = Boolean(unit.packageStatus) && !STANDARD_PACKAGE_STATUSES.includes(unit.packageStatus);
+    setIsCustomEditPackageStatus(isCustomPkg);
+    setCustomEditPackageStatusText(isCustomPkg ? unit.packageStatus : '');
+
     setIsEditingUnit(true);
   };
 
@@ -264,6 +284,14 @@ export default function PhysicalStock({
     try {
       let updatedForm = { ...editForm };
       
+      // Apply custom device and package status if selected
+      if (isCustomEditDeviceStatus || editForm.deviceStatus === 'Descrever') {
+        updatedForm.deviceStatus = (customEditDeviceStatusText.trim() || 'Descrever') as any;
+      }
+      if (isCustomEditPackageStatus || editForm.packageStatus === 'Descrever') {
+        updatedForm.packageStatus = (customEditPackageStatusText.trim() || 'Descrever') as any;
+      }
+
       // Ensure platform is properly set (or empty string/undefined)
       updatedForm.platform = (editForm.platform || '') as any;
       
@@ -2265,7 +2293,14 @@ export default function PhysicalStock({
                   <>
                     <button 
                       type="button"
-                      onClick={() => { setIsEditingUnit(false); setEditForm(null); }}
+                      onClick={() => { 
+                        setIsEditingUnit(false); 
+                        setEditForm(null); 
+                        setIsCustomEditDeviceStatus(false);
+                        setCustomEditDeviceStatusText('');
+                        setIsCustomEditPackageStatus(false);
+                        setCustomEditPackageStatusText('');
+                      }}
                       className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
                         isLight
                           ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-sm'
@@ -2474,28 +2509,133 @@ export default function PhysicalStock({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        Estado do Aparelho
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-bold text-slate-300">
+                          Estado do Aparelho
+                        </label>
+                        {!isCustomEditDeviceStatus && editForm.deviceStatus !== 'Descrever' ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCustomEditDeviceStatus(true);
+                              setEditForm({ ...editForm, deviceStatus: 'Descrever' as any });
+                            }}
+                            className="text-[10px] text-sky-400 hover:text-sky-300 font-medium transition-colors cursor-pointer"
+                          >
+                            + Descrever
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCustomEditDeviceStatus(false);
+                              setCustomEditDeviceStatusText('');
+                              setEditForm({ ...editForm, deviceStatus: 'Usado' });
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-slate-200 font-medium transition-colors cursor-pointer"
+                          >
+                            Opções padrão
+                          </button>
+                        )}
+                      </div>
                       <select 
-                        value={editForm.deviceStatus} 
-                        onChange={(e) => setEditForm({ ...editForm, deviceStatus: e.target.value as DeviceStatusType })} 
+                        value={isCustomEditDeviceStatus ? 'Descrever' : editForm.deviceStatus} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === 'Descrever') {
+                            setIsCustomEditDeviceStatus(true);
+                            setEditForm({ ...editForm, deviceStatus: 'Descrever' as any });
+                          } else {
+                            setIsCustomEditDeviceStatus(false);
+                            setCustomEditDeviceStatusText('');
+                            setEditForm({ ...editForm, deviceStatus: val as DeviceStatusType });
+                          }
+                        }} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
                       >
                         <option value="Novo">Novo</option>
                         <option value="Usado">Usado</option>
                         <option value="Com Avaria">Com Avaria</option>
                         <option value="Peças">Peças / Sucata</option>
+                        <option value="Descrever">Descrever (Personalizado)...</option>
                       </select>
+
+                      {(isCustomEditDeviceStatus || editForm.deviceStatus === 'Descrever') && (
+                        <div className="mt-2 space-y-1.5">
+                          <input
+                            type="text"
+                            value={customEditDeviceStatusText}
+                            onChange={(e) => {
+                              setCustomEditDeviceStatusText(e.target.value);
+                              setEditForm({ ...editForm, deviceStatus: (e.target.value || 'Descrever') as any });
+                            }}
+                            placeholder="Descreva o estado do aparelho..."
+                            autoFocus
+                            className="w-full bg-slate-900 border border-sky-500/70 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition-colors"
+                          />
+                          <div className="flex flex-wrap gap-1">
+                            {['Leves marcas de uso', 'Riscos na carcaça', 'Tela riscada/trincada', 'Sem marcas estéticas'].map((tag) => (
+                              <button
+                                type="button"
+                                key={tag}
+                                onClick={() => {
+                                  const newVal = customEditDeviceStatusText ? `${customEditDeviceStatusText}, ${tag}` : tag;
+                                  setCustomEditDeviceStatusText(newVal);
+                                  setEditForm({ ...editForm, deviceStatus: newVal as any });
+                                }}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
+                              >
+                                + {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        Estado da Embalagem / Caixa
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-bold text-slate-300">
+                          Estado da Embalagem / Caixa
+                        </label>
+                        {!isCustomEditPackageStatus && editForm.packageStatus !== 'Descrever' ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCustomEditPackageStatus(true);
+                              setEditForm({ ...editForm, packageStatus: 'Descrever' as any });
+                            }}
+                            className="text-[10px] text-sky-400 hover:text-sky-300 font-medium transition-colors cursor-pointer"
+                          >
+                            + Descrever
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCustomEditPackageStatus(false);
+                              setCustomEditPackageStatusText('');
+                              setEditForm({ ...editForm, packageStatus: 'Danificada' });
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-slate-200 font-medium transition-colors cursor-pointer"
+                          >
+                            Opções padrão
+                          </button>
+                        )}
+                      </div>
                       <select 
-                        value={editForm.packageStatus} 
-                        onChange={(e) => setEditForm({ ...editForm, packageStatus: e.target.value as PackageStatusType })} 
+                        value={isCustomEditPackageStatus ? 'Descrever' : editForm.packageStatus} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === 'Descrever') {
+                            setIsCustomEditPackageStatus(true);
+                            setEditForm({ ...editForm, packageStatus: 'Descrever' as any });
+                          } else {
+                            setIsCustomEditPackageStatus(false);
+                            setCustomEditPackageStatusText('');
+                            setEditForm({ ...editForm, packageStatus: val as PackageStatusType });
+                          }
+                        }} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
                       >
                         <option value="Perfeita">Perfeita / Na Caixa</option>
@@ -2503,7 +2643,40 @@ export default function PhysicalStock({
                         <option value="Sem Caixa">Sem Caixa</option>
                         <option value="Danificada">Danificada</option>
                         <option value="Sem Embalagem">Sem Embalagem / Fora da Caixa</option>
+                        <option value="Descrever">Descrever (Personalizado)...</option>
                       </select>
+
+                      {(isCustomEditPackageStatus || editForm.packageStatus === 'Descrever') && (
+                        <div className="mt-2 space-y-1.5">
+                          <input
+                            type="text"
+                            value={customEditPackageStatusText}
+                            onChange={(e) => {
+                              setCustomEditPackageStatusText(e.target.value);
+                              setEditForm({ ...editForm, packageStatus: (e.target.value || 'Descrever') as any });
+                            }}
+                            placeholder="Descreva o estado da embalagem/caixa..."
+                            autoFocus
+                            className="w-full bg-slate-900 border border-sky-500/70 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition-colors"
+                          />
+                          <div className="flex flex-wrap gap-1">
+                            {['Caixa original amassada', 'Caixa rasgada', 'Sem berço interno', 'Embalagem plástica / parda'].map((tag) => (
+                              <button
+                                type="button"
+                                key={tag}
+                                onClick={() => {
+                                  const newVal = customEditPackageStatusText ? `${customEditPackageStatusText}, ${tag}` : tag;
+                                  setCustomEditPackageStatusText(newVal);
+                                  setEditForm({ ...editForm, packageStatus: newVal as any });
+                                }}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
+                              >
+                                + {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="sm:col-span-2">
@@ -3130,6 +3303,15 @@ export default function PhysicalStock({
                         <Clock className="w-3.5 h-3.5 text-slate-500" />
                         <span>Data de Entrada: <strong className="text-slate-200">{new Date(currentUnit.createdAt).toLocaleDateString('pt-BR')} às {new Date(currentUnit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
                       </div>
+                      {currentUnit.createdBy && (currentUnit.createdBy.name || currentUnit.createdBy.email) && (
+                        <>
+                          <span className="text-slate-600 hidden sm:inline">•</span>
+                          <div className="flex items-center gap-1.5 text-slate-400">
+                            <User className="w-3.5 h-3.5 text-sky-400" />
+                            <span>Entrada por: <strong className="text-sky-300 font-semibold">{currentUnit.createdBy.name || currentUnit.createdBy.email}</strong></span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 

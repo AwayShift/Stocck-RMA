@@ -23,7 +23,8 @@ import {
   ShieldCheck,
   RefreshCw,
   ArrowRight,
-  Clock
+  Clock,
+  User
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType } from '../types';
 import { PlatformSelector } from './PlatformSelector';
@@ -31,6 +32,7 @@ import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 import { RichTextEditor } from './RichTextEditor';
 import { getBaseProductImages } from '../utils/productImages';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
+import { getCurrentActiveAuthUser } from '../lib/supabaseAuth';
 
 export interface TriageSummaryData {
   product: BaseProduct;
@@ -46,6 +48,11 @@ export interface TriageSummaryData {
   accessoriesInclusion: string;
   createdAt: string;
   photoThumbnail?: string;
+  createdBy?: {
+    uid?: string;
+    email?: string;
+    name?: string;
+  };
 }
 
 interface RmaEntryProps {
@@ -54,9 +61,40 @@ interface RmaEntryProps {
   onSaveTriage: (unit: TriageUnit) => Promise<void>;
   onNavigateToStock: () => void;
   isLight?: boolean;
+  currentUser?: {
+    uid?: string;
+    email?: string;
+    name?: string;
+  } | null;
 }
 
-export default function RmaEntry({ products, units = [], onSaveTriage, onNavigateToStock, isLight = false }: RmaEntryProps) {
+export default function RmaEntry({ 
+  products, 
+  units = [], 
+  onSaveTriage, 
+  onNavigateToStock, 
+  isLight = false,
+  currentUser = null
+}: RmaEntryProps) {
+  // Current active user for attribution
+  const [activeUser, setActiveUser] = useState<{ uid?: string; email?: string; name?: string } | null>(currentUser || null);
+
+  useEffect(() => {
+    if (currentUser) {
+      setActiveUser(currentUser);
+    } else {
+      getCurrentActiveAuthUser().then(u => {
+        if (u) {
+          setActiveUser({
+            uid: u.uid,
+            email: u.email,
+            name: u.name
+          });
+        }
+      }).catch(() => {});
+    }
+  }, [currentUser]);
+
   // Select Base Product state & search query
   const [selectedProductId, setSelectedProductId] = useState('');
   const [productSearchTerm, setProductSearchTerm] = useState('');
@@ -532,6 +570,22 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
     }
 
     try {
+      let creator = activeUser;
+      if (!creator || (!creator.name && !creator.email)) {
+        try {
+          const authUser = await getCurrentActiveAuthUser();
+          if (authUser) {
+            creator = {
+              uid: authUser.uid,
+              email: authUser.email,
+              name: authUser.name
+            };
+          }
+        } catch (e) {
+          console.warn('Silent auth user fetch error in RmaEntry submit:', e);
+        }
+      }
+
       const baseTimestamp = Date.now();
       for (let i = 0; i < targetSerials.length; i++) {
         const currentSerial = targetSerials[i];
@@ -556,7 +610,12 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
           photosAccessories: finalPhotosAccessories,
           createdAt: new Date(baseTimestamp + i * 150).toISOString(),
           status: 'Estoque',
-          excludeFromDailyCount: excludeFromDailyCount
+          excludeFromDailyCount: excludeFromDailyCount,
+          createdBy: creator ? {
+            uid: creator.uid,
+            email: creator.email,
+            name: creator.name
+          } : undefined
         };
 
         await onSaveTriage(newTriage);
@@ -576,7 +635,12 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
         packageStatus: finalPackageStatus,
         accessoriesInclusion: accessoriesInclusion.trim(),
         createdAt: new Date().toISOString(),
-        photoThumbnail: finalPhotosProduct[0] || finalPhotosBox[0] || (refProduct.images && refProduct.images[0]) || ''
+        photoThumbnail: finalPhotosProduct[0] || finalPhotosBox[0] || (refProduct.images && refProduct.images[0]) || '',
+        createdBy: creator ? {
+          uid: creator.uid,
+          email: creator.email,
+          name: creator.name
+        } : undefined
       };
 
       // Reset form fields immediately so RMA entry tab is completely restored and clean for new products
@@ -609,6 +673,17 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
             Recebimento de pacotes devolvidos, laudo de análise técnica e destinação de estoque.
           </p>
         </div>
+        {activeUser && (
+          <div className="flex items-center gap-2.5 px-3.5 py-2 bg-slate-950/80 border border-slate-800/80 rounded-xl shrink-0" id="rma-operator-badge">
+            <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+              <User className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Operador Responsável</span>
+              <span className="text-xs text-white font-bold tracking-wide">{activeUser.name || activeUser.email}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {products.length === 0 ? (
@@ -1543,6 +1618,16 @@ export default function RmaEntry({ products, units = [], onSaveTriage, onNavigat
                     <span className={`font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Acessórios:</span>
                     <span className="font-medium text-right max-w-[65%] text-slate-900 dark:text-slate-100">
                       {summaryModalData.accessoriesInclusion}
+                    </span>
+                  </div>
+                )}
+
+                {summaryModalData.createdBy && (summaryModalData.createdBy.name || summaryModalData.createdBy.email) && (
+                  <div className="flex justify-between items-center py-2">
+                    <span className={`font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Cadastrado por:</span>
+                    <span className="font-semibold text-right text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5" />
+                      {summaryModalData.createdBy.name || summaryModalData.createdBy.email}
                     </span>
                   </div>
                 )}

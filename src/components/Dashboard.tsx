@@ -20,7 +20,8 @@ import {
   Eye,
   CheckCircle2,
   Filter,
-  X
+  X,
+  User
 } from 'lucide-react';
 import { TriageUnit, PlatformType, DestinationSectorType, isMigrationUnit, BaseProduct } from '../types';
 import { getUnitResolvedPhotos } from '../utils/productImages';
@@ -623,6 +624,15 @@ export default function Dashboard({
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${sectorStyle}`}>
                           {unit.destinationSector}
                         </span>
+                        {unit.createdBy && (unit.createdBy.name || unit.createdBy.email) && (
+                          <span 
+                            className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800/80 border border-slate-700/60 text-slate-300"
+                            title={`Cadastrado por: ${unit.createdBy.name || unit.createdBy.email}`}
+                          >
+                            <User className="w-2.5 h-2.5 text-sky-400 shrink-0" />
+                            <span className="truncate max-w-[80px]">{unit.createdBy.name || unit.createdBy.email?.split('@')[0]}</span>
+                          </span>
+                        )}
                         <span className="font-mono text-xs text-slate-500 pl-2">
                           {hourStr}
                         </span>

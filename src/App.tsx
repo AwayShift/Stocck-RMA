@@ -544,7 +544,18 @@ export default function App() {
 
   // Triage actions
   const handleSaveTriage = async (unit: TriageUnit) => {
-    const saved = await saveTriageUnit(unit);
+    let unitWithUser = unit;
+    if (!unitWithUser.createdBy && user) {
+      unitWithUser = {
+        ...unitWithUser,
+        createdBy: {
+          uid: user.id,
+          email: user.email || '',
+          name: userName || user.displayName || ''
+        }
+      };
+    }
+    const saved = await saveTriageUnit(unitWithUser);
     setTriageUnits(prev => {
       const index = prev.findIndex(u => u.id === saved.id);
       if (index >= 0) {
@@ -876,6 +887,7 @@ export default function App() {
                 onSaveTriage={handleSaveTriage}
                 onNavigateToStock={() => setActiveTab('stock')}
                 isLight={isLight}
+                currentUser={user ? { uid: user.id, email: user.email || '', name: userName || user.displayName || '' } : null}
               />
             )}
 

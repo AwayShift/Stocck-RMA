@@ -808,11 +808,35 @@ export const setHasPendingExtendedCols = (supported: boolean): void => {
   } catch {}
 };
 
+const STORAGE_FEAT_TRIAGE_CREATED_BY_COL = 'stocckrma_feat_triage_created_by_col';
+let memoryHasTriageCreatedByCol: boolean | null = null;
+
+export const getHasTriageCreatedByCol = (): boolean | null => {
+  if (memoryHasTriageCreatedByCol !== null) return memoryHasTriageCreatedByCol;
+  try {
+    const val = localStorage.getItem(STORAGE_FEAT_TRIAGE_CREATED_BY_COL);
+    if (val === 'true') memoryHasTriageCreatedByCol = true;
+    else if (val === 'false') memoryHasTriageCreatedByCol = false;
+  } catch {}
+  return memoryHasTriageCreatedByCol;
+};
+
+export const setHasTriageCreatedByCol = (supported: boolean): void => {
+  memoryHasTriageCreatedByCol = supported;
+  try {
+    localStorage.setItem(STORAGE_FEAT_TRIAGE_CREATED_BY_COL, supported ? 'true' : 'false');
+  } catch {}
+};
+
 export const getTriageColumns = (): string => {
-  if (getHasExcludeDailyCol() === false) {
-    return 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration';
+  let cols = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration';
+  if (getHasExcludeDailyCol() !== false) {
+    cols += ', exclude_from_daily_count';
   }
-  return 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration, exclude_from_daily_count';
+  if (getHasTriageCreatedByCol() !== false) {
+    cols += ', created_by';
+  }
+  return cols;
 };
 
 export const getPendingColumns = (): string => {
@@ -834,9 +858,9 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     validCheckoutDate = new Date(u.checkoutDate).toISOString();
   }
 
-  // Dual persistence: embed metadata tag [EXCLUDE_DAILY_COUNT] in notes so that even if
-  // the remote database does not yet have the exclude_from_daily_count column,
-  // the exclusion state is 100% persisted and synced across all devices and sessions!
+  // Dual persistence: embed metadata tag [EXCLUDE_DAILY_COUNT] and [CREATED_BY:...] in notes so that even if
+  // the remote database does not yet have those columns,
+  // the state is 100% persisted and synced across all devices and sessions!
   let rawNotes = u.notes || '';
   if (u.excludeFromDailyCount) {
     if (!rawNotes.includes('[EXCLUDE_DAILY_COUNT]')) {
@@ -844,6 +868,16 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     }
   } else {
     rawNotes = rawNotes.replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '').trim();
+  }
+
+  if (u.createdBy && (u.createdBy.name || u.createdBy.email)) {
+    const creatorMeta = `[CREATED_BY:${JSON.stringify({
+      uid: u.createdBy.uid || '',
+      email: u.createdBy.email || '',
+      name: u.createdBy.name || ''
+    })}]`;
+    rawNotes = rawNotes.replace(/\[CREATED_BY:\{.*?\}\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${creatorMeta}` : creatorMeta;
   }
 
   const payload: any = {
@@ -878,13 +912,36 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     payload.exclude_from_daily_count = Boolean(u.excludeFromDailyCount);
   }
 
+  // Only include created_by column if not known to be missing in PostgreSQL schema
+  if (getHasTriageCreatedByCol() !== false && u.createdBy) {
+    payload.created_by = u.createdBy;
+  }
+
   return payload;
 };
 
 export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
   const decompressedNotes = decompressText(r.notes || '');
   const hasExcludeMarker = decompressedNotes.includes('[EXCLUDE_DAILY_COUNT]');
-  const cleanNotes = decompressedNotes.replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '').trim();
+
+  let createdBy: { uid?: string; email?: string; name?: string } | undefined = undefined;
+  if (r.created_by && typeof r.created_by === 'object') {
+    createdBy = r.created_by;
+  } else if (r.createdBy && typeof r.createdBy === 'object') {
+    createdBy = r.createdBy;
+  } else if (decompressedNotes.includes('[CREATED_BY:')) {
+    try {
+      const match = decompressedNotes.match(/\[CREATED_BY:(\{.*?\})\]/);
+      if (match && match[1]) {
+        createdBy = JSON.parse(match[1]);
+      }
+    } catch {}
+  }
+
+  const cleanNotes = decompressedNotes
+    .replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '')
+    .replace(/\[CREATED_BY:\{.*?\}\]\s*/g, '')
+    .trim();
 
   return {
     id: r.id,
@@ -914,7 +971,8 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
       r.exclude_from_daily_count === true ||
       r.excludeFromDailyCount === true ||
       hasExcludeMarker
-    )
+    ),
+    createdBy: createdBy
   };
 };
 

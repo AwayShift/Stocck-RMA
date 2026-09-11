@@ -95,6 +95,11 @@ export interface TriageUnit {
   source?: 'manual' | 'excel' | 'migration';
   isMigration?: boolean;
   excludeFromDailyCount?: boolean; // Se verdadeiro, não contabiliza no contador de entrada diária
+  createdBy?: {
+    uid?: string;
+    email?: string;
+    name?: string;
+  };
 }
 
 /**

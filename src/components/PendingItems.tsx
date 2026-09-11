@@ -172,7 +172,9 @@ export default function PendingItems({
   const [transferCustomerReason, setTransferCustomerReason] = useState('');
   const [transferDestination, setTransferDestination] = useState<DestinationSectorType>('Openbox');
   const [transferDeviceStatus, setTransferDeviceStatus] = useState('Usado');
+  const [transferCustomDeviceStatus, setTransferCustomDeviceStatus] = useState('');
   const [transferPackageStatus, setTransferPackageStatus] = useState('Danificada');
+  const [transferCustomPackageStatus, setTransferCustomPackageStatus] = useState('');
   const [transferAccessories, setTransferAccessories] = useState('');
   const [transferSti, setTransferSti] = useState('');
   const [transferNotes, setTransferNotes] = useState('');
@@ -431,14 +433,21 @@ export default function PendingItems({
         return aUnresolved ? -1 : 1;
       }
 
-      // 2. Higher priority first (Urgente > Alta > Média > Baixa)
+      // 2. Casos já resolvidos: ordenar por ordem cronológica de abertura (do mais antigo ao mais recente)
+      if (!aUnresolved && !bUnresolved) {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return aTime - bTime;
+      }
+
+      // 3. Casos não resolvidos: prioridade mais alta primeiro (Urgente > Alta > Média > Baixa)
       const aPrio = PRIORITY_ORDER[a.priority || 'Média'] || 2;
       const bPrio = PRIORITY_ORDER[b.priority || 'Média'] || 2;
       if (aPrio !== bPrio) {
         return bPrio - aPrio;
       }
 
-      // 3. Newest registration date first
+      // 4. Data de abertura mais recente primeiro para não resolvidos
       const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return bTime - aTime;
@@ -708,9 +717,11 @@ export default function PendingItems({
     setTransferOrderNumber(item.orderNumber || '');
     setTransferDestination(item.destinationSectorSuggested || 'Openbox');
     setTransferDeviceStatus('Usado');
+    setTransferCustomDeviceStatus('');
     setTransferPackageStatus('Danificada');
-    setTransferCustomerReason(item.pendingReason || '');
-    setTransferAccessories(item.detailedNotes ? `Obs: ${item.detailedNotes}` : 'Liberado de pendência');
+    setTransferCustomPackageStatus('');
+    setTransferCustomerReason('');
+    setTransferAccessories('');
     setTransferNotes(`<p><strong>Liberado da Aba de Pendências:</strong></p><p>Motivo original: ${item.pendingReason}</p><p>${item.detailedNotes || ''}</p>`);
     setTransferPhotosProduct(item.photos ? [...item.photos] : []);
     setTransferPhotosBox([]);
@@ -757,6 +768,14 @@ export default function PendingItems({
 
       const matchedProd = products.find(p => p.sku.toLowerCase() === transferSku.trim().toLowerCase());
 
+      const finalDeviceStatus = transferDeviceStatus === 'Descrever'
+        ? (transferCustomDeviceStatus.trim() || 'Descrever')
+        : transferDeviceStatus;
+
+      const finalPackageStatus = transferPackageStatus === 'Descrever'
+        ? (transferCustomPackageStatus.trim() || 'Descrever')
+        : transferPackageStatus;
+
       await onTransferToStock(updatedItem, transferDestination, {
         baseProductId: matchedProd?.id,
         baseProductName: transferProductName.trim(),
@@ -766,9 +785,9 @@ export default function PendingItems({
         serialNumber: transferSerialNumber.trim(),
         trackingCode: transferSti.trim(),
         orderNumber: transferOrderNumber.trim(),
-        customerReason: transferCustomerReason.trim() || updatedItem.pendingReason,
-        deviceStatus: transferDeviceStatus,
-        packageStatus: transferPackageStatus,
+        customerReason: transferCustomerReason.trim() || 'Entrada de Estoque',
+        deviceStatus: finalDeviceStatus,
+        packageStatus: finalPackageStatus,
         accessoriesInclusion: transferAccessories.trim(),
         notes: transferNotes,
         photosProduct: transferPhotosProduct,
@@ -2388,11 +2407,33 @@ export default function PendingItems({
                   </div>
 
                   {/* Estado do Aparelho & Embalagem */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Estado do Aparelho
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-slate-300">
+                          Estado do Aparelho
+                        </label>
+                        {transferDeviceStatus !== 'Descrever' ? (
+                          <button
+                            type="button"
+                            onClick={() => setTransferDeviceStatus('Descrever')}
+                            className="text-[10px] text-emerald-400 hover:text-emerald-300 font-medium transition-colors cursor-pointer"
+                          >
+                            + Descrever
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTransferDeviceStatus('Usado');
+                              setTransferCustomDeviceStatus('');
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-slate-200 font-medium transition-colors cursor-pointer"
+                          >
+                            Opções padrão
+                          </button>
+                        )}
+                      </div>
                       <select
                         value={transferDeviceStatus}
                         onChange={(e) => setTransferDeviceStatus(e.target.value)}
@@ -2401,13 +2442,61 @@ export default function PendingItems({
                         <option value="Novo">Novo (Sem marcas de uso)</option>
                         <option value="Usado">Usado (Leves marcas / Marcas normais)</option>
                         <option value="Danificado">Danificado / Avariado</option>
+                        <option value="Descrever">Descrever (Personalizado)...</option>
                       </select>
+
+                      {transferDeviceStatus === 'Descrever' && (
+                        <div className="mt-2 space-y-1.5">
+                          <input
+                            type="text"
+                            value={transferCustomDeviceStatus}
+                            onChange={(e) => setTransferCustomDeviceStatus(e.target.value)}
+                            placeholder="Descreva o estado do aparelho..."
+                            autoFocus
+                            className="w-full bg-slate-950 border border-emerald-500/70 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 transition-colors"
+                          />
+                          <div className="flex flex-wrap gap-1">
+                            {['Leves marcas de uso', 'Riscos na carcaça', 'Tela riscada/trincada', 'Sem marcas estéticas'].map((tag) => (
+                              <button
+                                type="button"
+                                key={tag}
+                                onClick={() => setTransferCustomDeviceStatus(prev => prev ? `${prev}, ${tag}` : tag)}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-colors cursor-pointer"
+                              >
+                                + {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Estado da Embalagem
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-slate-300">
+                          Estado da Embalagem
+                        </label>
+                        {transferPackageStatus !== 'Descrever' ? (
+                          <button
+                            type="button"
+                            onClick={() => setTransferPackageStatus('Descrever')}
+                            className="text-[10px] text-emerald-400 hover:text-emerald-300 font-medium transition-colors cursor-pointer"
+                          >
+                            + Descrever
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTransferPackageStatus('Danificada');
+                              setTransferCustomPackageStatus('');
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-slate-200 font-medium transition-colors cursor-pointer"
+                          >
+                            Opções padrão
+                          </button>
+                        )}
+                      </div>
                       <select
                         value={transferPackageStatus}
                         onChange={(e) => setTransferPackageStatus(e.target.value)}
@@ -2416,7 +2505,33 @@ export default function PendingItems({
                         <option value="Perfeita">Perfeita (Original intacta)</option>
                         <option value="Danificada">Danificada (Amassada / Rasgada)</option>
                         <option value="Sem Embalagem">Sem Embalagem (Caixa parda / genérica)</option>
+                        <option value="Descrever">Descrever (Personalizado)...</option>
                       </select>
+
+                      {transferPackageStatus === 'Descrever' && (
+                        <div className="mt-2 space-y-1.5">
+                          <input
+                            type="text"
+                            value={transferCustomPackageStatus}
+                            onChange={(e) => setTransferCustomPackageStatus(e.target.value)}
+                            placeholder="Descreva o estado da embalagem..."
+                            autoFocus
+                            className="w-full bg-slate-950 border border-emerald-500/70 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 transition-colors"
+                          />
+                          <div className="flex flex-wrap gap-1">
+                            {['Caixa original amassada', 'Caixa rasgada', 'Sem berço interno', 'Embalagem plástica / parda'].map((tag) => (
+                              <button
+                                type="button"
+                                key={tag}
+                                onClick={() => setTransferCustomPackageStatus(prev => prev ? `${prev}, ${tag}` : tag)}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-colors cursor-pointer"
+                              >
+                                + {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
