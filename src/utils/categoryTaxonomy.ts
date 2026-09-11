@@ -368,14 +368,30 @@ export interface GroupedCategoryFilterItem {
 
 /**
  * Builds grouped filter list for select dropdowns with <optgroup>.
- * Takes all categories present in the products/stock database and ensures they are nicely grouped.
+ * Takes all categories present in the products/stock database and ensures only categories
+ * with at least 1 registered item (count > 0) are displayed in the filter.
  */
 export function buildGroupedFilterCategories(
   existingCategories: string[],
   categoryCounts?: Record<string, number>
 ): GroupedCategoryFilterItem[] {
-  // Combine predefined subcategories with any custom categories in the system
-  const categoriesPool = new Set<string>([...ALL_PREDEFINED_SUBCATEGORIES, ...existingCategories.filter(Boolean)]);
+  // If categoryCounts is provided, only include categories that have at least 1 item registered (count > 0).
+  // If categoryCounts is not provided, only include categories that actually exist in existingCategories.
+  const categoriesPool = new Set<string>();
+
+  if (categoryCounts) {
+    Object.entries(categoryCounts).forEach(([cat, count]) => {
+      if (count > 0 && cat && cat.trim() && cat !== 'Todas') {
+        categoriesPool.add(cat.trim());
+      }
+    });
+  } else {
+    existingCategories.filter(Boolean).forEach(cat => {
+      if (cat && cat.trim() && cat !== 'Todas') {
+        categoriesPool.add(cat.trim());
+      }
+    });
+  }
 
   // Group by general category
   const groupsMap = new Map<string, Set<string>>();
@@ -384,7 +400,6 @@ export function buildGroupedFilterCategories(
   });
 
   categoriesPool.forEach(cat => {
-    if (!cat || cat === 'Todas') return;
     const hierarchy = resolveCategoryHierarchy(cat);
     const set = groupsMap.get(hierarchy.general.id);
     if (set) {
@@ -399,6 +414,9 @@ export function buildGroupedFilterCategories(
 
   GENERAL_CATEGORIES.forEach(gen => {
     const catSet = groupsMap.get(gen.id) || new Set<string>();
+    // If this general category has no registered products, omit it completely
+    if (catSet.size === 0) return;
+
     const options: Array<{ value: string; label: string; isGeneralHeader?: boolean; count?: number }> = [];
 
     // Option to filter ALL products in this general category
@@ -421,6 +439,9 @@ export function buildGroupedFilterCategories(
 
     sortedSubcats.forEach(subName => {
       const count = categoryCounts ? (categoryCounts[subName] || 0) : undefined;
+      // Skip subcategories that have 0 products registered
+      if (count !== undefined && count <= 0) return;
+
       const countSuffix = count !== undefined ? ` (${count})` : '';
       options.push({
         value: subName,
@@ -428,6 +449,7 @@ export function buildGroupedFilterCategories(
       });
     });
 
+    // Only add group if there are valid options
     if (options.length > 0) {
       result.push({
         general: gen,

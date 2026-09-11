@@ -575,27 +575,41 @@ export default function PhysicalStock({
     return units.filter(u => u.status === 'Estoque' && (isDuplicateSti(u) || isDuplicateSerial(u))).length;
   }, [units, duplicateStiSet, duplicateSerialSet]);
 
-  // Unique Brands from catalog products and units
-  const uniqueBrands = React.useMemo(() => {
-    const brandsSet = new Set<string>();
-    products.forEach(p => {
-      if (p.brand && p.brand.trim() && p.brand.trim() !== 'N/A' && p.brand.trim() !== 'Não Informado') {
-        brandsSet.add(p.brand.trim());
-      }
-    });
-    units.forEach(u => {
-      const bp = findBaseProduct(u, products);
-      if (bp?.brand && bp.brand.trim() && bp.brand.trim() !== 'N/A' && bp.brand.trim() !== 'Não Informado') {
-        brandsSet.add(bp.brand.trim());
-      }
-    });
-    return Array.from(brandsSet).sort();
-  }, [products, units]);
+  // Units in the current sector tab (e.g. Todos Ativos, Principal, Openbox, RMA, Baixado)
+  const tabUnits = React.useMemo(() => {
+    if (activeTab === 'Todos') {
+      return units.filter(u => u.status === 'Estoque');
+    } else if (activeTab === 'Baixado') {
+      return units.filter(u => u.status === 'Baixado');
+    } else {
+      return units.filter(u => u.status === 'Estoque' && u.destinationSector === activeTab);
+    }
+  }, [units, activeTab]);
 
-  // Category counts and grouped filter categories
+  // Brand counts and unique brands with at least 1 registered unit in the active stock tab
+  const brandCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    tabUnits.forEach(u => {
+      const bp = findBaseProduct(u, products);
+      const b = (bp?.brand || '').trim();
+      if (b && b !== 'N/A' && b !== 'Não Informado' && b !== 'Todas') {
+        counts[b] = (counts[b] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [tabUnits, products]);
+
+  const uniqueBrands = React.useMemo(() => {
+    return (Object.entries(brandCounts) as [string, number][])
+      .filter(([_, count]) => count > 0)
+      .map(([brand, count]) => ({ brand, count }))
+      .sort((a, b) => a.brand.localeCompare(b.brand, 'pt-BR'));
+  }, [brandCounts]);
+
+  // Category counts and grouped filter categories for items with registered units
   const categoryCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
-    units.forEach(u => {
+    tabUnits.forEach(u => {
       const bp = findBaseProduct(u, products);
       if (bp?.category && bp.category.trim() && bp.category.trim() !== 'Todas') {
         const cat = bp.category.trim();
@@ -603,24 +617,31 @@ export default function PhysicalStock({
       }
     });
     return counts;
-  }, [units, products]);
+  }, [tabUnits, products]);
 
-  // Grouped Categories with General Categories & Subcategories
+  // Grouped Categories with General Categories & Subcategories with registered units
   const groupedFilterCategories = React.useMemo(() => {
-    const categoriesSet = new Set<string>();
-    products.forEach(p => {
-      if (p.category && p.category.trim() && p.category.trim() !== 'Todas') {
-        categoriesSet.add(p.category.trim());
+    const existingCats = Object.keys(categoryCounts).filter(cat => (categoryCounts[cat] || 0) > 0);
+    return buildGroupedFilterCategories(existingCats, categoryCounts);
+  }, [categoryCounts]);
+
+  // Reset selected filters if they no longer exist in the available items of the current view
+  useEffect(() => {
+    if (selectedBrand !== 'Todas' && !uniqueBrands.some(b => b.brand === selectedBrand)) {
+      setSelectedBrand('Todas');
+    }
+  }, [uniqueBrands, selectedBrand]);
+
+  useEffect(() => {
+    if (selectedCategory !== 'Todas') {
+      const exists = groupedFilterCategories.some(group => 
+        group.options.some(opt => opt.value === selectedCategory)
+      );
+      if (!exists) {
+        setSelectedCategory('Todas');
       }
-    });
-    units.forEach(u => {
-      const bp = findBaseProduct(u, products);
-      if (bp?.category && bp.category.trim() && bp.category.trim() !== 'Todas') {
-        categoriesSet.add(bp.category.trim());
-      }
-    });
-    return buildGroupedFilterCategories(Array.from(categoriesSet), categoryCounts);
-  }, [products, units, categoryCounts]);
+    }
+  }, [groupedFilterCategories, selectedCategory]);
 
   const handleClearAllFilters = () => {
     setSearchTerm('');
@@ -1370,8 +1391,8 @@ export default function PhysicalStock({
                 id="select-filter-stock-brand"
               >
                 <option value="Todas">Todas as Marcas ({uniqueBrands.length})</option>
-                {uniqueBrands.map(brand => (
-                  <option key={brand} value={brand}>{brand}</option>
+                {uniqueBrands.map(({ brand, count }) => (
+                  <option key={brand} value={brand}>{brand} ({count})</option>
                 ))}
               </select>
             </div>
@@ -1431,7 +1452,6 @@ export default function PhysicalStock({
                 <option value="Amazon">Amazon</option>
                 <option value="Amazon Ta Novo">Amazon Ta Novo</option>
                 <option value="Kabum">Kabum</option>
-                <option value="Outra">Outra</option>
                 <option value="Sem Plataforma">Sem Plataforma / Não Informada</option>
               </select>
             </div>
