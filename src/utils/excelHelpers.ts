@@ -232,8 +232,8 @@ export function downloadInflowTemplate() {
   const sampleData = [
     {
       'DATA': '25/05/2026',
-      'RMA': 23,
       'ESTOQUE': 25,
+      'RMA': 23,
       'OPENBOX': 2,
       'ES': 0,
       'TOTAL DIA': 50,
@@ -241,8 +241,8 @@ export function downloadInflowTemplate() {
     },
     {
       'DATA': '26/05/2026',
-      'RMA': 11,
       'ESTOQUE': 15,
+      'RMA': 11,
       'OPENBOX': 1,
       'ES': 44,
       'TOTAL DIA': 71,
@@ -250,8 +250,8 @@ export function downloadInflowTemplate() {
     },
     {
       'DATA': '27/05/2026',
-      'RMA': 11,
       'ESTOQUE': 25,
+      'RMA': 11,
       'OPENBOX': 5,
       'ES': 54,
       'TOTAL DIA': 95,
@@ -259,8 +259,8 @@ export function downloadInflowTemplate() {
     },
     {
       'DATA': '28/05/2026',
-      'RMA': 15,
       'ESTOQUE': 24,
+      'RMA': 15,
       'OPENBOX': 2,
       'ES': 0,
       'TOTAL DIA': 41,
@@ -268,8 +268,8 @@ export function downloadInflowTemplate() {
     },
     {
       'DATA': '29/05/2026',
-      'RMA': 2,
       'ESTOQUE': 6,
+      'RMA': 2,
       'OPENBOX': 2,
       'ES': 0,
       'TOTAL DIA': 10,
@@ -282,8 +282,8 @@ export function downloadInflowTemplate() {
   // Set column widths
   ws['!cols'] = [
     { wch: 14 }, // DATA
-    { wch: 10 }, // RMA
     { wch: 12 }, // ESTOQUE
+    { wch: 10 }, // RMA
     { wch: 12 }, // OPENBOX
     { wch: 10 }, // ES
     { wch: 14 }, // TOTAL DIA
@@ -314,8 +314,8 @@ export function exportInflowRecordsToExcel(records: DailyInflowRecord[], filenam
     week.records.forEach((rec, idx) => {
       rows.push({
         'DATA': formatBrDate(rec.date),
-        'RMA': rec.rma,
         'ESTOQUE': rec.estoque,
+        'RMA': rec.rma,
         'OPENBOX': rec.openbox,
         'ES': rec.es,
         'TOTAL DIA': rec.totalDia,
@@ -328,8 +328,8 @@ export function exportInflowRecordsToExcel(records: DailyInflowRecord[], filenam
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [
     { wch: 14 },
-    { wch: 10 },
     { wch: 12 },
+    { wch: 10 },
     { wch: 12 },
     { wch: 10 },
     { wch: 14 },

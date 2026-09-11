@@ -204,6 +204,10 @@ export default function RmaEntry({
     setIsCustomPackageStatus(false);
     setCustomPackageStatusText('');
 
+    if (sector !== 'Openbox') {
+      setTrackingCode('');
+    }
+
     if (sector === 'Principal') {
       setDeviceStatus('Novo');
       setPackageStatus('Perfeita');
@@ -512,8 +516,8 @@ export default function RmaEntry({
         return;
       }
     }
-    // Keep tracking code as entered by user, or blank if not provided (STI is exclusively for controlled openbox items)
-    const finalTrackingCode = trackingCode.trim();
+    // Keep tracking code as entered by user for Openbox, or blank if another sector (STI is exclusively for controlled openbox items)
+    const finalTrackingCode = destinationSector === 'Openbox' ? trackingCode.trim() : '';
 
     // Mandatory STI check for Openbox products
     if (destinationSector === 'Openbox' && !finalTrackingCode) {
@@ -995,7 +999,7 @@ export default function RmaEntry({
                 </div>
 
                 {/* Origin details row */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                <div className={`grid grid-cols-1 ${destinationSector === 'Openbox' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5 pt-1`}>
                   {/* Platform */}
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Plataforma</label>
@@ -1006,30 +1010,24 @@ export default function RmaEntry({
                     />
                   </div>
 
-                  {/* Código STI */}
-                  <div className="space-y-1">
-                    <label className={`text-[11px] font-bold uppercase tracking-wider flex items-center justify-between ${
-                      destinationSector === 'Openbox' ? 'text-amber-400' : 'text-slate-400'
-                    }`}>
-                      <span>Código STI {destinationSector === 'Openbox' ? '*' : ''}</span>
-                      {destinationSector === 'Openbox' && (
+                  {/* Código STI - visível apenas quando o Openbox está selecionado */}
+                  {destinationSector === 'Openbox' && (
+                    <div className="space-y-1 animate-in fade-in duration-200">
+                      <label className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between text-amber-400">
+                        <span>Código STI *</span>
                         <span className="text-[9px] font-bold px-1 bg-amber-500/20 text-amber-300 rounded">Obrigatório</span>
-                      )}
-                    </label>
-                    <input 
-                      type="text"
-                      placeholder={destinationSector === 'Openbox' ? "STI-40912 ou 13509873" : "Opcional"}
-                      value={trackingCode}
-                      onChange={(e) => setTrackingCode(e.target.value)}
-                      className={`w-full px-3 py-2 bg-slate-950 rounded-lg text-xs font-mono transition-all ${
-                        destinationSector === 'Openbox'
-                          ? 'border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400/40'
-                          : 'border border-slate-800 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500'
-                      }`}
-                      id="input-tracking-code"
-                      required={destinationSector === 'Openbox'}
-                    />
-                  </div>
+                      </label>
+                      <input 
+                        type="text"
+                        placeholder="STI-40912 ou 13509873"
+                        value={trackingCode}
+                        onChange={(e) => setTrackingCode(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 rounded-lg text-xs font-mono transition-all border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400/40"
+                        id="input-tracking-code"
+                        required
+                      />
+                    </div>
+                  )}
 
                   {/* Order Number */}
                   <div className="space-y-1">

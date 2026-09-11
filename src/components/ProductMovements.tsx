@@ -9,6 +9,7 @@ import {
   Search, 
   Package, 
   Boxes,
+  ShoppingCart,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -34,6 +35,7 @@ import {
   getWeekdayName,
   groupRecordsByWeek 
 } from '../utils/excelHelpers';
+import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
 
 interface ProductMovementsProps {
   products: BaseProduct[];
@@ -141,12 +143,17 @@ export default function ProductMovements({
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [dailyViewType, setDailyViewType] = useState<'calendar' | 'chart'>('calendar');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSector, setSelectedSector] = useState<string>('Todos');
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('Todas');
 
-  // Reset day/week filters when selected month changes
+  // Reset day/week and search filters when selected month changes
   useEffect(() => {
     setSelectedDay(null);
     setSelectedDateStr(null);
     setSelectedWeek(null);
+    setSelectedSector('Todos');
+    setSelectedPlatform('Todas');
+    setSearchQuery('');
   }, [selectedMonth]);
 
   // Navigate months helper - Go back in time (Mês anterior existente)
@@ -526,8 +533,8 @@ export default function ProductMovements({
     };
   }, [weeklyCounts, dailyCounts]);
 
-  // Filtered list of movements (for unit view - excluding migration items and items excluded from daily count)
-  const filteredMovements = useMemo(() => {
+  // Base triage units in the selected calendar period (month, or specific week/day)
+  const scopeUnits = useMemo(() => {
     return units.filter(u => {
       if (isMigrationUnit(u)) return false; // Ignore migration items
       if (u.excludeFromDailyCount) return false; // Exclude items removed from daily count from inflow flux
@@ -553,7 +560,101 @@ export default function ProductMovements({
           return false;
         }
       }
+      return true;
+    });
+  }, [units, selectedYear, selectedMonthIdx, selectedDateStr, selectedWeek, monthWeeks]);
 
+  // Available sectors with items in the current scope
+  const availableSectors = useMemo(() => {
+    const counts: Record<string, number> = {};
+    scopeUnits.forEach(u => {
+      const sec = (u.destinationSector || '').trim();
+      if (sec) {
+        counts[sec] = (counts[sec] || 0) + 1;
+      }
+    });
+
+    const standardOrder = ['Principal', 'Openbox', 'RMA'];
+    const result: Array<{ sector: string; count: number }> = [];
+
+    standardOrder.forEach(s => {
+      if (counts[s] && counts[s] > 0) {
+        result.push({ sector: s, count: counts[s] });
+      }
+    });
+
+    Object.keys(counts).forEach(s => {
+      if (!standardOrder.includes(s) && counts[s] > 0) {
+        result.push({ sector: s, count: counts[s] });
+      }
+    });
+
+    return result;
+  }, [scopeUnits]);
+
+  // Available platforms with items in the current scope
+  const availablePlatforms = useMemo(() => {
+    const counts: Record<string, number> = {};
+    scopeUnits.forEach(u => {
+      const p = (u.platform || '').trim();
+      const key = p && p !== 'N/A' && p !== 'Não Informado' ? p : 'Sem Plataforma';
+      counts[key] = (counts[key] || 0) + 1;
+    });
+
+    const standardOrder = ['Mercado Livre', 'Shopee', 'Amazon', 'Amazon Ta Novo', 'Kabum'];
+    const result: Array<{ platform: string; count: number }> = [];
+
+    standardOrder.forEach(p => {
+      if (counts[p] && counts[p] > 0) {
+        result.push({ platform: p, count: counts[p] });
+      }
+    });
+
+    Object.keys(counts).forEach(p => {
+      if (!standardOrder.includes(p) && p !== 'Sem Plataforma' && p !== 'Outra' && counts[p] > 0) {
+        result.push({ platform: p, count: counts[p] });
+      }
+    });
+
+    if (counts['Sem Plataforma'] && counts['Sem Plataforma'] > 0) {
+      result.push({ platform: 'Sem Plataforma', count: counts['Sem Plataforma'] });
+    }
+
+    return result;
+  }, [scopeUnits]);
+
+  // Auto reset filters if they no longer exist in the active scope
+  useEffect(() => {
+    if (selectedSector !== 'Todos' && !availableSectors.some(s => s.sector === selectedSector)) {
+      setSelectedSector('Todos');
+    }
+  }, [availableSectors, selectedSector]);
+
+  useEffect(() => {
+    if (selectedPlatform !== 'Todas' && !availablePlatforms.some(p => p.platform === selectedPlatform)) {
+      setSelectedPlatform('Todas');
+    }
+  }, [availablePlatforms, selectedPlatform]);
+
+  // Filtered list of movements (for unit view - with search, sector and platform filters)
+  const filteredMovements = useMemo(() => {
+    return scopeUnits.filter(u => {
+      // Sector filter
+      if (selectedSector !== 'Todos') {
+        if (u.destinationSector !== selectedSector) return false;
+      }
+
+      // Platform filter
+      if (selectedPlatform !== 'Todas') {
+        const p = (u.platform || '').trim();
+        if (selectedPlatform === 'Sem Plataforma') {
+          if (p && p !== 'N/A' && p !== 'Não Informado' && p !== 'Sem Plataforma') return false;
+        } else {
+          if (p !== selectedPlatform) return false;
+        }
+      }
+
+      // Search query
       if (searchQuery.trim() !== '') {
         const query = searchQuery.toLowerCase();
         const matchesSku = u.baseProductSku?.toLowerCase().includes(query);
@@ -572,7 +673,15 @@ export default function ProductMovements({
       const tb = getDateParts(b.createdAt)?.time || 0;
       return tb - ta;
     });
-  }, [units, selectedYear, selectedMonthIdx, selectedDateStr, selectedWeek, searchQuery, monthWeeks]);
+  }, [scopeUnits, selectedSector, selectedPlatform, searchQuery]);
+
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setSelectedSector('Todos');
+    setSelectedPlatform('Todas');
+  };
+
+  const hasActiveFilters = searchQuery.trim() !== '' || selectedSector !== 'Todos' || selectedPlatform !== 'Todas';
 
   const maxWeeklyCount = Math.max(...weeklyCounts, 1);
   const maxDailyCount = Math.max(...dailyCounts, 1);
@@ -890,21 +999,6 @@ export default function ProductMovements({
             }`}>
               <span className={`text-[11px] font-bold uppercase tracking-wider ${
                 isLight ? 'text-slate-600' : 'text-slate-400'
-              }`}>RMA (Triagem)</span>
-              <div className="mt-2 flex items-baseline gap-1.5">
-                <span className={`text-2xl font-black ${
-                  isLight ? 'text-rose-600' : 'text-rose-400'
-                }`}>{weeksGrandTotal.totalRma}</span>
-                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
-              </div>
-              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Garantia / Devoluções</span>
-            </div>
-
-            <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
-              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
-            }`}>
-              <span className={`text-[11px] font-bold uppercase tracking-wider ${
-                isLight ? 'text-slate-600' : 'text-slate-400'
               }`}>Estoque Geral</span>
               <div className="mt-2 flex items-baseline gap-1.5">
                 <span className={`text-2xl font-black ${
@@ -913,6 +1007,21 @@ export default function ProductMovements({
                 <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
               </div>
               <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Almoxarifado</span>
+            </div>
+
+            <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
+            }`}>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                isLight ? 'text-slate-600' : 'text-slate-400'
+              }`}>RMA (Triagem)</span>
+              <div className="mt-2 flex items-baseline gap-1.5">
+                <span className={`text-2xl font-black ${
+                  isLight ? 'text-rose-600' : 'text-rose-400'
+                }`}>{weeksGrandTotal.totalRma}</span>
+                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
+              </div>
+              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Garantia / Devoluções</span>
             </div>
 
             <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
@@ -1036,8 +1145,8 @@ export default function ProductMovements({
                         : 'bg-slate-950 text-slate-300 border-slate-800'
                     }`}>
                       <th className="py-3 px-4 w-44">DATA</th>
-                      <th className={`py-3 px-4 text-center w-24 ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>RMA</th>
                       <th className={`py-3 px-4 text-center w-28 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>ESTOQUE</th>
+                      <th className={`py-3 px-4 text-center w-24 ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>RMA</th>
                       <th className={`py-3 px-4 text-center w-28 ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>OPENBOX</th>
                       <th className={`py-3 px-4 text-center w-24 ${isLight ? 'text-purple-600' : 'text-purple-400'}`}>ES</th>
                       <th className={`py-3 px-4 text-center w-28 font-black ${
@@ -1135,18 +1244,18 @@ export default function ProductMovements({
                                   )}
                                 </td>
 
-                                {/* RMA */}
-                                <td className={`py-3 px-4 text-center font-mono font-bold ${
-                                  isLight ? 'text-rose-600' : 'text-rose-400'
-                                }`}>
-                                  {record.rma}
-                                </td>
-
                                 {/* ESTOQUE */}
                                 <td className={`py-3 px-4 text-center font-mono font-bold ${
                                   isLight ? 'text-emerald-600' : 'text-emerald-400'
                                 }`}>
                                   {record.estoque}
+                                </td>
+
+                                {/* RMA */}
+                                <td className={`py-3 px-4 text-center font-mono font-bold ${
+                                  isLight ? 'text-rose-600' : 'text-rose-400'
+                                }`}>
+                                  {record.rma}
                                 </td>
 
                                 {/* OPENBOX */}
@@ -1233,8 +1342,8 @@ export default function ProductMovements({
                           <span className={`text-[10px] font-normal ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Ciclo semanal completo com dias adjacentes</span>
                         </div>
                       </td>
-                      <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>{weeksGrandTotal.totalRma}</td>
                       <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>{weeksGrandTotal.totalEstoque}</td>
+                      <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>{weeksGrandTotal.totalRma}</td>
                       <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>{weeksGrandTotal.totalOpenbox}</td>
                       <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-purple-600' : 'text-purple-400'}`}>{weeksGrandTotal.totalEs}</td>
                       <td className={`py-4 px-4 text-center font-mono text-base ${
@@ -1273,8 +1382,8 @@ export default function ProductMovements({
                         <td className={`py-2.5 px-4 font-semibold ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
                           Mês Civil Estrito ({monthName})
                         </td>
-                        <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-rose-600' : 'text-rose-400/80'}`}>{monthTotals.totalRma}</td>
                         <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-emerald-600' : 'text-emerald-400/80'}`}>{monthTotals.totalEstoque}</td>
+                        <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-rose-600' : 'text-rose-400/80'}`}>{monthTotals.totalRma}</td>
                         <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-amber-600' : 'text-amber-400/80'}`}>{monthTotals.totalOpenbox}</td>
                         <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-purple-600' : 'text-purple-400/80'}`}>{monthTotals.totalEs}</td>
                         <td className={`py-2.5 px-4 text-center font-mono font-bold ${
@@ -1641,24 +1750,131 @@ export default function ProductMovements({
               </div>
             </div>
 
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filtrar por SKU, Produto, Canal, Destino ou Rastreamento..."
-                className="unit-search-input w-full bg-slate-950 border border-slate-800/50 rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 transition-all"
-              />
-              {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-white transition-all cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+            {/* Search and Filters Controls */}
+            <div className="space-y-3">
+              {/* Search Input */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Filtrar por SKU, Produto, Canal, Destino ou Rastreamento..."
+                  className="unit-search-input w-full bg-slate-950 border border-slate-800/50 rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 transition-all"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-white transition-all cursor-pointer"
+                    title="Limpar pesquisa"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filters Row: Estoque & Plataforma */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Filtro por Estoque */}
+                <div className="space-y-1">
+                  <label className={`text-[10px] font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'} uppercase tracking-wider flex items-center gap-1.5`}>
+                    <Boxes className="w-3 h-3 text-emerald-400" />
+                    <span>Estoque / Destino</span>
+                  </label>
+                  <select
+                    value={selectedSector}
+                    onChange={(e) => setSelectedSector(e.target.value)}
+                    className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold focus:outline-none transition-colors truncate ${
+                      selectedSector !== 'Todos' 
+                        ? getSectorFilterStyle(selectedSector).selectClasses 
+                        : 'border-slate-800 text-slate-200'
+                    }`}
+                    id="select-filter-movements-sector"
+                  >
+                    <option value="Todos">Todos os Estoques ({scopeUnits.length})</option>
+                    {availableSectors.map(({ sector, count }) => (
+                      <option key={sector} value={sector}>
+                        {sector === 'Principal' ? 'Estoque Principal' : sector === 'Openbox' ? 'Setor Openbox' : sector === 'RMA' ? 'Setor RMA' : sector} ({count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Filtro por Plataforma */}
+                <div className="space-y-1">
+                  <label className={`text-[10px] font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'} uppercase tracking-wider flex items-center gap-1.5`}>
+                    <ShoppingCart className="w-3 h-3 text-sky-400" />
+                    <span>Plataforma</span>
+                  </label>
+                  <select
+                    value={selectedPlatform}
+                    onChange={(e) => setSelectedPlatform(e.target.value)}
+                    className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold focus:outline-none transition-colors truncate ${
+                      selectedPlatform !== 'Todas' 
+                        ? getPlatformFilterStyle(selectedPlatform).selectClasses 
+                        : 'border-slate-800 text-slate-200'
+                    }`}
+                    id="select-filter-movements-platform"
+                  >
+                    <option value="Todas">Todas as Plataformas ({scopeUnits.length})</option>
+                    {availablePlatforms.map(({ platform, count }) => (
+                      <option key={platform} value={platform}>
+                        {platform} ({count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Filter feedback & Clear button */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'} font-medium flex items-center gap-1.5`}>
+                    <Filter className="w-3 h-3 text-sky-400" />
+                    <span>Exibindo <strong className={`font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>{filteredMovements.length}</strong> de <strong className="text-slate-500 font-mono">{scopeUnits.length}</strong> itens</span>
+                  </span>
+
+                  {selectedSector !== 'Todos' && (
+                    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md border font-bold ${getSectorFilterStyle(selectedSector).badgeClasses}`}>
+                      <span>Estoque: {selectedSector}</span>
+                      <button 
+                        onClick={() => setSelectedSector('Todos')}
+                        className="hover:opacity-75 cursor-pointer ml-0.5"
+                        title="Remover filtro de estoque"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  )}
+
+                  {selectedPlatform !== 'Todas' && (
+                    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md border font-bold ${getPlatformFilterStyle(selectedPlatform).badgeClasses}`}>
+                      <span>Plataforma: {selectedPlatform}</span>
+                      <button 
+                        onClick={() => setSelectedPlatform('Todas')}
+                        className="hover:opacity-75 cursor-pointer ml-0.5"
+                        title="Remover filtro de plataforma"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+
+                {hasActiveFilters && (
+                  <button
+                    onClick={handleClearFilters}
+                    className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border flex items-center gap-1 transition-all cursor-pointer shadow-sm ${
+                      isLight 
+                        ? 'text-slate-700 hover:text-slate-900 border-slate-300 hover:border-slate-400 bg-white' 
+                        : 'text-slate-400 hover:text-white border-slate-800 hover:border-slate-700 bg-slate-950/60 hover:bg-slate-800'
+                    }`}
+                  >
+                    <X className="w-3 h-3 text-rose-400" />
+                    <span>Limpar Filtros</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* List of Movements */}
@@ -1669,14 +1885,23 @@ export default function ProductMovements({
                 </div>
                 <div>
                   <p className="text-xs font-bold text-slate-300">
-                    {selectedDay !== null 
-                      ? `Nenhum item unitário registrado no dia ${selectedDay}`
-                      : selectedWeek !== null
-                        ? `Nenhum item unitário registrado nesta semana`
-                        : 'Nenhum item unitário localizado'}
+                    {hasActiveFilters
+                      ? 'Nenhum item encontrado com os filtros selecionados'
+                      : selectedDay !== null 
+                        ? `Nenhum item unitário registrado no dia ${selectedDay}`
+                        : selectedWeek !== null
+                          ? `Nenhum item unitário registrado nesta semana`
+                          : 'Nenhum item unitário localizado'}
                   </p>
                   <p className="text-[10px] text-slate-500 mt-1 max-w-sm leading-relaxed">
-                    {selectedDay !== null || selectedWeek !== null ? (
+                    {hasActiveFilters ? (
+                      <button 
+                        onClick={handleClearFilters}
+                        className="text-sky-400 underline hover:text-sky-300 font-medium cursor-pointer"
+                      >
+                        Clique aqui para limpar os filtros de busca
+                      </button>
+                    ) : selectedDay !== null || selectedWeek !== null ? (
                       <button 
                         onClick={() => { setSelectedDay(null); setSelectedWeek(null); }}
                         className="text-sky-400 underline hover:text-sky-300 font-medium cursor-pointer"

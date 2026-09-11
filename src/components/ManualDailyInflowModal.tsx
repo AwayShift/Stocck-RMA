@@ -179,49 +179,6 @@ export default function ManualDailyInflowModal({
 
           {/* Quantities by Sector Grid */}
           <div className="grid grid-cols-2 gap-3.5 pt-1">
-            {/* RMA */}
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3.5 space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-rose-400 uppercase tracking-wider">
-                  RMA (Triagem)
-                </label>
-                <span className="text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 rounded">
-                  Qtd
-                </span>
-              </div>
-              <input
-                type="number"
-                min="0"
-                value={rma === 0 ? '' : rma}
-                onChange={(e) => setRma(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                placeholder="0"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xl font-black text-rose-400 focus:outline-none focus:border-rose-500 text-center"
-              />
-              <div className="flex items-center justify-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => adjustValue(setRma, -1)}
-                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
-                >
-                  -1
-                </button>
-                <button
-                  type="button"
-                  onClick={() => adjustValue(setRma, 1)}
-                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-rose-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
-                >
-                  +1
-                </button>
-                <button
-                  type="button"
-                  onClick={() => adjustValue(setRma, 10)}
-                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-rose-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
-                >
-                  +10
-                </button>
-              </div>
-            </div>
-
             {/* ESTOQUE */}
             <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
@@ -259,6 +216,49 @@ export default function ManualDailyInflowModal({
                   type="button"
                   onClick={() => adjustValue(setEstoque, 10)}
                   className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-emerald-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
+                >
+                  +10
+                </button>
+              </div>
+            </div>
+
+            {/* RMA */}
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-rose-400 uppercase tracking-wider">
+                  RMA (Triagem)
+                </label>
+                <span className="text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                  Qtd
+                </span>
+              </div>
+              <input
+                type="number"
+                min="0"
+                value={rma === 0 ? '' : rma}
+                onChange={(e) => setRma(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                placeholder="0"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xl font-black text-rose-400 focus:outline-none focus:border-rose-500 text-center"
+              />
+              <div className="flex items-center justify-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => adjustValue(setRma, -1)}
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
+                >
+                  -1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => adjustValue(setRma, 1)}
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-rose-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
+                >
+                  +1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => adjustValue(setRma, 10)}
+                  className="px-2.5 py-1 text-xs font-bold bg-slate-900 text-rose-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
                 >
                   +10
                 </button>

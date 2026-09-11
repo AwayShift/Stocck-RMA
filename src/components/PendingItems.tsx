@@ -783,7 +783,7 @@ export default function PendingItems({
         baseProductVoltage: transferVoltage,
         platform: transferPlatform,
         serialNumber: transferSerialNumber.trim(),
-        trackingCode: transferSti.trim(),
+        trackingCode: transferDestination === 'Openbox' ? transferSti.trim() : '',
         orderNumber: transferOrderNumber.trim(),
         customerReason: transferCustomerReason.trim() || 'Entrada de Estoque',
         deviceStatus: finalDeviceStatus,
@@ -2325,20 +2325,18 @@ export default function PendingItems({
                   </div>
 
                   {/* If Openbox, STI code is mandatory */}
-                  <div className={`p-3.5 rounded-xl border transition-all space-y-2 ${
-                    transferDestination === 'Openbox'
-                      ? !transferSti.trim() || transferError 
+                  {transferDestination === 'Openbox' && (
+                    <div className={`p-3.5 rounded-xl border transition-all space-y-2 animate-in fade-in duration-200 ${
+                      !transferSti.trim() || transferError 
                         ? 'bg-amber-500/10 border-amber-500/50 shadow-sm' 
                         : 'bg-slate-950 border-emerald-500/40'
-                      : 'bg-slate-950 border-slate-800'
-                  }`}>
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-amber-400" />
-                        <span>Código STI / Rastreio {transferDestination === 'Openbox' ? '(Obrigatório para Openbox) *' : '(Opcional)'}</span>
-                      </label>
-                      {transferDestination === 'Openbox' && (
-                        !transferSti.trim() ? (
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-amber-400" />
+                          <span>Código STI / Rastreio (Obrigatório para Openbox) *</span>
+                        </label>
+                        {!transferSti.trim() ? (
                           <span className="text-[10px] font-bold text-amber-400/90 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
                             Pendente de preenchimento
                           </span>
@@ -2346,28 +2344,28 @@ export default function PendingItems({
                           <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
                             <Check className="w-3 h-3" /> Preenchido
                           </span>
-                        )
-                      )}
-                    </div>
+                        )}
+                      </div>
 
-                    <input
-                      type="text"
-                      value={transferSti}
-                      onChange={(e) => {
-                        setTransferSti(e.target.value);
-                        if (e.target.value.trim()) setTransferError(null);
-                      }}
-                      placeholder="Informe o Código STI (Ex: STI-882910)"
-                      className={`w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none transition-all ${
-                        transferDestination === 'Openbox' && transferError && !transferSti.trim()
-                          ? 'border-2 border-rose-500 focus:border-rose-400 shadow-sm shadow-rose-500/20'
-                          : !transferSti.trim() && transferDestination === 'Openbox'
-                          ? 'border border-amber-500/60 focus:border-amber-400'
-                          : 'border border-slate-800 focus:border-emerald-400'
-                      }`}
-                      id="input-transfer-sti"
-                    />
-                  </div>
+                      <input
+                        type="text"
+                        value={transferSti}
+                        onChange={(e) => {
+                          setTransferSti(e.target.value);
+                          if (e.target.value.trim()) setTransferError(null);
+                        }}
+                        placeholder="Informe o Código STI (Ex: STI-882910)"
+                        className={`w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none transition-all ${
+                          transferError && !transferSti.trim()
+                            ? 'border-2 border-rose-500 focus:border-rose-400 shadow-sm shadow-rose-500/20'
+                            : !transferSti.trim()
+                            ? 'border border-amber-500/60 focus:border-amber-400'
+                            : 'border border-slate-800 focus:border-emerald-400'
+                        }`}
+                        id="input-transfer-sti"
+                      />
+                    </div>
+                  )}
 
                   {/* Serial Number & Order Number */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
