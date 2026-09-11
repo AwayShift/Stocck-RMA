@@ -1700,8 +1700,7 @@ export default function PhysicalStock({
               return (
                 <div 
                   key={unit.id}
-                  onClick={() => setSelectedUnitId(unit.id)}
-                  className={`group bg-slate-900 border hover:border-slate-600 rounded-xl p-4 flex flex-col justify-between hover:shadow-xl transition-all cursor-pointer ${
+                  className={`group bg-slate-900 border hover:border-slate-700/80 rounded-xl p-4 flex flex-col justify-between hover:shadow-xl transition-all ${
                     hasDupSti || hasDupSerial ? 'border-amber-500/50 shadow-md shadow-amber-500/5' : 'border-slate-800'
                   }`}
                   id={`stock-unit-${unit.id}`}
@@ -1728,17 +1727,53 @@ export default function PhysicalStock({
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
                           </button>
                         )}
-                        <span className="font-mono text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded">
-                          {unit.baseProductSku}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCode(unit.baseProductSku, `sku-${unit.id}`, e)}
+                          className={`font-mono text-xs font-bold px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 group/copy ${
+                            copiedCodeKey === `sku-${unit.id}`
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
+                              : 'text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 hover:text-sky-300 border border-transparent'
+                          }`}
+                          title="Clique para copiar o SKU"
+                        >
+                          {copiedCodeKey === `sku-${unit.id}` ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span>Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>{unit.baseProductSku}</span>
+                              <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                            </>
+                          )}
+                        </button>
                         {unit.serialNumber && (
-                          <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${
-                            hasDupSerial 
-                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold' 
-                              : 'text-slate-400 bg-slate-950 border-slate-800'
-                          }`} title={hasDupSerial ? "Número de Série Duplicado!" : "Número de Série"}>
-                            S/N: {unit.serialNumber}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyCode(unit.serialNumber!, `serial-${unit.id}`, e)}
+                            className={`font-mono text-xs px-2 py-0.5 rounded border transition-all cursor-pointer flex items-center gap-1 group/copy ${
+                              copiedCodeKey === `serial-${unit.id}`
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 scale-105 font-bold'
+                                : hasDupSerial 
+                                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold hover:bg-rose-500/30' 
+                                  : 'text-slate-300 bg-slate-950 border-slate-800 hover:border-slate-700 hover:text-white'
+                            }`}
+                            title={hasDupSerial ? "Número de Série Duplicado! Clique para copiar" : "Clique para copiar o Número de Série"}
+                          >
+                            {copiedCodeKey === `serial-${unit.id}` ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span>Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>S/N: {unit.serialNumber}</span>
+                                <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                              </>
+                            )}
+                          </button>
                         )}
                         {hasDupSti && (
                           <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-0.5" title="Código STI Duplicado!">
@@ -1754,20 +1789,53 @@ export default function PhysicalStock({
                         )}
                       </div>
                       {unit.trackingCode && unit.trackingCode.trim() !== '' && (
-                        <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                          hasDupSti ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-500'
-                        }`}>
-                          #{unit.trackingCode.replace(/^#/, '')}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCode(unit.trackingCode!.replace(/^#/, ''), `sti-${unit.id}`, e)}
+                          className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
+                            copiedCodeKey === `sti-${unit.id}`
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
+                              : hasDupSti
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                                : 'text-slate-300 hover:text-white bg-slate-950/80 hover:bg-slate-800 border border-slate-800'
+                          }`}
+                          title="Clique para copiar o Código STI"
+                        >
+                          {copiedCodeKey === `sti-${unit.id}` ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span>Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>#{unit.trackingCode.replace(/^#/, '')}</span>
+                              <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                            </>
+                          )}
+                        </button>
                       )}
                     </div>
 
-                    {/* Image / Thumbnail if exists */}
-                    <div className="w-full h-32 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center relative p-1.5">
+                    {/* Image / Thumbnail - click here opens unit details */}
+                    <div 
+                      onClick={() => setSelectedUnitId(unit.id)}
+                      className="w-full h-32 rounded-lg bg-slate-950 border border-slate-800 hover:border-sky-500/60 overflow-hidden flex items-center justify-center relative p-1.5 cursor-pointer transition-all group/thumb shadow-sm hover:shadow-sky-500/10"
+                      title="Clique na foto ou ícone para ver os detalhes do produto"
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          setSelectedUnitId(unit.id);
+                        }
+                      }}
+                    >
                       {mainPhoto ? (
-                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300" referrerPolicy="no-referrer" />
+                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-contain group-hover/thumb:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
                       ) : (
-                        <Package className="w-8 h-8 text-slate-600" />
+                        <div className="flex flex-col items-center justify-center gap-1.5 text-slate-500 group-hover/thumb:text-sky-400 transition-colors">
+                          <Package className="w-9 h-9" />
+                          <span className="text-[10px] font-semibold text-slate-500 group-hover/thumb:text-sky-400">Ver detalhes</span>
+                        </div>
                       )}
                       {unit.status === 'Baixado' && (
                         <span className="absolute inset-0 bg-black/70 flex items-center justify-center text-rose-400 font-bold text-xs uppercase tracking-wider">
@@ -1873,8 +1941,7 @@ export default function PhysicalStock({
               return (
                 <div 
                   key={unit.id}
-                  onClick={() => setSelectedUnitId(unit.id)}
-                  className={`group bg-slate-900 border hover:border-slate-600 rounded-xl p-3 sm:p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:shadow-lg transition-all cursor-pointer ${
+                  className={`group bg-slate-900 border hover:border-slate-700/80 rounded-xl p-3 sm:p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:shadow-lg transition-all ${
                     hasDupSti || hasDupSerial ? 'border-amber-500/50' : 'border-slate-800/80'
                   }`}
                   id={`stock-unit-list-${unit.id}`}
@@ -1899,34 +1966,102 @@ export default function PhysicalStock({
                       </button>
                     )}
 
-                    {/* Thumbnail */}
-                    <div className="w-12 h-12 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0 relative">
+                    {/* Thumbnail - click opens unit details */}
+                    <div 
+                      onClick={() => setSelectedUnitId(unit.id)}
+                      className="w-12 h-12 rounded-lg bg-slate-950 border border-slate-800 hover:border-sky-500/60 overflow-hidden flex items-center justify-center shrink-0 relative cursor-pointer group/listthumb transition-all shadow-sm hover:shadow-sky-500/10"
+                      title="Clique na foto ou ícone para ver os detalhes do produto"
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          setSelectedUnitId(unit.id);
+                        }
+                      }}
+                    >
                       {mainPhoto ? (
-                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-cover group-hover/listthumb:scale-110 transition-transform" />
                       ) : (
-                        <Package className="w-5 h-5 text-slate-600" />
+                        <Package className="w-5 h-5 text-slate-500 group-hover/listthumb:text-sky-400 transition-colors" />
                       )}
                     </div>
 
                     {/* Details */}
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded shrink-0">
-                          {unit.baseProductSku}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCode(unit.baseProductSku, `sku-list-${unit.id}`, e)}
+                          className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
+                            copiedCodeKey === `sku-list-${unit.id}`
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
+                              : 'text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 hover:text-sky-300 border border-transparent'
+                          }`}
+                          title="Clique para copiar o SKU"
+                        >
+                          {copiedCodeKey === `sku-list-${unit.id}` ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span>Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>{unit.baseProductSku}</span>
+                              <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                            </>
+                          )}
+                        </button>
                         {unit.trackingCode && unit.trackingCode.trim() !== '' && (
-                          <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                            hasDupSti ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-500'
-                          }`}>
-                            #{unit.trackingCode.replace(/^#/, '')}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyCode(unit.trackingCode!.replace(/^#/, ''), `sti-list-${unit.id}`, e)}
+                            className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
+                              copiedCodeKey === `sti-list-${unit.id}`
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
+                                : hasDupSti
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                                  : 'text-slate-300 hover:text-white bg-slate-950/80 hover:bg-slate-800 border border-slate-800'
+                            }`}
+                            title="Clique para copiar o Código STI"
+                          >
+                            {copiedCodeKey === `sti-list-${unit.id}` ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span>Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>#{unit.trackingCode.replace(/^#/, '')}</span>
+                                <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                              </>
+                            )}
+                          </button>
                         )}
                         {unit.serialNumber && (
-                          <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${
-                            hasDupSerial ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold' : 'text-slate-400 bg-slate-950 border-slate-800'
-                          }`} title="Número de Série">
-                            S/N: {unit.serialNumber}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyCode(unit.serialNumber!, `serial-list-${unit.id}`, e)}
+                            className={`font-mono text-xs px-2 py-0.5 rounded border shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
+                              copiedCodeKey === `serial-list-${unit.id}`
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105 font-bold'
+                                : hasDupSerial 
+                                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold hover:bg-rose-500/30' 
+                                  : 'text-slate-300 bg-slate-950 border-slate-800 hover:border-slate-700 hover:text-white'
+                            }`}
+                            title={hasDupSerial ? "Número de Série Duplicado! Clique para copiar" : "Clique para copiar o Número de Série"}
+                          >
+                            {copiedCodeKey === `serial-list-${unit.id}` ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span>Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>S/N: {unit.serialNumber}</span>
+                                <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                              </>
+                            )}
+                          </button>
                         )}
                         {hasDupSti && (
                           <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-0.5" title="Código STI Duplicado!">
@@ -2020,10 +2155,18 @@ export default function PhysicalStock({
                         <span>Editar</span>
                       </button>
 
-                      <span className="text-xs text-slate-400 font-semibold group-hover:translate-x-0.5 transition-transform hidden sm:inline-flex items-center gap-1">
-                        <Eye className="w-3.5 h-3.5" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedUnitId(unit.id);
+                        }}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                        title="Ver detalhes completos do produto"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-sky-400" />
                         <span>Detalhes</span>
-                      </span>
+                      </button>
                     </div>
                   </div>
                 </div>
