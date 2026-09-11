@@ -3352,11 +3352,27 @@ export default function PhysicalStock({
                   </div>
                 </div>
 
-                {/* Integrated Photo Gallery split by logical category */}
+                {/* Technical Report / Observations HTML Render */}
+                <div className="space-y-2.5" id="technical-report-view">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-sky-400" />
+                    Laudo Técnico de Entrada (Triador)
+                  </h4>
+                  {currentUnit.notes ? (
+                    <div 
+                      className="p-5 bg-slate-950 border border-slate-800/60 rounded-xl text-sm text-slate-200 leading-relaxed max-h-64 overflow-y-auto prose prose-invert prose-sm"
+                      dangerouslySetInnerHTML={{ __html: currentUnit.notes }}
+                    />
+                  ) : (
+                    <p className="p-5 text-xs text-slate-500 bg-slate-950 rounded-xl border border-slate-800/60 italic text-center">Sem laudo técnico descritivo fornecido.</p>
+                  )}
+                </div>
+
+                {/* Integrated Photo Gallery split by logical category (Last element in modal view) */}
                 {(() => {
                   const resolved = getUnitResolvedPhotos(currentUnit, products);
                   return (
-                    <div className="space-y-3">
+                    <div className="space-y-3" id="photo-gallery-modal-view">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                           <Sparkles className="w-4 h-4 text-sky-400" />
@@ -3461,22 +3477,6 @@ export default function PhysicalStock({
                     </div>
                   );
                 })()}
-
-                {/* Technical Report / Observations HTML Render */}
-                <div className="space-y-2.5" id="technical-report-view">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-sky-400" />
-                    Laudo Técnico de Entrada (Triador)
-                  </h4>
-                  {currentUnit.notes ? (
-                    <div 
-                      className="p-5 bg-slate-950 border border-slate-800/60 rounded-xl text-sm text-slate-200 leading-relaxed max-h-64 overflow-y-auto prose prose-invert prose-sm"
-                      dangerouslySetInnerHTML={{ __html: currentUnit.notes }}
-                    />
-                  ) : (
-                    <p className="p-5 text-xs text-slate-500 bg-slate-950 rounded-xl border border-slate-800/60 italic text-center">Sem laudo técnico descritivo fornecido.</p>
-                  )}
-                </div>
 
                 {/* Checkout details if already dispatched */}
                 {currentUnit.status === 'Baixado' && currentUnit.checkoutDate && (
