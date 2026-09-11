@@ -2569,91 +2569,75 @@ export default function PhysicalStock({
                   </label>
                 </div>
 
-                {/* Section 4: Photo Gallery Editor */}
+                {/* Section 4: Photo Gallery Editor - Compact & High Efficiency */}
                 <div 
-                  className="space-y-4 bg-slate-950 p-5 border border-slate-800 rounded-xl"
+                  className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-xl"
                   onPaste={(e) => handleEditModalPaste(e, urlInputCategory)}
                   id="edit-photo-gallery-manager"
                 >
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                        <Camera className="w-4 h-4" />
-                        Gerenciar Galeria de Fotos ({ (editForm.photosProduct?.length || 0) + (editForm.photosBox?.length || 0) + (editForm.photosAccessories?.length || 0) })
+                  {/* Compact Header & Target Selector */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-slate-800/80">
+                    <div className="flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                        Galeria de Fotos
                       </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Faça upload, cole prints de tela com <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-sky-400 font-mono text-[10px]">Ctrl+V</kbd> ou insira links diretos.
-                      </p>
+                      <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-300">
+                        {(editForm.photosProduct?.length || 0) + (editForm.photosBox?.length || 0) + (editForm.photosAccessories?.length || 0)} fotos
+                      </span>
                     </div>
 
-                    {/* Category selector */}
-                    <div className="flex items-center gap-2 text-xs self-stretch sm:self-auto justify-between sm:justify-end">
-                      <span className="text-slate-400 text-[11px] font-medium">Adicionar Para:</span>
-                      <select 
-                        value={urlInputCategory}
-                        onChange={(e) => setUrlInputCategory(e.target.value as any)}
-                        className="bg-slate-900 border border-slate-700 hover:border-sky-500 rounded-lg px-3 py-1.5 text-xs font-bold text-white cursor-pointer transition-colors shadow-sm"
-                      >
-                        <option value="photosProduct">Fotos do Aparelho ({editForm.photosProduct?.length || 0})</option>
-                        <option value="photosBox">Fotos da Embalagem ({editForm.photosBox?.length || 0})</option>
-                        <option value="photosAccessories">Fotos dos Acessórios ({editForm.photosAccessories?.length || 0})</option>
-                      </select>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-slate-400 text-[11px]">Destino ativo:</span>
+                      {/* Interactive pill buttons for category selection */}
+                      <div className="flex items-center gap-1 p-0.5 bg-slate-900 border border-slate-800 rounded-lg">
+                        <button 
+                          type="button" 
+                          onClick={() => setUrlInputCategory('photosProduct')}
+                          className={`px-2.5 py-1 rounded-md text-xs font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                            urlInputCategory === 'photosProduct' 
+                              ? 'bg-sky-500 text-white shadow-sm' 
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                          title="Definir destino como Fotos do Aparelho (Ctrl+V colará aqui)"
+                        >
+                          <span>Aparelho</span>
+                          <span className={`text-[10px] px-1 rounded-full ${urlInputCategory === 'photosProduct' ? 'bg-sky-700/80 text-white' : 'bg-slate-800 text-slate-300'}`}>
+                            {editForm.photosProduct?.length || 0}
+                          </span>
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => setUrlInputCategory('photosBox')}
+                          className={`px-2.5 py-1 rounded-md text-xs font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                            urlInputCategory === 'photosBox' 
+                              ? 'bg-sky-500 text-white shadow-sm' 
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                          title="Definir destino como Fotos da Embalagem (Ctrl+V colará aqui)"
+                        >
+                          <span>Embalagem</span>
+                          <span className={`text-[10px] px-1 rounded-full ${urlInputCategory === 'photosBox' ? 'bg-sky-700/80 text-white' : 'bg-slate-800 text-slate-300'}`}>
+                            {editForm.photosBox?.length || 0}
+                          </span>
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => setUrlInputCategory('photosAccessories')}
+                          className={`px-2.5 py-1 rounded-md text-xs font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                            urlInputCategory === 'photosAccessories' 
+                              ? 'bg-sky-500 text-white shadow-sm' 
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                          title="Definir destino como Fotos dos Acessórios (Ctrl+V colará aqui)"
+                        >
+                          <span>Acessórios</span>
+                          <span className={`text-[10px] px-1 rounded-full ${urlInputCategory === 'photosAccessories' ? 'bg-sky-700/80 text-white' : 'bg-slate-800 text-slate-300'}`}>
+                            {editForm.photosAccessories?.length || 0}
+                          </span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Target Category Quick Switcher Tabs */}
-                  <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-900/90 border border-slate-800 rounded-xl text-center text-xs">
-                    <button 
-                      type="button" 
-                      onClick={() => setUrlInputCategory('photosProduct')}
-                      className={`py-2 px-2 rounded-lg font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
-                        urlInputCategory === 'photosProduct' 
-                          ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20' 
-                          : 'hover:bg-slate-800 hover:text-white text-slate-400'
-                      }`}
-                    >
-                      <span>Aparelho</span>
-                      <span className="photo-tab-counter-badge px-2 py-0.5 rounded-full text-[10px] font-bold">
-                        {editForm.photosProduct?.length || 0}
-                      </span>
-                      {urlInputCategory === 'photosProduct' && (
-                        <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V Alvo</span>
-                      )}
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => setUrlInputCategory('photosBox')}
-                      className={`py-2 px-2 rounded-lg font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
-                        urlInputCategory === 'photosBox' 
-                          ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20' 
-                          : 'hover:bg-slate-800 hover:text-white text-slate-400'
-                      }`}
-                    >
-                      <span>Embalagem</span>
-                      <span className="photo-tab-counter-badge px-2 py-0.5 rounded-full text-[10px] font-bold">
-                        {editForm.photosBox?.length || 0}
-                      </span>
-                      {urlInputCategory === 'photosBox' && (
-                        <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V Alvo</span>
-                      )}
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => setUrlInputCategory('photosAccessories')}
-                      className={`py-2 px-2 rounded-lg font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
-                        urlInputCategory === 'photosAccessories' 
-                          ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20' 
-                          : 'hover:bg-slate-800 hover:text-white text-slate-400'
-                      }`}
-                    >
-                      <span>Acessórios</span>
-                      <span className="photo-tab-counter-badge px-2 py-0.5 rounded-full text-[10px] font-bold">
-                        {editForm.photosAccessories?.length || 0}
-                      </span>
-                      {urlInputCategory === 'photosAccessories' && (
-                        <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V Alvo</span>
-                      )}
-                    </button>
                   </div>
 
                   {/* Smart Base Product Image & Saved Photo Options for Estoque Principal */}
@@ -2805,13 +2789,13 @@ export default function PhysicalStock({
                     return null;
                   })()}
 
-                  {/* Add photo inputs toolbar with Paste Button */}
-                  <div className="p-3.5 bg-slate-900 rounded-xl border border-slate-800 space-y-2.5">
+                  {/* Add photo inputs toolbar with Paste Button - Compact single-row design */}
+                  <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       {/* Upload from Computer */}
-                      <label className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 shadow-sm hover:shadow">
+                      <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 shadow-sm">
                         <Upload className="w-3.5 h-3.5" />
-                        <span>Upload do Computador</span>
+                        <span>Upload</span>
                         <input 
                           type="file" 
                           multiple
@@ -2825,16 +2809,16 @@ export default function PhysicalStock({
                       <button
                         type="button"
                         onClick={() => handlePasteFromClipboard(urlInputCategory)}
-                        className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-bold rounded-lg text-xs transition-all flex items-center gap-1.5 shrink-0 shadow-sm hover:shadow cursor-pointer"
-                        title="Colar imagem ou screenshot copiado para a categoria selecionada"
+                        className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-bold rounded-lg text-xs transition-all flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
+                        title="Colar imagem da área de transferência (ou use Ctrl+V diretamente)"
                       >
                         <ClipboardPaste className="w-3.5 h-3.5" />
-                        <span>Colar Imagem</span>
-                        <span className="text-[10px] bg-sky-700/80 px-1 py-0.5 rounded font-mono font-normal">Ctrl+V</span>
+                        <span>Colar</span>
+                        <span className="text-[10px] bg-sky-700/80 px-1 py-0.2 rounded font-mono font-normal">Ctrl+V</span>
                       </button>
 
                       {/* URL input */}
-                      <div className="flex-1 min-w-[240px] flex items-center gap-2">
+                      <div className="flex-1 min-w-[220px] flex items-center gap-1.5">
                         <input 
                           type="url" 
                           value={imageUrlInput} 
@@ -2845,58 +2829,57 @@ export default function PhysicalStock({
                               handleAddPhotoUrl(urlInputCategory);
                             }
                           }}
-                          placeholder="Cole o link da imagem (https://...)" 
-                          className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 placeholder:text-slate-600" 
+                          placeholder="Cole link da imagem (https://...)" 
+                          className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500 placeholder:text-slate-600" 
                         />
                         <button 
                           type="button" 
                           onClick={() => handleAddPhotoUrl(urlInputCategory)}
                           disabled={isSanitizingUrl || !imageUrlInput.trim()}
-                          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-200 font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1.5"
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-200 font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1"
                         >
                           {isSanitizingUrl ? (
                             <>
                               <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-400" />
-                              <span>Sanitizando...</span>
+                              <span>Processando...</span>
                             </>
                           ) : (
-                            <>
-                              <span>Adicionar URL</span>
-                            </>
+                            <span>Adicionar</span>
                           )}
                         </button>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-0.5">
-                      <span className="flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-sky-400" />
-                        Destino ativo: <strong className="text-sky-300">
-                          {urlInputCategory === 'photosProduct' ? 'Fotos do Aparelho' : urlInputCategory === 'photosBox' ? 'Fotos da Embalagem' : 'Fotos dos Acessórios'}
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                      <span className="flex items-center gap-1 text-[11px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                        Inserindo em: <strong className="text-sky-300">
+                          {urlInputCategory === 'photosProduct' ? 'Aparelho' : urlInputCategory === 'photosBox' ? 'Embalagem' : 'Acessórios'}
                         </strong>
+                        <span className="text-slate-500 hidden sm:inline ml-1">(Pressione Ctrl+V em qualquer lugar para colar rápido)</span>
                       </span>
-                      <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3" />
-                        Sanitização e desinfecção de fotos ativada
+                      <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                        Max 3MB · WebP
                       </span>
                     </div>
                   </div>
 
                   {/* Categories preview grids with delete overlay and dropzones */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {/* Product Photos */}
                     <div 
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => handleDropPhoto(e, 'photosProduct')}
                       onPaste={(e) => handleEditModalPaste(e, 'photosProduct')}
                       onClick={() => setUrlInputCategory('photosProduct')}
-                      className={`p-3.5 rounded-xl border transition-all space-y-2.5 ${
+                      className={`p-3 rounded-xl border transition-all space-y-2 ${
                         urlInputCategory === 'photosProduct' 
-                          ? 'bg-slate-900/90 border-sky-500/60 shadow-lg shadow-sky-500/5 ring-1 ring-sky-500/30' 
+                          ? 'bg-slate-900/90 border-sky-500/60 shadow-md shadow-sky-500/5 ring-1 ring-sky-500/30' 
                           : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-2">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-1.5">
                         <span className="flex items-center gap-1.5">
                           <ImageIcon className="w-3.5 h-3.5 text-sky-400" />
                           <span>Fotos do Aparelho</span>
@@ -2910,9 +2893,9 @@ export default function PhysicalStock({
                       </div>
 
                       {editForm.photosProduct && editForm.photosProduct.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-1.5">
                           {editForm.photosProduct.map((p, i) => (
-                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
+                            <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
                               <img 
                                 src={p} 
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
@@ -2928,25 +2911,25 @@ export default function PhysicalStock({
                                   e.stopPropagation();
                                   handleRemovePhoto('photosProduct', i);
                                 }}
-                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
+                                className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
                                 title="Remover foto"
                               >
-                                <X className="w-3.5 h-3.5" />
+                                <X className="w-3 h-3" />
                               </button>
                             </div>
                           ))}
                         </div>
                       ) : (
                         <div 
-                          className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-4 text-center cursor-pointer transition-colors bg-slate-950/40"
+                          className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-2.5 text-center cursor-pointer transition-colors bg-slate-950/40"
                           onClick={(e) => {
                             e.stopPropagation();
                             setUrlInputCategory('photosProduct');
                           }}
                         >
-                          <Upload className="w-5 h-5 mx-auto text-slate-500 mb-1" />
+                          <Upload className="w-4 h-4 mx-auto text-slate-500 mb-0.5" />
                           <p className="text-[11px] text-slate-300 font-semibold">Sem fotos do aparelho</p>
-                          <p className="text-[9px] text-slate-500 mt-0.5">Clique aqui, use Ctrl+V ou arraste imagens</p>
+                          <p className="text-[9px] text-slate-500">Clique, arraste ou use Ctrl+V</p>
                         </div>
                       )}
                     </div>
@@ -2957,13 +2940,13 @@ export default function PhysicalStock({
                       onDrop={(e) => handleDropPhoto(e, 'photosBox')}
                       onPaste={(e) => handleEditModalPaste(e, 'photosBox')}
                       onClick={() => setUrlInputCategory('photosBox')}
-                      className={`p-3.5 rounded-xl border transition-all space-y-2.5 ${
+                      className={`p-3 rounded-xl border transition-all space-y-2 ${
                         urlInputCategory === 'photosBox' 
-                          ? 'bg-slate-900/90 border-sky-500/60 shadow-lg shadow-sky-500/5 ring-1 ring-sky-500/30' 
+                          ? 'bg-slate-900/90 border-sky-500/60 shadow-md shadow-sky-500/5 ring-1 ring-sky-500/30' 
                           : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-2">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-1.5">
                         <span className="flex items-center gap-1.5">
                           <Package className="w-3.5 h-3.5 text-sky-400" />
                           <span>Fotos da Embalagem</span>
@@ -2977,9 +2960,9 @@ export default function PhysicalStock({
                       </div>
 
                       {editForm.photosBox && editForm.photosBox.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-1.5">
                           {editForm.photosBox.map((p, i) => (
-                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
+                            <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
                               <img 
                                 src={p} 
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
@@ -2995,25 +2978,25 @@ export default function PhysicalStock({
                                   e.stopPropagation();
                                   handleRemovePhoto('photosBox', i);
                                 }}
-                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
+                                className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
                                 title="Remover foto"
                               >
-                                <X className="w-3.5 h-3.5" />
+                                <X className="w-3 h-3" />
                               </button>
                             </div>
                           ))}
                         </div>
                       ) : (
                         <div 
-                          className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-4 text-center cursor-pointer transition-colors bg-slate-950/40"
+                          className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-2.5 text-center cursor-pointer transition-colors bg-slate-950/40"
                           onClick={(e) => {
                             e.stopPropagation();
                             setUrlInputCategory('photosBox');
                           }}
                         >
-                          <Upload className="w-5 h-5 mx-auto text-slate-500 mb-1" />
+                          <Upload className="w-4 h-4 mx-auto text-slate-500 mb-0.5" />
                           <p className="text-[11px] text-slate-300 font-semibold">Sem fotos da caixa</p>
-                          <p className="text-[9px] text-slate-500 mt-0.5">Clique aqui, use Ctrl+V ou arraste imagens</p>
+                          <p className="text-[9px] text-slate-500">Clique, arraste ou use Ctrl+V</p>
                         </div>
                       )}
                     </div>
@@ -3024,13 +3007,13 @@ export default function PhysicalStock({
                       onDrop={(e) => handleDropPhoto(e, 'photosAccessories')}
                       onPaste={(e) => handleEditModalPaste(e, 'photosAccessories')}
                       onClick={() => setUrlInputCategory('photosAccessories')}
-                      className={`p-3.5 rounded-xl border transition-all space-y-2.5 ${
+                      className={`p-3 rounded-xl border transition-all space-y-2 ${
                         urlInputCategory === 'photosAccessories' 
-                          ? 'bg-slate-900/90 border-sky-500/60 shadow-lg shadow-sky-500/5 ring-1 ring-sky-500/30' 
+                          ? 'bg-slate-900/90 border-sky-500/60 shadow-md shadow-sky-500/5 ring-1 ring-sky-500/30' 
                           : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-2">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-300 border-b border-slate-800 pb-1.5">
                         <span className="flex items-center gap-1.5">
                           <Layers className="w-3.5 h-3.5 text-sky-400" />
                           <span>Fotos dos Acessórios</span>
@@ -3044,9 +3027,9 @@ export default function PhysicalStock({
                       </div>
 
                       {editForm.photosAccessories && editForm.photosAccessories.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-1.5">
                           {editForm.photosAccessories.map((p, i) => (
-                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
+                            <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
                               <img 
                                 src={p} 
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
@@ -3062,25 +3045,25 @@ export default function PhysicalStock({
                                   e.stopPropagation();
                                   handleRemovePhoto('photosAccessories', i);
                                 }}
-                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded-md hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
+                                className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
                                 title="Remover foto"
                               >
-                                <X className="w-3.5 h-3.5" />
+                                <X className="w-3 h-3" />
                               </button>
                             </div>
                           ))}
                         </div>
                       ) : (
                         <div 
-                          className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-4 text-center cursor-pointer transition-colors bg-slate-950/40"
+                          className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-2.5 text-center cursor-pointer transition-colors bg-slate-950/40"
                           onClick={(e) => {
                             e.stopPropagation();
                             setUrlInputCategory('photosAccessories');
                           }}
                         >
-                          <Upload className="w-5 h-5 mx-auto text-slate-500 mb-1" />
+                          <Upload className="w-4 h-4 mx-auto text-slate-500 mb-0.5" />
                           <p className="text-[11px] text-slate-300 font-semibold">Sem fotos de acessórios</p>
-                          <p className="text-[9px] text-slate-500 mt-0.5">Clique aqui, use Ctrl+V ou arraste imagens</p>
+                          <p className="text-[9px] text-slate-500">Clique, arraste ou use Ctrl+V</p>
                         </div>
                       )}
                     </div>
