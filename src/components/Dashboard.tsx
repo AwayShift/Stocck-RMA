@@ -47,6 +47,7 @@ export default function Dashboard({
 }: DashboardProps) {
   const [showExcluded, setShowExcluded] = useState(false);
   const [updatingUnitId, setUpdatingUnitId] = useState<string | null>(null);
+  const [unitToExclude, setUnitToExclude] = useState<TriageUnit | null>(null);
   const [selectedPlatformFilter, setSelectedPlatformFilter] = useState<PlatformType | null>(null);
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<DestinationSectorType | null>(null);
 
@@ -629,14 +630,9 @@ export default function Dashboard({
                           <button
                             type="button"
                             disabled={updatingUnitId === unit.id}
-                            onClick={async (e) => {
+                            onClick={(e) => {
                               e.stopPropagation();
-                              setUpdatingUnitId(unit.id);
-                              try {
-                                await onUpdateUnit({ ...unit, excludeFromDailyCount: true });
-                              } finally {
-                                setUpdatingUnitId(null);
-                              }
+                              setUnitToExclude(unit);
                             }}
                             title="Remover este produto do contador diário de hoje"
                             className="p-1.5 text-slate-500 hover:text-amber-400 hover:bg-amber-500/15 rounded-lg transition-colors cursor-pointer"
@@ -732,6 +728,82 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal to Exclude from Daily Counter */}
+      {unitToExclude && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setUnitToExclude(null)}
+          id="modal-confirm-exclude-daily"
+        >
+          <div 
+            className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-400">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-white">
+                  Remover do Contador Diário?
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Esta unidade continuará armazenada no estoque físico, porém não será contabilizada nas métricas e relatórios de entrada de hoje.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs space-y-1.5">
+              <div className="flex justify-between text-slate-300">
+                <span className="text-slate-400">Produto:</span>
+                <span className="font-semibold truncate max-w-[240px] text-right text-white">
+                  {unitToExclude.baseProductName}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-300">
+                <span className="text-slate-400">SKU:</span>
+                <span className="font-mono text-sky-400 font-bold">{unitToExclude.baseProductSku}</span>
+              </div>
+              {unitToExclude.serialNumber && (
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-400">S/N:</span>
+                  <span className="font-mono text-slate-300">{unitToExclude.serialNumber}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setUnitToExclude(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={updatingUnitId === unitToExclude.id}
+                onClick={async () => {
+                  if (!onUpdateUnit) return;
+                  setUpdatingUnitId(unitToExclude.id);
+                  try {
+                    await onUpdateUnit({ ...unitToExclude, excludeFromDailyCount: true });
+                    setUnitToExclude(null);
+                  } finally {
+                    setUpdatingUnitId(null);
+                  }
+                }}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-amber-600/20 cursor-pointer disabled:opacity-50"
+                id="btn-confirm-exclude-daily"
+              >
+                <MinusCircle className="w-3.5 h-3.5" />
+                <span>Confirmar Remoção</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
