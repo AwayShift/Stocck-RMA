@@ -35,6 +35,12 @@ interface DashboardProps {
   onUpdateUnit?: (unit: TriageUnit) => Promise<void>;
   onNavigateToStock: (platform?: PlatformType | null, sector?: DestinationSectorType | null) => void;
   onNavigateToPending?: () => void;
+  currentUser?: {
+    uid?: string;
+    email?: string;
+    name?: string;
+  } | null;
+  userName?: string;
 }
 
 export default function Dashboard({ 
@@ -44,7 +50,9 @@ export default function Dashboard({
   onViewUnit, 
   onUpdateUnit,
   onNavigateToStock,
-  onNavigateToPending
+  onNavigateToPending,
+  currentUser,
+  userName
 }: DashboardProps) {
   const [showExcluded, setShowExcluded] = useState(false);
   const [updatingUnitId, setUpdatingUnitId] = useState<string | null>(null);
@@ -659,7 +667,7 @@ export default function Dashboard({
             )}
           </div>
           <div className="mt-6 pt-4 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
-            <span>Operador Atual: <strong>Logística Sênior</strong></span>
+            <span>Operador Atual: <strong className="text-slate-200 font-semibold">{currentUser?.name || userName || currentUser?.email?.split('@')[0] || 'Logística Sênior'}</strong></span>
             <span>Total Geral: {totalInStock} unidades no estoque ativo</span>
           </div>
         </div>

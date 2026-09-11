@@ -433,11 +433,11 @@ export default function PendingItems({
         return aUnresolved ? -1 : 1;
       }
 
-      // 2. Casos já resolvidos: ordenar por ordem cronológica de abertura (do mais antigo ao mais recente)
+      // 2. Casos já resolvidos: ordenar por ordem cronológica de abertura (do mais novo para o mais antigo)
       if (!aUnresolved && !bUnresolved) {
         const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return aTime - bTime;
+        return bTime - aTime;
       }
 
       // 3. Casos não resolvidos: prioridade mais alta primeiro (Urgente > Alta > Média > Baixa)

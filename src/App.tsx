@@ -862,6 +862,8 @@ export default function App() {
                 onUpdateUnit={handleSaveTriage}
                 onNavigateToStock={handleNavigateToStockWithFilters}
                 onNavigateToPending={() => setActiveTab('pending')}
+                currentUser={user ? { uid: user.id, email: user.email || '', name: userName || user.displayName || '' } : null}
+                userName={userName}
               />
             )}
 
