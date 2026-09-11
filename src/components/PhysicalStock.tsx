@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   Search, 
@@ -92,6 +92,7 @@ export default function PhysicalStock({
   const [selectedPlatform, setSelectedPlatform] = useState<string>(initialPlatformFilter || 'Todas');
   const [selectedVoltage, setSelectedVoltage] = useState<string>('Todas');
   const [selectedDate, setSelectedDate] = useState<string>(''); // YYYY-MM-DD
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
   // React to initial platform filter changes from Dashboard navigation
   useEffect(() => {
@@ -1312,10 +1313,12 @@ export default function PhysicalStock({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-3 border-t border-slate-800" id="stock-filter-controls">
             {/* 1. Filter by Marca (Brand) */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Sliders className="w-3 h-3 text-purple-400" />
-                <span>Marca</span>
-              </label>
+              <div className="h-5 flex items-center">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sliders className="w-3 h-3 text-purple-400" />
+                  <span>Marca</span>
+                </label>
+              </div>
               <select
                 value={selectedBrand}
                 onChange={(e) => setSelectedBrand(e.target.value)}
@@ -1333,10 +1336,12 @@ export default function PhysicalStock({
 
             {/* 2. Filter by Categoria */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-3 h-3 text-emerald-400" />
-                <span>Categoria</span>
-              </label>
+              <div className="h-5 flex items-center">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers className="w-3 h-3 text-emerald-400" />
+                  <span>Categoria</span>
+                </label>
+              </div>
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
@@ -1364,10 +1369,12 @@ export default function PhysicalStock({
 
             {/* 2.5 Filter by Plataforma */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <ShoppingCart className={`w-3 h-3 ${selectedPlatform !== 'Todas' ? getPlatformFilterStyle(selectedPlatform).dotClasses.replace('bg-', 'text-') : 'text-sky-400'}`} />
-                <span>Plataforma</span>
-              </label>
+              <div className="h-5 flex items-center">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShoppingCart className={`w-3 h-3 ${selectedPlatform !== 'Todas' ? getPlatformFilterStyle(selectedPlatform).dotClasses.replace('bg-', 'text-') : 'text-sky-400'}`} />
+                  <span>Plataforma</span>
+                </label>
+              </div>
               <select
                 value={selectedPlatform}
                 onChange={(e) => setSelectedPlatform(e.target.value)}
@@ -1389,10 +1396,12 @@ export default function PhysicalStock({
 
             {/* 3. Filter by Voltagem */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Zap className="w-3 h-3 text-amber-400" />
-                <span>Tensão / Voltagem</span>
-              </label>
+              <div className="h-5 flex items-center">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  <span>Tensão / Voltagem</span>
+                </label>
+              </div>
               <select
                 value={selectedVoltage}
                 onChange={(e) => setSelectedVoltage(e.target.value)}
@@ -1411,9 +1420,9 @@ export default function PhysicalStock({
 
             {/* 4. Filter by Data de Registro */}
             <div className="space-y-1">
-              <div className="flex items-center justify-between">
+              <div className="h-5 flex items-center justify-between">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Calendar className="w-3 h-3 text-sky-450" />
+                  <Calendar className="w-3 h-3 text-sky-400" />
                   <span>Data de Registro</span>
                 </label>
                 <div className="flex items-center gap-1">
@@ -1453,15 +1462,44 @@ export default function PhysicalStock({
                   )}
                 </div>
               </div>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors [color-scheme:dark] ${
-                  selectedDate ? 'border-sky-500/50 bg-sky-950/20 text-sky-300' : 'border-slate-800'
-                }`}
-                id="input-filter-stock-date"
-              />
+              <div 
+                className="relative cursor-pointer"
+                onClick={() => {
+                  const input = dateInputRef.current;
+                  if (input) {
+                    if (typeof input.showPicker === 'function') {
+                      try {
+                        input.showPicker();
+                      } catch {
+                        input.focus();
+                      }
+                    } else {
+                      input.focus();
+                    }
+                  }
+                }}
+              >
+                <input
+                  ref={dateInputRef}
+                  type="date"
+                  value={selectedDate}
+                  onClick={(e) => {
+                    const target = e.currentTarget;
+                    if (typeof target.showPicker === 'function') {
+                      try {
+                        target.showPicker();
+                      } catch {
+                        // fallback to standard browser behavior
+                      }
+                    }
+                  }}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors cursor-pointer [color-scheme:dark] ${
+                    selectedDate ? 'border-sky-500/50 bg-sky-950/20 text-sky-300' : 'border-slate-800'
+                  }`}
+                  id="input-filter-stock-date"
+                />
+              </div>
             </div>
           </div>
 
