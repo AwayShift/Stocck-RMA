@@ -1731,14 +1731,6 @@ export default function PhysicalStock({
                       ) : (
                         <Package className="w-8 h-8 text-slate-600" />
                       )}
-                      {photosCount > 0 && (
-                        <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold flex items-center gap-1">
-                          {resolved.isUsingBaseProductImage && (
-                            <span className="text-sky-400 text-[9px] font-sans font-normal">Base •</span>
-                          )}
-                          {photosCount} {photosCount === 1 ? 'Foto' : 'Fotos'}
-                        </span>
-                      )}
                       {unit.status === 'Baixado' && (
                         <span className="absolute inset-0 bg-black/70 flex items-center justify-center text-rose-400 font-bold text-xs uppercase tracking-wider">
                           Saída Efetuada
@@ -1875,11 +1867,6 @@ export default function PhysicalStock({
                         <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                       ) : (
                         <Package className="w-5 h-5 text-slate-600" />
-                      )}
-                      {photosCount > 0 && (
-                        <span className="absolute bottom-0.5 right-0.5 bg-black/80 text-[8px] text-slate-300 px-1 py-0.2 rounded font-mono font-bold">
-                          {photosCount}
-                        </span>
                       )}
                     </div>
 
