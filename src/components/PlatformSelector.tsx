@@ -228,7 +228,7 @@ export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
         data-platform={value}
         disabled={disabled}
         onClick={() => setIsOpen(prev => !prev)}
-        className={`w-full px-2.5 py-1.5 sm:py-2 rounded-lg text-xs font-semibold border flex items-center justify-between gap-2 transition-all cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-sky-500/40 ${
+        className={`w-full px-2.5 h-[38px] rounded-lg text-xs font-semibold border flex items-center justify-between gap-2 transition-all cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-sky-500/40 ${
           isOpen ? 'ring-2 ring-sky-500/50 border-sky-500' : ''
         } ${currentConfig.triggerStyleDark} platform-trigger-btn`}
         aria-haspopup="listbox"

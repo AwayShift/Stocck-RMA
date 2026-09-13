@@ -1002,7 +1002,7 @@ export default function RmaEntry({
                 <div className={`grid grid-cols-1 ${destinationSector === 'Openbox' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5 pt-1`}>
                   {/* Platform */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Plataforma</label>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center min-h-[20px]">Plataforma</label>
                     <PlatformSelector
                       value={platform}
                       onChange={(p) => setPlatform(p as PlatformType)}
@@ -1013,16 +1013,16 @@ export default function RmaEntry({
                   {/* Código STI - visível apenas quando o Openbox está selecionado */}
                   {destinationSector === 'Openbox' && (
                     <div className="space-y-1 animate-in fade-in duration-200">
-                      <label className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between text-amber-400">
+                      <label className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between text-amber-400 min-h-[20px]">
                         <span>Código STI *</span>
-                        <span className="text-[9px] font-bold px-1 bg-amber-500/20 text-amber-300 rounded">Obrigatório</span>
+                        <span className="text-[9px] font-bold px-1 py-0.5 bg-amber-500/20 text-amber-300 rounded leading-none">Obrigatório</span>
                       </label>
                       <input 
                         type="text"
                         placeholder="STI-40912 ou 13509873"
                         value={trackingCode}
                         onChange={(e) => setTrackingCode(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 rounded-lg text-xs font-mono transition-all border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400/40"
+                        className="w-full px-3 h-[38px] bg-slate-950 rounded-lg text-xs font-mono transition-all border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400/40"
                         id="input-tracking-code"
                         required
                       />
@@ -1031,13 +1031,13 @@ export default function RmaEntry({
 
                   {/* Order Number */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Nº Pedido (Opcional)</label>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center min-h-[20px]">Nº Pedido (Opcional)</label>
                     <input 
                       type="text"
                       placeholder="Ex: 2000008172648"
                       value={orderNumber}
                       onChange={(e) => setOrderNumber(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                      className="w-full px-3 h-[38px] bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
                       id="input-order-number"
                     />
                   </div>
