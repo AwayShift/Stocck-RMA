@@ -607,6 +607,11 @@ export default function Dashboard({
                                 S/N: {unit.serialNumber}
                               </span>
                             )}
+                            {unit.platform && (
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle.bg} ${pStyle.text} ${pStyle.border}`}>
+                                {unit.platform}
+                              </span>
+                            )}
                           </div>
                           <h4 
                             title={unit.baseProductName} 
@@ -624,11 +629,6 @@ export default function Dashboard({
                       </div>
 
                       <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end shrink-0 sm:pl-3 flex-wrap">
-                        {unit.destinationSector !== 'Openbox' && (
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle.bg} ${pStyle.text} ${pStyle.border}`}>
-                            {unit.platform}
-                          </span>
-                        )}
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${sectorStyle}`}>
                           {unit.destinationSector}
                         </span>
