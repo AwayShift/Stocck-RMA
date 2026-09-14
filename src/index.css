@@ -167,6 +167,8 @@ html.light button.bg-sky-600,
 html.light button.bg-sky-500,
 html.light button.bg-indigo-600,
 html.light button.bg-indigo-500,
+html.light button.bg-purple-600,
+html.light button.bg-purple-500,
 html.light button.bg-rose-600,
 html.light button.bg-rose-500,
 html.light button.bg-blue-600,
@@ -184,6 +186,9 @@ html.light a.bg-amber-500,
 html.light .bg-sky-500.text-white,
 html.light .bg-emerald-500.text-white,
 html.light .bg-rose-500.text-white,
+html.light .bg-rose-600.text-white,
+html.light .bg-purple-600.text-white,
+html.light .bg-purple-500.text-white,
 html.light .bg-amber-600.text-white,
 html.light .bg-amber-500.text-white,
 html.light #btn-confirm-restore-cloud-snapshot {
@@ -196,6 +201,8 @@ html.light button.bg-sky-600 *,
 html.light button.bg-sky-500 *,
 html.light button.bg-indigo-600 *,
 html.light button.bg-indigo-500 *,
+html.light button.bg-purple-600 *,
+html.light button.bg-purple-500 *,
 html.light button.bg-rose-600 *,
 html.light button.bg-rose-500 *,
 html.light button.bg-blue-600 *,
@@ -233,6 +240,30 @@ html.light button.bg-emerald-600 .photo-tab-counter-badge {
   background-color: #064e3b !important;
   color: #ffffff !important;
   border: 1px solid #047857 !important;
+}
+
+/* Light mode specific styling for Historico de Baixas banner and badges */
+html.light #stock-baixado-history-banner {
+  background-color: #f5f3ff !important;
+  border-color: #ddd6fe !important;
+  color: #581c87 !important;
+}
+
+html.light #stock-baixado-history-banner span.font-bold {
+  color: #3b0764 !important;
+}
+
+html.light #tab-btn-baixados.bg-purple-600 {
+  background-color: #7c3aed !important;
+  color: #ffffff !important;
+}
+
+html.light #tab-btn-baixados.bg-purple-600 * {
+  color: #ffffff !important;
+}
+
+html.light .border-purple-500\/30 {
+  border-color: #c4b5fd !important;
 }
 
 /* Input, Select, Textarea in Light Mode */

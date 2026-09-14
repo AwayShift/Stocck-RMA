@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   Search, 
@@ -38,6 +38,7 @@ import {
   ShieldCheck,
   RefreshCw,
   RotateCcw,
+  Undo2,
   Calendar,
   ShoppingCart,
   User
@@ -667,107 +668,144 @@ export default function PhysicalStock({
     filterOnlyDuplicates
   );
 
-  // Filter logic
-  const filteredUnits = units.filter(unit => {
-    // 0. Filter only duplicate items if toggle is active
-    if (filterOnlyDuplicates && !isUnitDuplicate(unit)) {
-      return false;
+  // Helper: Retrieve discharge / checkout date
+  const getDischargeDate = (unit: TriageUnit): string | null => {
+    if (unit.checkoutDate) return unit.checkoutDate;
+    if (unit.status === 'Baixado') return unit.updatedAt || unit.createdAt || null;
+    return null;
+  };
+
+  // Helper: Format discharge date for UI
+  const formatDischargeDateTime = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return 'Não informada';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    } catch {
+      return dateStr;
     }
+  };
 
-    const baseProd = findBaseProduct(unit, products);
-
-    // 1. Brand filter
-    if (selectedBrand !== 'Todas') {
-      const targetBrand = selectedBrand.trim().toLowerCase();
-      const unitBrand = (baseProd?.brand || '').trim().toLowerCase();
-      if (unitBrand !== targetBrand) {
+  // Filter logic with Chronological Sorting (Mais recente ao mais antigo)
+  const filteredUnits = useMemo(() => {
+    const list = units.filter(unit => {
+      // 0. Filter only duplicate items if toggle is active
+      if (filterOnlyDuplicates && !isUnitDuplicate(unit)) {
         return false;
       }
-    }
 
-    // 2. Category filter (hierárquico: Categoria Geral ou Subcategoria)
-    if (selectedCategory !== 'Todas') {
-      const unitCategory = baseProd?.category;
-      if (!checkCategoryFilterMatch(unitCategory, selectedCategory)) {
-        return false;
-      }
-    }
+      const baseProd = findBaseProduct(unit, products);
 
-    // 2.5 Platform filter
-    if (selectedPlatform !== 'Todas') {
-      const targetPlatform = selectedPlatform.trim().toLowerCase();
-      const unitPlatform = (unit.platform || '').trim().toLowerCase();
-      if (targetPlatform === 'sem plataforma') {
-        if (unitPlatform !== '' && unitPlatform !== 'sem plataforma' && unitPlatform !== 'não informada') {
+      // 1. Brand filter
+      if (selectedBrand !== 'Todas') {
+        const targetBrand = selectedBrand.trim().toLowerCase();
+        const unitBrand = (baseProd?.brand || '').trim().toLowerCase();
+        if (unitBrand !== targetBrand) {
           return false;
         }
-      } else if (unitPlatform !== targetPlatform) {
-        return false;
       }
-    }
 
-    // 3. Voltage filter
-    if (selectedVoltage !== 'Todas') {
-      const targetVoltage = selectedVoltage.trim().toLowerCase();
-      const unitVoltage = (unit.baseProductVoltage || baseProd?.voltage || '').trim().toLowerCase();
-      if (unitVoltage !== targetVoltage) {
-        return false;
-      }
-    }
-
-    // 3.5 Filter by registration date (dia em que o produto foi registrado)
-    if (selectedDate) {
-      if (!unit.createdAt) {
-        return false;
-      }
-      try {
-        const uDate = new Date(unit.createdAt);
-        const y = uDate.getFullYear();
-        const m = String(uDate.getMonth() + 1).padStart(2, '0');
-        const d = String(uDate.getDate()).padStart(2, '0');
-        const localDateStr = `${y}-${m}-${d}`;
-        const rawIsoDateStr = unit.createdAt.slice(0, 10);
-        if (localDateStr !== selectedDate && rawIsoDateStr !== selectedDate) {
+      // 2. Category filter (hierárquico: Categoria Geral ou Subcategoria)
+      if (selectedCategory !== 'Todas') {
+        const unitCategory = baseProd?.category;
+        if (!checkCategoryFilterMatch(unitCategory, selectedCategory)) {
           return false;
         }
-      } catch {
-        return false;
       }
-    }
 
-    // 4. Search filter (supports SKU, Name, STI, Serial, Platform, Notes, Reason, etc.)
-    const term = searchTerm.toLowerCase().trim();
-    const brandName = (baseProd?.brand || '').toLowerCase();
-    const categoryName = (baseProd?.category || '').toLowerCase();
-    const baseProdName = (baseProd?.name || '').toLowerCase();
-    const baseProdSku = (baseProd?.sku || '').toLowerCase();
+      // 2.5 Platform filter
+      if (selectedPlatform !== 'Todas') {
+        const targetPlatform = selectedPlatform.trim().toLowerCase();
+        const unitPlatform = (unit.platform || '').trim().toLowerCase();
+        if (targetPlatform === 'sem plataforma') {
+          if (unitPlatform !== '' && unitPlatform !== 'sem plataforma' && unitPlatform !== 'não informada') {
+            return false;
+          }
+        } else if (unitPlatform !== targetPlatform) {
+          return false;
+        }
+      }
 
-    const matchesSearch = !term ||
-      (unit.baseProductName || '').toLowerCase().includes(term) ||
-      (unit.baseProductSku || '').toLowerCase().includes(term) ||
-      baseProdName.includes(term) ||
-      baseProdSku.includes(term) ||
-      brandName.includes(term) ||
-      categoryName.includes(term) ||
-      (unit.trackingCode || '').toLowerCase().includes(term) ||
-      (unit.orderNumber || '').toLowerCase().includes(term) ||
-      (unit.serialNumber || '').toLowerCase().includes(term) ||
-      (unit.platform || '').toLowerCase().includes(term) ||
-      (unit.customerReason || '').toLowerCase().includes(term) ||
-      (unit.destinationSector || '').toLowerCase().includes(term) ||
-      (unit.notes || '').toLowerCase().includes(term) ||
-      (unit.id || '').toLowerCase().includes(term);
+      // 3. Voltage filter
+      if (selectedVoltage !== 'Todas') {
+        const targetVoltage = selectedVoltage.trim().toLowerCase();
+        const unitVoltage = (unit.baseProductVoltage || baseProd?.voltage || '').trim().toLowerCase();
+        if (unitVoltage !== targetVoltage) {
+          return false;
+        }
+      }
 
-    // 5. Tab sector filter
-    if (activeTab === 'Todos') {
-      return matchesSearch && unit.status === 'Estoque';
-    } else if (activeTab === 'Baixado') {
-      return matchesSearch && unit.status === 'Baixado';
-    } else {
-      const matchesSector = unit.destinationSector === activeTab;
-      return unit.status === 'Estoque' && matchesSearch && matchesSector;
-    }
-  });
+      // 3.5 Filter by registration date (dia em que o produto foi registrado)
+      if (selectedDate) {
+        if (!unit.createdAt) {
+          return false;
+        }
+        try {
+          const uDate = new Date(unit.createdAt);
+          const y = uDate.getFullYear();
+          const m = String(uDate.getMonth() + 1).padStart(2, '0');
+          const d = String(uDate.getDate()).padStart(2, '0');
+          const localDateStr = `${y}-${m}-${d}`;
+          const rawIsoDateStr = unit.createdAt.slice(0, 10);
+          if (localDateStr !== selectedDate && rawIsoDateStr !== selectedDate) {
+            return false;
+          }
+        } catch {
+          return false;
+        }
+      }
+
+      // 4. Search filter (supports SKU, Name, STI, Serial, Platform, Notes, Reason, etc.)
+      const term = searchTerm.toLowerCase().trim();
+      const brandName = (baseProd?.brand || '').toLowerCase();
+      const categoryName = (baseProd?.category || '').toLowerCase();
+      const baseProdName = (baseProd?.name || '').toLowerCase();
+      const baseProdSku = (baseProd?.sku || '').toLowerCase();
+
+      const matchesSearch = !term ||
+        (unit.baseProductName || '').toLowerCase().includes(term) ||
+        (unit.baseProductSku || '').toLowerCase().includes(term) ||
+        baseProdName.includes(term) ||
+        baseProdSku.includes(term) ||
+        brandName.includes(term) ||
+        categoryName.includes(term) ||
+        (unit.trackingCode || '').toLowerCase().includes(term) ||
+        (unit.orderNumber || '').toLowerCase().includes(term) ||
+        (unit.serialNumber || '').toLowerCase().includes(term) ||
+        (unit.platform || '').toLowerCase().includes(term) ||
+        (unit.customerReason || '').toLowerCase().includes(term) ||
+        (unit.destinationSector || '').toLowerCase().includes(term) ||
+        (unit.notes || '').toLowerCase().includes(term) ||
+        (unit.id || '').toLowerCase().includes(term);
+
+      // 5. Tab sector filter
+      if (activeTab === 'Todos') {
+        return matchesSearch && unit.status === 'Estoque';
+      } else if (activeTab === 'Baixado') {
+        return matchesSearch && unit.status === 'Baixado';
+      } else {
+        const matchesSector = unit.destinationSector === activeTab;
+        return unit.status === 'Estoque' && matchesSearch && matchesSector;
+      }
+    });
+
+    // Ordenação: Do mais recente ao mais antigo (descending)
+    // Na aba 'Baixado', prioriza a data de saída física (checkoutDate || updatedAt || createdAt)
+    // Nas demais abas, prioriza a data de registro de entrada (createdAt)
+    return list.sort((a, b) => {
+      if (activeTab === 'Baixado') {
+        const dateBStr = b.checkoutDate || b.updatedAt || b.createdAt || '';
+        const dateAStr = a.checkoutDate || a.updatedAt || a.createdAt || '';
+        const timeB = dateBStr ? new Date(dateBStr).getTime() : 0;
+        const timeA = dateAStr ? new Date(dateAStr).getTime() : 0;
+        if (timeB !== timeA) return timeB - timeA;
+      }
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [units, filterOnlyDuplicates, selectedBrand, selectedCategory, selectedPlatform, selectedVoltage, selectedDate, searchTerm, activeTab, products]);
 
   // Reset pagination limit when search term, filters, sector tab, date, or duplicate filter changes
   useEffect(() => {
@@ -1210,9 +1248,15 @@ export default function PhysicalStock({
           <div className="h-6 w-[1px] bg-slate-800 self-center mx-1"></div>
           <button 
             onClick={() => setActiveTab('Baixado')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'Baixado' ? 'bg-slate-800 text-slate-200' : 'text-slate-500 hover:text-slate-350 hover:bg-slate-850'}`}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'Baixado' 
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' 
+                : 'text-slate-455 hover:text-purple-400 hover:bg-slate-850'
+            }`}
+            id="tab-btn-baixados"
           >
-            Histórico de Baixas ({units.filter(u => u.status === 'Baixado').length})
+            <span className={`w-2 h-2 rounded-full ${activeTab === 'Baixado' ? 'bg-purple-200' : 'bg-purple-400'}`}></span>
+            <span>Histórico de Baixas ({units.filter(u => u.status === 'Baixado').length})</span>
           </button>
         </div>
 
@@ -1740,6 +1784,31 @@ export default function PhysicalStock({
           </div>
         )}
 
+        {/* Baixado History Context Banner */}
+        {activeTab === 'Baixado' && (
+          <div 
+            className="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3 text-xs font-medium transition-colors bg-purple-950/20 border-purple-500/30 text-purple-900 dark:text-purple-200"
+            id="stock-baixado-history-banner"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-lg bg-purple-600/15 border border-purple-500/30 flex items-center justify-center shrink-0 text-purple-700 dark:text-purple-300">
+                <CheckCircle2 className="w-4 h-4" />
+              </span>
+              <div>
+                <span className="font-bold text-purple-950 dark:text-purple-100">
+                  Histórico de Baixas (Saídas Físicas do Galpão)
+                </span>
+                <span className="text-purple-700/80 dark:text-purple-300/80 ml-1.5 hidden sm:inline">
+                  — Unidades ordenadas por data de saída da mais recente para a mais antiga.
+                </span>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-purple-600 text-white shadow-xs">
+              {filteredUnits.length} {filteredUnits.length === 1 ? 'saída registrada' : 'saídas registradas'}
+            </span>
+          </div>
+        )}
+
         {/* Units list Grid or List */}
         {filteredUnits.length === 0 ? (
           <div className="p-12 text-center bg-slate-950 flex flex-col items-center justify-center" id="stock-empty">
@@ -1767,7 +1836,9 @@ export default function PhysicalStock({
                 <div 
                   key={unit.id}
                   className={`group bg-slate-900 border hover:border-slate-700/80 rounded-xl p-4 flex flex-col justify-between hover:shadow-xl transition-all ${
-                    hasDupSti || hasDupSerial ? 'border-amber-500/50 shadow-md shadow-amber-500/5' : 'border-slate-800'
+                    unit.status === 'Baixado'
+                      ? 'border-purple-500/30'
+                      : (hasDupSti || hasDupSerial ? 'border-amber-500/50 shadow-md shadow-amber-500/5' : 'border-slate-800')
                   }`}
                   id={`stock-unit-${unit.id}`}
                 >
@@ -1775,7 +1846,7 @@ export default function PhysicalStock({
                     {/* Header */}
                     <div className="flex justify-between items-start gap-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {unit.status !== 'Baixado' && (
+                        {unit.status !== 'Baixado' ? (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1792,6 +1863,11 @@ export default function PhysicalStock({
                           >
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
                           </button>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs flex items-center gap-1 shrink-0">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Baixado</span>
+                          </span>
                         )}
                         <button
                           type="button"
@@ -1909,9 +1985,17 @@ export default function PhysicalStock({
                         </div>
                       )}
                       {unit.status === 'Baixado' && (
-                        <span className="absolute inset-0 bg-black/70 flex items-center justify-center text-rose-400 font-bold text-xs uppercase tracking-wider">
-                          Saída Efetuada
-                        </span>
+                        <div className="absolute inset-0 bg-slate-950/75 dark:bg-black/80 backdrop-blur-[1px] flex flex-col items-center justify-center gap-1.5 p-2 transition-all">
+                          <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white font-black text-[11px] uppercase tracking-wider shadow-lg flex items-center gap-1.5 border border-rose-300/40">
+                            <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Saída Efetuada</span>
+                          </span>
+                          {getDischargeDate(unit) && (
+                            <span className="text-[10px] font-mono font-bold text-white bg-slate-900/90 dark:bg-black/90 px-2 py-0.5 rounded shadow-sm border border-white/20">
+                              Saída: {formatDischargeDateTime(getDischargeDate(unit))}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
 
@@ -1966,15 +2050,26 @@ export default function PhysicalStock({
                     </div>
                   </div>
 
-                  {/* Bottom section: Entrada and Actions */}
+                  {/* Bottom section: Entrada, Saída and Actions */}
                   <div className="mt-5 pt-3 border-t border-slate-800">
-                    <p className="text-[10px] text-slate-450 font-medium mb-2.5 flex items-center gap-1.5 font-mono">
-                      <Clock className="w-3.5 h-3.5 text-sky-450 shrink-0" />
-                      <span>Entrada:</span>
-                      <span className="text-slate-300 font-semibold">
-                        {new Date(unit.createdAt).toLocaleDateString('pt-BR')} {new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </p>
+                    <div className="flex flex-col gap-1 mb-2.5 font-mono text-[10px]">
+                      <p className="text-slate-400 font-medium flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                        <span className="text-slate-400">Entrada:</span>
+                        <span className="text-slate-200 font-semibold">
+                          {new Date(unit.createdAt).toLocaleDateString('pt-BR')} {new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </p>
+                      {unit.status === 'Baixado' && (
+                        <p className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                          <span>Saída:</span>
+                          <span className="font-extrabold text-rose-700 dark:text-rose-300">
+                            {formatDischargeDateTime(getDischargeDate(unit))}
+                          </span>
+                        </p>
+                      )}
+                    </div>
 
                     <div className="flex justify-between items-center text-xs">
                       {unit.platform ? (
@@ -2031,7 +2126,7 @@ export default function PhysicalStock({
                   id={`stock-unit-list-${unit.id}`}
                 >
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    {unit.status !== 'Baixado' && (
+                    {unit.status !== 'Baixado' ? (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -2048,6 +2143,11 @@ export default function PhysicalStock({
                       >
                         <Check className="w-3.5 h-3.5 stroke-[3]" />
                       </button>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs flex items-center gap-1 shrink-0">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Baixado</span>
+                      </span>
                     )}
 
                     {/* Thumbnail - click opens unit details */}
@@ -2173,8 +2273,9 @@ export default function PhysicalStock({
                           {unit.destinationSector}
                         </span>
                         {unit.status === 'Baixado' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/80 text-rose-400 border border-rose-800/50 uppercase">
-                            Saída Efetuada
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs uppercase tracking-wider flex items-center gap-1 shrink-0">
+                            <CheckCircle2 className="w-3 h-3 text-white" />
+                            <span>Saída Efetuada</span>
                           </span>
                         )}
                       </div>
@@ -2230,13 +2331,24 @@ export default function PhysicalStock({
 
                   {/* Date and Action hint */}
                   <div className="flex items-center justify-between md:justify-end gap-4 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-800/60">
-                    <p className="text-[10px] text-slate-450 font-medium flex items-center gap-1 font-mono">
-                      <Clock className="w-3.5 h-3.5 text-sky-450 shrink-0" />
-                      <span className="text-slate-400">Entrada:</span>
-                      <span className="text-slate-300 font-semibold">
-                        {new Date(unit.createdAt).toLocaleDateString('pt-BR')} {new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </p>
+                    <div className="flex flex-col items-start md:items-end gap-1 font-mono text-[10px]">
+                      <p className="text-slate-400 font-medium flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                        <span className="text-slate-400">Entrada:</span>
+                        <span className="text-slate-200 font-semibold">
+                          {new Date(unit.createdAt).toLocaleDateString('pt-BR')} {new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </p>
+                      {unit.status === 'Baixado' && (
+                        <p className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                          <span>Saída:</span>
+                          <span className="font-extrabold text-rose-700 dark:text-rose-300">
+                            {formatDischargeDateTime(getDischargeDate(unit))}
+                          </span>
+                        </p>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-2">
                       <button
@@ -2338,6 +2450,17 @@ export default function PhysicalStock({
                   }`}>
                     Setor: {isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector}
                   </span>
+
+                  {currentUnit.status === 'Baixado' && (
+                    <span className={`text-xs font-black px-2.5 py-0.5 rounded-md border flex items-center gap-1.5 uppercase tracking-wider ${
+                      isLight 
+                        ? 'bg-rose-100 text-rose-900 border-rose-300' 
+                        : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                    }`}>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-rose-500" />
+                      Baixado
+                    </span>
+                  )}
 
                   {isEditingUnit && (
                     <span className={`px-2 py-0.5 text-[10px] font-black rounded-md uppercase tracking-wider border ${
@@ -3175,6 +3298,34 @@ export default function PhysicalStock({
                   </div>
                 )}
 
+                {/* Baixado info banner inside detail modal */}
+                {currentUnit.status === 'Baixado' && (
+                  <div className={`p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs border ${
+                    isLight 
+                      ? 'bg-rose-50 border-rose-200 text-rose-900' 
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+                  }`} id="unit-detail-baixado-banner">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        isLight ? 'bg-rose-100 border border-rose-300' : 'bg-rose-600/20 border border-rose-500/40'
+                      }`}>
+                        <CheckCircle2 className="w-5 h-5 text-rose-600" />
+                      </div>
+                      <div>
+                        <p className={`font-bold text-sm ${isLight ? 'text-rose-950' : 'text-rose-300'}`}>
+                          Produto com Baixa Efetuada (Saída Física do Galpão)
+                        </p>
+                        <p className={`text-[11px] font-mono mt-0.5 ${isLight ? 'text-rose-800 font-semibold' : 'text-rose-300/90'}`}>
+                          Data de Saída: <strong className={isLight ? 'text-rose-950 font-black' : 'text-white'}>{formatDischargeDateTime(getDischargeDate(currentUnit))}</strong>
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-rose-600 text-white font-black text-[10px] uppercase tracking-wider shrink-0 self-start sm:self-center shadow-xs">
+                      Saída Registrada
+                    </span>
+                  </div>
+                )}
+
                 {/* Technical Specifications Hero Bar */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 bg-slate-950 p-4 sm:p-5 border border-slate-800 rounded-2xl shadow-inner text-xs">
                   {/* SKU */}
@@ -3366,6 +3517,15 @@ export default function PhysicalStock({
                         <Clock className="w-3.5 h-3.5 text-slate-500" />
                         <span>Data de Entrada: <strong className="text-slate-200">{new Date(currentUnit.createdAt).toLocaleDateString('pt-BR')} às {new Date(currentUnit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
                       </div>
+                      {currentUnit.status === 'Baixado' && (
+                        <>
+                          <span className="text-slate-600 hidden sm:inline">•</span>
+                          <div className="flex items-center gap-1.5 text-rose-400">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-rose-500" />
+                            <span>Data de Saída: <strong className="text-rose-300 font-bold">{formatDischargeDateTime(getDischargeDate(currentUnit))}</strong></span>
+                          </div>
+                        </>
+                      )}
                       {currentUnit.createdBy && (currentUnit.createdBy.name || currentUnit.createdBy.email) && (
                         <>
                           <span className="text-slate-600 hidden sm:inline">•</span>
