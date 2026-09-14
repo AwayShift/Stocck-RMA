@@ -753,7 +753,8 @@ export default function BaseCatalog({
                         {/* Image Thumbnail Header */}
                         <div 
                           onClick={() => setViewingProduct(product)}
-                          className="relative aspect-[4/3] w-full bg-slate-900/90 overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-800 group-hover:border-sky-500/30 transition-colors p-2.5"
+                          className="relative aspect-[4/3] w-full photo-container-clean !bg-white overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-200 dark:border-slate-800 group-hover:border-sky-500/30 transition-colors p-2.5"
+                          style={{ backgroundColor: '#ffffff' }}
                         >
                           {displayPhoto ? (
                             <img 
@@ -763,8 +764,8 @@ export default function BaseCatalog({
                               referrerPolicy="no-referrer"
                             />
                           ) : (
-                            <div className="flex flex-col items-center justify-center text-slate-600 gap-1.5 p-4 select-none">
-                              <ImageIcon className="w-8 h-8 stroke-1 text-slate-700" />
+                            <div className="flex flex-col items-center justify-center text-slate-400 gap-1.5 p-4 select-none">
+                              <ImageIcon className="w-8 h-8 stroke-1 text-slate-400" />
                               <span className="text-[10px] font-mono font-medium text-slate-500">Sem imagem</span>
                             </div>
                           )}
@@ -772,11 +773,11 @@ export default function BaseCatalog({
                           {/* Voltage Badge (Top Left) - Rendered only when product has voltage and it is not N/A */}
                           {product.voltage && product.voltage !== 'N/A' && (
                             <div className="absolute top-2.5 left-2.5 z-10">
-                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shadow-md backdrop-blur-md ${
-                                product.voltage === 'Bivolt' ? 'bg-sky-950/85 text-sky-300 border border-sky-500/30' :
-                                product.voltage === '110V' ? 'bg-teal-950/85 text-teal-300 border border-teal-500/30' :
-                                product.voltage === '220V' ? 'bg-orange-950/85 text-orange-300 border border-orange-500/30' :
-                                'bg-slate-900/85 text-slate-300 border border-slate-700/50'
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shadow-md ${
+                                product.voltage === 'Bivolt' ? 'bg-sky-600 text-white border border-sky-400/80 shadow-sky-500/20' :
+                                product.voltage === '110V' ? 'bg-teal-600 text-white border border-teal-400/80 shadow-teal-500/20' :
+                                product.voltage === '220V' ? 'bg-orange-600 text-white border border-orange-400/80 shadow-orange-500/20' :
+                                'bg-slate-800 text-white border border-slate-700'
                               }`}>
                                 {product.voltage}
                               </span>
@@ -1560,7 +1561,8 @@ export default function BaseCatalog({
                         : viewingProduct.imageUrl;
                       if (imgUrl) setZoomedImage(imgUrl);
                     }}
-                    className="aspect-square w-full rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden flex items-center justify-center relative group/mainImg cursor-zoom-in"
+                    className="aspect-square w-full rounded-2xl border border-slate-200 dark:border-slate-800 photo-container-clean !bg-white overflow-hidden flex items-center justify-center relative group/mainImg cursor-zoom-in shadow-sm"
+                    style={{ backgroundColor: '#ffffff' }}
                     title="Clique para dar zoom na imagem"
                   >
                     {/* Category Badge */}
@@ -1594,8 +1596,8 @@ export default function BaseCatalog({
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className="flex flex-col items-center justify-center text-slate-500 font-mono text-xs p-4">
-                        <ImageIcon className="w-12 h-12 mb-2 text-slate-700" />
+                      <div className="flex flex-col items-center justify-center text-slate-400 font-mono text-xs p-4">
+                        <ImageIcon className="w-12 h-12 mb-2 text-slate-400" />
                         Nenhuma imagem cadastrada
                       </div>
                     )}
@@ -1618,13 +1620,14 @@ export default function BaseCatalog({
                         <button
                           key={idx}
                           onClick={() => setActiveViewImageIndex(idx)}
-                          className={`w-14 h-14 rounded-xl border overflow-hidden bg-slate-950 transition-all focus:outline-none cursor-pointer ${
+                          className={`w-14 h-14 rounded-xl border overflow-hidden photo-container-clean !bg-white transition-all focus:outline-none cursor-pointer p-0.5 ${
                             activeViewImageIndex === idx 
                               ? 'border-sky-500 ring-2 ring-sky-500/20 scale-95' 
-                              : 'border-slate-800 hover:border-slate-600 hover:scale-105'
+                              : 'border-slate-300 dark:border-slate-800 hover:border-slate-500 hover:scale-105'
                           }`}
+                          style={{ backgroundColor: '#ffffff' }}
                         >
-                          <img src={img} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          <img src={img} alt={`Thumb ${idx + 1}`} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                         </button>
                       ))}
                     </div>

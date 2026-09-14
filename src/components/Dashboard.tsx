@@ -585,11 +585,14 @@ export default function Dashboard({
                     >
                       <div className="flex items-center gap-3.5 flex-1 min-w-0 w-full sm:w-auto">
                         {/* Thumbnail of product photo or placeholder */}
-                        <div className="w-12 h-12 rounded-lg bg-slate-900 border border-slate-800 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                        <div 
+                          className="w-12 h-12 rounded-lg photo-container-clean !bg-white border border-slate-200 dark:border-slate-800 flex-shrink-0 overflow-hidden flex items-center justify-center p-0.5 shadow-xs"
+                          style={{ backgroundColor: '#ffffff' }}
+                        >
                           {mainPhoto ? (
-                            <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-cover" />
+                            <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-contain" />
                           ) : (
-                            <Package className="w-6 h-6 text-slate-500" />
+                            <Package className="w-6 h-6 text-slate-400" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">

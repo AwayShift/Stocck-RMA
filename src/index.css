@@ -113,10 +113,13 @@ html.light [class*="bg-[#"] {
   background-color: #ffffff !important;
 }
 
-/* Photo containers must remain pure white without bluish tint */
+/* Photo containers must remain pure white in both light and dark modes */
 .photo-container-clean,
 html.light .photo-container-clean,
-html.light div.photo-container-clean {
+html.light div.photo-container-clean,
+html:not(.light) .photo-container-clean,
+html:not(.light) div.photo-container-clean,
+div[data-photo-container] {
   background-color: #ffffff !important;
 }
 
@@ -242,6 +245,22 @@ html.light button.bg-emerald-600 .photo-tab-counter-badge {
   border: 1px solid #047857 !important;
 }
 
+/* Styling for Historico de Baixas banner - Dark mode default */
+#stock-baixado-history-banner {
+  background-color: rgba(76, 29, 149, 0.28) !important;
+  border-color: rgba(168, 85, 247, 0.45) !important;
+  color: #f3e8ff !important;
+}
+
+#stock-baixado-history-banner .font-bold,
+#stock-baixado-history-banner strong {
+  color: #ffffff !important;
+}
+
+#stock-baixado-history-banner svg {
+  color: #d8b4fe !important;
+}
+
 /* Light mode specific styling for Historico de Baixas banner and badges */
 html.light #stock-baixado-history-banner {
   background-color: #f5f3ff !important;
@@ -249,8 +268,13 @@ html.light #stock-baixado-history-banner {
   color: #581c87 !important;
 }
 
-html.light #stock-baixado-history-banner span.font-bold {
+html.light #stock-baixado-history-banner .font-bold,
+html.light #stock-baixado-history-banner strong {
   color: #3b0764 !important;
+}
+
+html.light #stock-baixado-history-banner svg {
+  color: #6b21a8 !important;
 }
 
 html.light #tab-btn-baixados.bg-purple-600 {

@@ -1787,23 +1787,31 @@ export default function PhysicalStock({
         {/* Baixado History Context Banner */}
         {activeTab === 'Baixado' && (
           <div 
-            className="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3 text-xs font-medium transition-colors bg-purple-950/20 border-purple-500/30 text-purple-900 dark:text-purple-200"
+            className={`px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3 text-xs font-medium transition-colors ${
+              isLight
+                ? 'bg-purple-50 border-purple-200 text-purple-900'
+                : 'bg-purple-950/40 border-purple-500/40 text-purple-100'
+            }`}
             id="stock-baixado-history-banner"
           >
             <div className="flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded-lg bg-purple-600/15 border border-purple-500/30 flex items-center justify-center shrink-0 text-purple-700 dark:text-purple-300">
+              <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                isLight 
+                  ? 'bg-purple-100 border border-purple-300 text-purple-700' 
+                  : 'bg-purple-500/20 border border-purple-400/50 text-purple-200'
+              }`}>
                 <CheckCircle2 className="w-4 h-4" />
               </span>
               <div>
-                <span className="font-bold text-purple-950 dark:text-purple-100">
+                <span className={`font-bold ${isLight ? 'text-purple-950' : 'text-white'}`}>
                   Histórico de Baixas (Saídas Físicas do Galpão)
                 </span>
-                <span className="text-purple-700/80 dark:text-purple-300/80 ml-1.5 hidden sm:inline">
+                <span className={`ml-1.5 hidden sm:inline ${isLight ? 'text-purple-800' : 'text-purple-200'}`}>
                   — Unidades ordenadas por data de saída da mais recente para a mais antiga.
                 </span>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-purple-600 text-white shadow-xs">
+            <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-purple-600 text-white shadow-xs">
               {filteredUnits.length} {filteredUnits.length === 1 ? 'saída registrada' : 'saídas registradas'}
             </span>
           </div>
@@ -1961,12 +1969,12 @@ export default function PhysicalStock({
                     {/* Image / Thumbnail - click here opens unit details */}
                     <div 
                       onClick={() => setSelectedUnitId(unit.id)}
-                      className={`w-full h-36 rounded-lg ${
+                      className={`w-full h-36 rounded-lg photo-container-clean !bg-white border ${
                         isLight 
-                          ? 'photo-container-clean !bg-white border-slate-200 shadow-sm' 
-                          : 'bg-slate-950 border-slate-800'
+                          ? 'border-slate-200 shadow-sm' 
+                          : 'border-slate-800'
                       } hover:border-sky-500/60 overflow-hidden flex items-center justify-center relative p-2 cursor-pointer transition-all group/thumb hover:shadow-sky-500/10`}
-                      style={{ backgroundColor: isLight ? '#ffffff' : undefined }}
+                      style={{ backgroundColor: '#ffffff' }}
                       title="Clique na foto ou ícone para ver os detalhes do produto"
                       role="button"
                       tabIndex={0}
@@ -1979,9 +1987,9 @@ export default function PhysicalStock({
                       {mainPhoto ? (
                         <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-contain group-hover/thumb:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
                       ) : (
-                        <div className="flex flex-col items-center justify-center gap-1.5 text-slate-500 group-hover/thumb:text-sky-400 transition-colors">
+                        <div className="flex flex-col items-center justify-center gap-1.5 text-slate-400 group-hover/thumb:text-sky-500 transition-colors">
                           <Package className="w-9 h-9" />
-                          <span className="text-[10px] font-semibold text-slate-500 group-hover/thumb:text-sky-400">Ver detalhes</span>
+                          <span className="text-[10px] font-semibold text-slate-500 group-hover/thumb:text-sky-500">Ver detalhes</span>
                         </div>
                       )}
                       {unit.status === 'Baixado' && (
@@ -2061,10 +2069,16 @@ export default function PhysicalStock({
                         </span>
                       </p>
                       {unit.status === 'Baixado' && (
-                        <p className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                        <p className={`font-bold flex items-center gap-1.5 ${
+                          isLight ? 'text-rose-700' : 'text-rose-400'
+                        }`}>
+                          <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${
+                            isLight ? 'text-rose-700' : 'text-rose-400'
+                          }`} />
                           <span>Saída:</span>
-                          <span className="font-extrabold text-rose-700 dark:text-rose-300">
+                          <span className={`font-extrabold ${
+                            isLight ? 'text-rose-950' : 'text-rose-200'
+                          }`}>
                             {formatDischargeDateTime(getDischargeDate(unit))}
                           </span>
                         </p>
@@ -2153,12 +2167,12 @@ export default function PhysicalStock({
                     {/* Thumbnail - click opens unit details */}
                     <div 
                       onClick={() => setSelectedUnitId(unit.id)}
-                      className={`w-12 h-12 rounded-lg ${
+                      className={`w-12 h-12 rounded-lg photo-container-clean !bg-white border ${
                         isLight 
-                          ? 'photo-container-clean !bg-white border-slate-200 shadow-sm' 
-                          : 'bg-slate-950 border-slate-800'
-                      } hover:border-sky-500/60 overflow-hidden flex items-center justify-center shrink-0 relative cursor-pointer group/listthumb transition-all shadow-sm hover:shadow-sky-500/10`}
-                      style={{ backgroundColor: isLight ? '#ffffff' : undefined }}
+                          ? 'border-slate-200 shadow-sm' 
+                          : 'border-slate-800 shadow-inner'
+                      } hover:border-sky-500/60 overflow-hidden flex items-center justify-center shrink-0 relative cursor-pointer group/listthumb transition-all shadow-sm hover:shadow-sky-500/10 p-0.5`}
+                      style={{ backgroundColor: '#ffffff' }}
                       title="Clique na foto ou ícone para ver os detalhes do produto"
                       role="button"
                       tabIndex={0}
@@ -2169,9 +2183,9 @@ export default function PhysicalStock({
                       }}
                     >
                       {mainPhoto ? (
-                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-cover group-hover/listthumb:scale-110 transition-transform" />
+                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-contain group-hover/listthumb:scale-110 transition-transform" />
                       ) : (
-                        <Package className="w-5 h-5 text-slate-500 group-hover/listthumb:text-sky-400 transition-colors" />
+                        <Package className="w-5 h-5 text-slate-400 group-hover/listthumb:text-sky-500 transition-colors" />
                       )}
                     </div>
 
@@ -2340,10 +2354,16 @@ export default function PhysicalStock({
                         </span>
                       </p>
                       {unit.status === 'Baixado' && (
-                        <p className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                        <p className={`font-bold flex items-center gap-1 ${
+                          isLight ? 'text-rose-700' : 'text-rose-400'
+                        }`}>
+                          <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${
+                            isLight ? 'text-rose-700' : 'text-rose-400'
+                          }`} />
                           <span>Saída:</span>
-                          <span className="font-extrabold text-rose-700 dark:text-rose-300">
+                          <span className={`font-extrabold ${
+                            isLight ? 'text-rose-950' : 'text-rose-200'
+                          }`}>
                             {formatDischargeDateTime(getDischargeDate(unit))}
                           </span>
                         </p>
@@ -3626,10 +3646,11 @@ export default function PhysicalStock({
                                 <div 
                                   key={i} 
                                   onClick={() => openImageZoom(p, `Fotos do Aparelho - ${currentUnit.baseProductName}`, resolved.photosProduct, i)}
-                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-500 cursor-pointer relative group transition-colors"
+                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-700 hover:border-sky-500 cursor-pointer relative group transition-colors photo-container-clean !bg-white flex items-center justify-center p-1 shadow-sm"
+                                  style={{ backgroundColor: '#ffffff' }}
                                 >
-                                  <img src={p} className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
+                                  <img src={p} className="w-full h-full object-contain" />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-lg">
                                     <Eye className="w-4 h-4" />
                                   </div>
                                 </div>
@@ -3651,10 +3672,11 @@ export default function PhysicalStock({
                                 <div 
                                   key={i} 
                                   onClick={() => openImageZoom(p, `Fotos da Embalagem - ${currentUnit.baseProductName}`, resolved.photosBox, i)}
-                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-500 cursor-pointer relative group transition-colors"
+                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-700 hover:border-sky-500 cursor-pointer relative group transition-colors photo-container-clean !bg-white flex items-center justify-center p-1 shadow-sm"
+                                  style={{ backgroundColor: '#ffffff' }}
                                 >
-                                  <img src={p} className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
+                                  <img src={p} className="w-full h-full object-contain" />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-lg">
                                     <Eye className="w-4 h-4" />
                                   </div>
                                 </div>
@@ -3676,10 +3698,11 @@ export default function PhysicalStock({
                                 <div 
                                   key={i} 
                                   onClick={() => openImageZoom(p, `Fotos dos Acessórios - ${currentUnit.baseProductName}`, resolved.photosAccessories, i)}
-                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-sky-500 cursor-pointer relative group transition-colors"
+                                  className="w-full aspect-video rounded-lg overflow-hidden border border-slate-700 hover:border-sky-500 cursor-pointer relative group transition-colors photo-container-clean !bg-white flex items-center justify-center p-1 shadow-sm"
+                                  style={{ backgroundColor: '#ffffff' }}
                                 >
-                                  <img src={p} className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity">
+                                  <img src={p} className="w-full h-full object-contain" />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-lg">
                                     <Eye className="w-4 h-4" />
                                   </div>
                                 </div>
