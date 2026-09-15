@@ -365,7 +365,7 @@ export default function Dashboard({
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Aguardando RMA</span>
+                <span className="text-sm font-semibold text-slate-400 uppercase tracking-wider">RMA</span>
                 {selectedSectorFilter === 'RMA' && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-300 flex items-center gap-0.5">
                     <Filter className="w-2.5 h-2.5" /> Filtrando

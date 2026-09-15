@@ -144,7 +144,7 @@ export function getSectorFilterStyle(sector: DestinationSectorType | 'Baixado' |
         hoverBtnClasses: 'hover:text-rose-100 hover:bg-rose-500/20',
         selectClasses: 'border-rose-500/60 bg-rose-950/25 text-rose-300',
         ringClasses: 'border-rose-500 ring-2 ring-rose-500/40',
-        label: 'Aguardando RMA'
+        label: 'RMA'
       };
     case 'Baixado':
       return {
