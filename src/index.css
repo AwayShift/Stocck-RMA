@@ -1191,6 +1191,90 @@ html.light .cal-day-selected span {
   font-weight: 900 !important;
 }
 
+/* Hourly Calendar Picker (Light Mode Contrast & Visual Enhancements) */
+html.light #hourly-calendar-container {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light #hourly-calendar-container .text-slate-300 {
+  color: #0f172a !important;
+}
+
+html.light #hourly-calendar-container .text-slate-400 {
+  color: #475569 !important;
+}
+
+html.light #hourly-calendar-container .text-slate-500 {
+  color: #64748b !important;
+}
+
+/* Selected Day Pill in Hourly Calendar Header */
+html.light #hourly-selected-day-badge {
+  background-color: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0c4a6e !important;
+}
+
+html.light #hourly-selected-day-badge .day-title,
+html.light #hourly-selected-day-badge span.day-title {
+  color: #0c4a6e !important;
+  font-weight: 900 !important;
+}
+
+html.light #hourly-selected-day-badge .day-subtitle,
+html.light #hourly-selected-day-badge span.day-subtitle {
+  color: #0369a1 !important;
+  font-weight: 600 !important;
+}
+
+html.light #hourly-calendar-grid button:not(.cal-day-selected-btn):not(.cal-day-has-entries) {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+html.light #hourly-calendar-grid button:not(.cal-day-selected-btn):not(.cal-day-has-entries):hover {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light #hourly-calendar-grid button.cal-day-has-entries {
+  background-color: #ffffff !important;
+  border-color: #86efac !important;
+}
+
+html.light #hourly-calendar-grid button.cal-day-has-entries:hover {
+  background-color: #f0fdf4 !important;
+  border-color: #22c55e !important;
+}
+
+html.light #hourly-calendar-grid button.cal-day-has-entries .cal-badge-count {
+  background-color: #dcfce7 !important;
+  border-color: #86efac !important;
+  color: #15803d !important;
+  font-weight: 900 !important;
+}
+
+html.light #hourly-calendar-grid button.cal-day-selected-btn {
+  background-color: #0284c7 !important;
+  border-color: #0369a1 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35) !important;
+}
+
+html.light #hourly-calendar-grid button.cal-day-selected-btn,
+html.light #hourly-calendar-grid button.cal-day-selected-btn span,
+html.light #hourly-calendar-grid button.cal-day-selected-btn div {
+  color: #ffffff !important;
+}
+
+html.light #hourly-calendar-grid button.cal-day-selected-btn .cal-badge-count {
+  background-color: #0369a1 !important;
+  color: #ffffff !important;
+  border-color: #0284c7 !important;
+}
+
 /* Light Mode Detalhamento Unitário Styles */
 html.light .unit-search-input {
   background-color: #ffffff !important;

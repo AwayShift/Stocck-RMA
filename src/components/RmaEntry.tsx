@@ -33,6 +33,7 @@ import { RichTextEditor } from './RichTextEditor';
 import { getBaseProductImages } from '../utils/productImages';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { getCurrentActiveAuthUser } from '../lib/supabaseAuth';
+import { formatStiInput, isValidStiCode, normalizeStiCode } from '../utils/stiFormatter';
 
 export interface TriageSummaryData {
   product: BaseProduct;
@@ -517,13 +518,20 @@ export default function RmaEntry({
       }
     }
     // Keep tracking code as entered by user for Openbox, or blank if another sector (STI is exclusively for controlled openbox items)
-    const finalTrackingCode = destinationSector === 'Openbox' ? trackingCode.trim() : '';
+    const finalTrackingCode = destinationSector === 'Openbox' ? normalizeStiCode(trackingCode) : '';
 
-    // Mandatory STI check for Openbox products
-    if (destinationSector === 'Openbox' && !finalTrackingCode) {
-      setErrorMessage('O Código STI é obrigatório para cadastrar produtos no setor OpenBox.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
+    // Mandatory STI check for Openbox products (strictly STI + 6 numbers)
+    if (destinationSector === 'Openbox') {
+      if (!finalTrackingCode) {
+        setErrorMessage('O Código STI é obrigatório para cadastrar produtos no setor OpenBox.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (!isValidStiCode(finalTrackingCode)) {
+        setErrorMessage('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
     }
 
     // Determine final device status and package status (presets vs manual description)
@@ -1019,9 +1027,16 @@ export default function RmaEntry({
                       </label>
                       <input 
                         type="text"
-                        placeholder="STI-40912 ou 13509873"
+                        placeholder="Ex: STI134920"
                         value={trackingCode}
-                        onChange={(e) => setTrackingCode(e.target.value)}
+                        onChange={(e) => {
+                          const formatted = formatStiInput(e.target.value);
+                          setTrackingCode(formatted);
+                          if (errorMessage && isValidStiCode(formatted)) {
+                            setErrorMessage(null);
+                          }
+                        }}
+                        maxLength={9}
                         className="w-full px-3 h-[38px] bg-slate-950 rounded-lg text-xs font-mono transition-all border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400/40"
                         id="input-tracking-code"
                         required

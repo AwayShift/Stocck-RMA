@@ -5,6 +5,7 @@
 
 import * as XLSX from 'xlsx';
 import { DailyInflowRecord, InflowWeekSummary, TriageUnit, BaseProduct } from '../types';
+import { normalizeStiCode } from './stiFormatter';
 
 /**
  * Parses Excel dates safely (supporting numeric serial dates, DD/MM/YYYY, YYYY-MM-DD, etc.)
@@ -1006,7 +1007,7 @@ export async function parseStockInventoryExcelFile(
             stiUpper !== 'UNDEFINED' && 
             stiUpper !== 'NONE'
           ) {
-            sti = rawSti;
+            sti = normalizeStiCode(rawSti);
             stiFound++;
           }
 

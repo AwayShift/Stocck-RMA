@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Filter,
   X,
   FileSpreadsheet,
@@ -23,7 +24,10 @@ import {
   Trash2,
   BarChart3,
   Table as TableIcon,
-  RotateCcw
+  RotateCcw,
+  Clock,
+  ArrowUpRight,
+  Sun
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, DailyInflowRecord, isMigrationUnit } from '../types';
 import ExcelInflowImportModal from './ExcelInflowImportModal';
@@ -36,6 +40,7 @@ import {
   groupRecordsByWeek 
 } from '../utils/excelHelpers';
 import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
+import { formatStiBadge } from '../utils/stiFormatter';
 
 interface ProductMovementsProps {
   products: BaseProduct[];
@@ -49,6 +54,7 @@ interface ProductMovementsProps {
   enableSpreadsheetImport?: boolean;
   enableSpreadsheetExport?: boolean;
   isLight?: boolean;
+  onNavigateToStockUnit?: (unit: TriageUnit) => void;
 }
 
 export default function ProductMovements({ 
@@ -62,7 +68,8 @@ export default function ProductMovements({
   userRole,
   enableSpreadsheetImport = true,
   enableSpreadsheetExport = true,
-  isLight = false
+  isLight = false,
+  onNavigateToStockUnit
 }: ProductMovementsProps) {
   // Navigation & View mode
   const [activeView, setActiveView] = useState<'spreadsheet' | 'visual'>('spreadsheet');
@@ -141,16 +148,19 @@ export default function ProductMovements({
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
-  const [dailyViewType, setDailyViewType] = useState<'calendar' | 'chart'>('calendar');
+  const [selectedHour, setSelectedHour] = useState<number | null>(null);
+  const [dailyViewType, setDailyViewType] = useState<'calendar' | 'chart' | 'hourly'>('calendar');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('Todos');
   const [selectedPlatform, setSelectedPlatform] = useState<string>('Todas');
+  const [isHourlyCalendarOpen, setIsHourlyCalendarOpen] = useState<boolean>(false);
 
-  // Reset day/week and search filters when selected month changes
+  // Reset day/week, hour and search filters when selected month changes
   useEffect(() => {
     setSelectedDay(null);
     setSelectedDateStr(null);
     setSelectedWeek(null);
+    setSelectedHour(null);
     setSelectedSector('Todos');
     setSelectedPlatform('Todas');
     setSearchQuery('');
@@ -654,7 +664,87 @@ export default function ProductMovements({
     }
   }, [availablePlatforms, selectedPlatform]);
 
-  // Filtered list of movements (for unit view - with search, sector and platform filters)
+  // Hourly distribution of registered entries across the 24 hours of the day
+  const hourlyDistribution = useMemo(() => {
+    const hours = Array.from({ length: 24 }, (_, i) => ({
+      hour: i,
+      label: `${String(i).padStart(2, '0')}:00`,
+      total: 0,
+      estoque: 0,
+      rma: 0,
+      openbox: 0,
+    }));
+
+    scopeUnits.forEach(u => {
+      if (!u.createdAt) return;
+      const dt = new Date(u.createdAt);
+      if (!isNaN(dt.getTime())) {
+        const h = dt.getHours();
+        if (h >= 0 && h < 24) {
+          hours[h].total++;
+          if (u.destinationSector === 'Principal') hours[h].estoque++;
+          else if (u.destinationSector === 'Openbox') hours[h].openbox++;
+          else hours[h].rma++;
+        }
+      }
+    });
+
+    const maxCount = Math.max(...hours.map(h => h.total), 1);
+    const totalInScope = hours.reduce((sum, h) => sum + h.total, 0);
+
+    let peakHour = hours[0];
+    hours.forEach(h => {
+      if (h.total > peakHour.total) {
+        peakHour = h;
+      }
+    });
+
+    const periods = {
+      madrugada: hours.slice(0, 6).reduce((s, h) => s + h.total, 0),
+      manha: hours.slice(6, 12).reduce((s, h) => s + h.total, 0),
+      tarde: hours.slice(12, 18).reduce((s, h) => s + h.total, 0),
+      noite: hours.slice(18, 24).reduce((s, h) => s + h.total, 0),
+    };
+
+    return {
+      hours,
+      maxCount,
+      totalInScope,
+      peakHour: peakHour.total > 0 ? peakHour : null,
+      periods,
+    };
+  }, [scopeUnits]);
+
+  // List of all days in current month with entry counts for day-specific selection
+  const monthDaysOptions = useMemo(() => {
+    const list: {
+      dayNum: number;
+      dateStr: string;
+      formattedDate: string;
+      weekday: string;
+      count: number;
+    }[] = [];
+
+    const inflowsMap = new Map<string, number>();
+    unitsByDayMap.forEach((stats, dateStr) => {
+      inflowsMap.set(dateStr, stats.total);
+    });
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${selectedYear}-${String(selectedMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const count = inflowsMap.get(dateStr) || 0;
+      list.push({
+        dayNum: d,
+        dateStr,
+        formattedDate: `${String(d).padStart(2, '0')}/${String(selectedMonthIdx + 1).padStart(2, '0')}`,
+        weekday: getWeekdayName(dateStr),
+        count
+      });
+    }
+    return list;
+  }, [daysInMonth, selectedYear, selectedMonthIdx, unitsByDayMap]);
+
+  // Filtered list of movements (for unit view - with search, sector, platform and hour filters)
   const filteredMovements = useMemo(() => {
     return scopeUnits.filter(u => {
       // Sector filter
@@ -669,6 +759,15 @@ export default function ProductMovements({
           if (p && p !== 'N/A' && p !== 'Não Informado' && p !== 'Sem Plataforma') return false;
         } else {
           if (p !== selectedPlatform) return false;
+        }
+      }
+
+      // Hour filter
+      if (selectedHour !== null) {
+        if (!u.createdAt) return false;
+        const dt = new Date(u.createdAt);
+        if (isNaN(dt.getTime()) || dt.getHours() !== selectedHour) {
+          return false;
         }
       }
 
@@ -691,15 +790,16 @@ export default function ProductMovements({
       const tb = getDateParts(b.createdAt)?.time || 0;
       return tb - ta;
     });
-  }, [scopeUnits, selectedSector, selectedPlatform, searchQuery]);
+  }, [scopeUnits, selectedSector, selectedPlatform, selectedHour, searchQuery]);
 
   const handleClearFilters = () => {
     setSearchQuery('');
     setSelectedSector('Todos');
     setSelectedPlatform('Todas');
+    setSelectedHour(null);
   };
 
-  const hasActiveFilters = searchQuery.trim() !== '' || selectedSector !== 'Todos' || selectedPlatform !== 'Todas';
+  const hasActiveFilters = searchQuery.trim() !== '' || selectedSector !== 'Todos' || selectedPlatform !== 'Todas' || selectedHour !== null;
 
   const maxWeeklyCount = Math.max(...weeklyCounts, 1);
   const maxDailyCount = Math.max(...dailyCounts, 1);
@@ -911,15 +1011,6 @@ export default function ProductMovements({
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Action: Manual Entry */}
-          <button
-            onClick={() => handleOpenManualEntry()}
-            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Lançamento Manual</span>
-          </button>
 
           {/* Action: Excel Import */}
           {enableSpreadsheetImport && (
@@ -1467,16 +1558,26 @@ export default function ProductMovements({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
             {/* Left Column: Weekly Distribution Card */}
-            <div className="lg:col-span-4 bg-slate-900/90 border border-slate-800/50 p-6 rounded-2xl flex flex-col justify-between space-y-4 shadow-sm">
+            <div className={`lg:col-span-4 p-6 rounded-2xl flex flex-col justify-between space-y-4 shadow-sm border transition-all ${
+              isLight ? 'bg-white border-slate-200' : 'bg-slate-900/90 border-slate-800/50'
+            }`}>
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Distribuição Semanal</h3>
-                  <span className="text-[10px] px-2 py-0.5 bg-slate-950 rounded border border-slate-800/50 text-slate-400 font-mono">
+                  <h3 className={`text-xs font-black uppercase tracking-wider ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                    Distribuição Semanal
+                  </h3>
+                  <span className={`text-[10px] px-2 py-0.5 rounded border font-mono font-bold ${
+                    isLight ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-950 border-slate-800/50 text-slate-400'
+                  }`}>
                     {monthWeeks.length} Semanas
                   </span>
                 </div>
-                <h4 className="text-sm font-extrabold text-white">Entradas por Semana</h4>
-                <p className="text-[10px] text-slate-400 mt-1">Entradas agregadas por bloco semanal.</p>
+                <h4 className={`text-sm font-extrabold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  Entradas por Semana
+                </h4>
+                <p className={`text-[10px] mt-1 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                  Entradas agregadas por bloco semanal.
+                </p>
               </div>
 
               {/* Weekly custom bars layout */}
@@ -1496,33 +1597,49 @@ export default function ProductMovements({
                       }}
                       className={`p-3 rounded-xl border transition-all cursor-pointer group flex flex-col space-y-1.5 ${
                         isSelected 
-                          ? 'bg-indigo-500/10 border-indigo-500/40 shadow-sm' 
-                          : 'bg-slate-950/40 border-slate-900/50 hover:border-slate-800/50'
+                          ? isLight
+                            ? 'bg-indigo-50 border-indigo-300 shadow-sm'
+                            : 'bg-indigo-500/10 border-indigo-500/40 shadow-sm' 
+                          : isLight
+                            ? 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                            : 'bg-slate-950/40 border-slate-900/50 hover:border-slate-800/50'
                       }`}
                     >
                       <div className="flex justify-between items-center text-xs">
                         <div className="flex items-center gap-1.5">
-                          <span className={`font-black tracking-tight ${isSelected ? 'text-indigo-400' : 'text-slate-300'}`}>
+                          <span className={`font-black tracking-tight ${
+                            isSelected 
+                              ? isLight ? 'text-indigo-700' : 'text-indigo-400' 
+                              : isLight ? 'text-slate-800' : 'text-slate-300'
+                          }`}>
                             {(label.title && label.title !== 'undefined' && !label.title.includes('undefined')) ? label.title : `Semana ${idx + 1}`}
                           </span>
-                          <span className="text-[10px] text-slate-500 font-medium">({label.range && label.range !== 'undefined' ? label.range : ''})</span>
+                          <span className={`text-[10px] font-medium ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                            ({label.range && label.range !== 'undefined' ? label.range : ''})
+                          </span>
                         </div>
-                        <span className="font-mono font-bold text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800/50">
+                        <span className={`font-mono font-bold px-2 py-0.5 rounded border ${
+                          isLight ? 'text-slate-800 bg-white border-slate-200' : 'text-slate-300 bg-slate-950 border-slate-800/50'
+                        }`}>
                           {val} un
                         </span>
                       </div>
 
                       {/* Bar Background */}
-                      <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-900 flex">
+                      <div className={`w-full h-2 rounded-full overflow-hidden border flex ${
+                        isLight ? 'bg-slate-200/80 border-slate-200' : 'bg-slate-950 border-slate-900'
+                      }`}>
                         <div 
                           style={{ width: `${Math.max(val > 0 ? 3 : 0, percentage)}%` }}
                           className={`h-full rounded-full transition-all duration-500 relative ${
                             isSelected 
                               ? 'bg-gradient-to-r from-indigo-600 to-indigo-400' 
+                              : isLight
+                              ? 'bg-gradient-to-r from-slate-400 to-slate-500 group-hover:from-indigo-600 group-hover:to-indigo-400'
                               : 'bg-gradient-to-r from-slate-700 to-slate-500 group-hover:from-indigo-600 group-hover:to-indigo-400'
                           }`}
                         >
-                          {val > 0 && <div className="absolute inset-0 bg-white/10"></div>}
+                          {val > 0 && <div className="absolute inset-0 bg-white/15"></div>}
                         </div>
                       </div>
                     </div>
@@ -1531,39 +1648,67 @@ export default function ProductMovements({
               </div>
 
               {/* Meta breakdown summary */}
-              <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950/40 p-3.5 rounded-xl border border-slate-800/50 shrink-0">
+              <div className={`grid grid-cols-2 gap-3 text-xs p-3.5 rounded-xl border shrink-0 ${
+                isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/40 border-slate-800/50'
+              }`}>
                 <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">Total nas Semanas</span>
-                  <span className="font-extrabold text-white text-base mt-0.5 block">
+                  <span className={`block text-[10px] font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                    Total nas Semanas
+                  </span>
+                  <span className={`font-extrabold text-base mt-0.5 block ${isLight ? 'text-slate-900' : 'text-white'}`}>
                     {weeksGrandTotal.totalGeral}
                   </span>
                   {weeksGrandTotal.totalGeral !== monthTotals.totalGeral && (
-                    <span className="text-[9px] text-slate-400">({monthTotals.totalGeral} no mês civil)</span>
+                    <span className={`text-[9px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      ({monthTotals.totalGeral} no mês civil)
+                    </span>
                   )}
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">Média Semanal</span>
-                  <span className="font-extrabold text-white text-base mt-0.5 block">
+                  <span className={`block text-[10px] font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                    Média Semanal
+                  </span>
+                  <span className={`font-extrabold text-base mt-0.5 block ${isLight ? 'text-slate-900' : 'text-white'}`}>
                     {(weeksGrandTotal.totalGeral / Math.max(monthWeeks.length, 1)).toFixed(1)} / sem
                   </span>
-                  <span className="text-[9px] text-slate-400">Em {monthWeeks.length} semanas</span>
+                  <span className={`text-[9px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Em {monthWeeks.length} semanas
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Right Column: Daily Distribution & Calendar Grid */}
-            <div className="lg:col-span-8 bg-slate-900/90 border border-slate-800/50 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/50 pb-4 shrink-0">
+            <div className={`lg:col-span-8 p-6 rounded-2xl flex flex-col space-y-4 shadow-sm border transition-all ${
+              isLight ? 'bg-white border-slate-200' : 'bg-slate-900/90 border-slate-800/50'
+            }`}>
+              <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 shrink-0 ${
+                isLight ? 'border-slate-200' : 'border-slate-800/50'
+              }`}>
                 <div>
-                  <h3 className="text-sm font-black text-white">Análise Diária • {monthName}</h3>
-                  <p className="text-[10px] text-slate-400">Escolha o modo de visualização dos dias e clique para interagir.</p>
+                  <h3 className={`text-sm font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                    {dailyViewType === 'hourly'
+                      ? (selectedDateStr ? `Análise por Horário • Dia ${String(selectedDay || '').padStart(2, '0')} (${formatBrDate(selectedDateStr)})` : `Análise por Horário • ${monthName} / ${selectedYear}`)
+                      : `Análise Diária • ${monthName}`}
+                  </h3>
+                  <p className={`text-[10px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                    {dailyViewType === 'hourly'
+                      ? (selectedDateStr
+                          ? `Visualizando entradas do dia ${formatBrDate(selectedDateStr)} (${getWeekdayName(selectedDateStr)}). Clique nas barras para filtrar.`
+                          : 'Distribuição das entradas ao longo das 24 horas do dia. Selecione um dia específico abaixo ou veja o acumulado.')
+                      : 'Escolha o modo de visualização dos dias e clique para interagir.'}
+                  </p>
                 </div>
 
-                <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/50 gap-0.5">
+                <div className={`flex p-1 rounded-xl border gap-0.5 ${
+                  isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-800/50'
+                }`}>
                   <button
                     onClick={() => setDailyViewType('calendar')}
                     className={`px-3.5 py-1.5 rounded-lg text-[10px] font-black tracking-wide uppercase transition-all cursor-pointer ${
-                      dailyViewType === 'calendar' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                      dailyViewType === 'calendar' 
+                        ? 'bg-indigo-600 text-white shadow-xs' 
+                        : isLight ? 'text-slate-600 hover:text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
                     }`}
                   >
                     Calendário
@@ -1571,10 +1716,23 @@ export default function ProductMovements({
                   <button
                     onClick={() => setDailyViewType('chart')}
                     className={`px-3.5 py-1.5 rounded-lg text-[10px] font-black tracking-wide uppercase transition-all cursor-pointer ${
-                      dailyViewType === 'chart' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                      dailyViewType === 'chart' 
+                        ? 'bg-indigo-600 text-white shadow-xs' 
+                        : isLight ? 'text-slate-600 hover:text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
                     }`}
                   >
                     Gráfico Diário
+                  </button>
+                  <button
+                    onClick={() => setDailyViewType('hourly')}
+                    className={`px-3.5 py-1.5 rounded-lg text-[10px] font-black tracking-wide uppercase transition-all cursor-pointer flex items-center gap-1.5 ${
+                      dailyViewType === 'hourly' 
+                        ? 'bg-sky-600 text-white shadow-xs' 
+                        : isLight ? 'text-slate-600 hover:text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Por Horário</span>
                   </button>
                 </div>
               </div>
@@ -1675,7 +1833,7 @@ export default function ProductMovements({
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : dailyViewType === 'chart' ? (
                 <div className="flex-1 flex flex-col justify-center">
                   <div className="flex flex-col space-y-2">
                     <div className="flex justify-between text-[10px] text-slate-500 px-1">
@@ -1731,6 +1889,541 @@ export default function ProductMovements({
                     </div>
                   </div>
                 </div>
+              ) : (
+                /* Hourly View (Gráfico de Entradas pelo Horário) */
+                <div className="flex-1 flex flex-col justify-between space-y-4">
+                  {/* Calendar Day Picker for Hourly View */}
+                  <div 
+                    className={`flex flex-col gap-2.5 p-3 rounded-xl border transition-all ${
+                      isLight 
+                        ? 'bg-slate-50/90 border-slate-200 shadow-xs' 
+                        : 'bg-slate-950/75 border-slate-800/80 shadow-xs'
+                    }`} 
+                    id="hourly-calendar-container"
+                  >
+                    {/* Header bar: all items unified strictly in the top bar */}
+                    <div className="flex items-center justify-between gap-2 sm:gap-2.5 w-full flex-nowrap overflow-x-auto no-scrollbar py-0.5" id="hourly-calendar-top-bar">
+                      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 min-w-0">
+                        <div className={`flex items-center gap-1.5 text-xs font-bold shrink-0 ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>
+                          <Calendar className={`w-4 h-4 ${isLight ? 'text-sky-600' : 'text-sky-400'} shrink-0`} />
+                          <span className={`text-xs uppercase tracking-wider font-black ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>
+                            Calendário <span className="hidden xl:inline">de Dias</span> ({monthName})
+                          </span>
+                        </div>
+
+                        {/* Current Selection Pill */}
+                        {selectedDateStr ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <div 
+                              id="hourly-selected-day-badge"
+                              className={`text-xs font-bold px-2.5 py-1 rounded-lg border shadow-xs flex items-center gap-1.5 transition-colors shrink-0 ${
+                                isLight
+                                  ? 'bg-sky-100 text-sky-950 border-sky-300'
+                                  : 'bg-sky-600 text-white border-sky-500'
+                              }`}
+                            >
+                              <span className={`day-title font-black ${isLight ? 'text-sky-950' : 'text-white'}`}>
+                                Dia {String(selectedDay).padStart(2, '0')}
+                              </span>
+                              <span className={`day-subtitle font-medium text-[11px] ${isLight ? 'text-sky-700' : 'text-sky-100'}`}>
+                                ({formatBrDate(selectedDateStr)} • {getWeekdayName(selectedDateStr).split('-')[0]})
+                              </span>
+                            </div>
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border shrink-0 ${
+                              isLight
+                                ? 'text-sky-800 bg-sky-100 border-sky-300'
+                                : 'text-sky-400 bg-sky-500/15 border-sky-500/30'
+                            }`}>
+                              {hourlyDistribution.totalInScope} {hourlyDistribution.totalInScope === 1 ? 'item' : 'itens'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border flex items-center gap-1 shrink-0 ${
+                            isLight
+                              ? 'text-emerald-900 bg-emerald-100/90 border-emerald-300'
+                              : 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+                          }`}>
+                            <span className="font-extrabold">Mês Completo Acumulado</span>
+                            <span className={isLight ? 'text-slate-700 font-medium' : 'text-slate-400 font-normal'}>• {monthTotals.totalGeral} un</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Controls: Prev/Next day, Mês Completo button, Collapse/Expand toggle */}
+                      <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                        {/* Day prev/next step buttons */}
+                        {selectedDateStr && (
+                          <div className="flex items-center gap-1 mr-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentIdx = monthDaysOptions.findIndex(d => d.dateStr === selectedDateStr);
+                                if (currentIdx > 0) {
+                                  const prev = monthDaysOptions[currentIdx - 1];
+                                  setSelectedDateStr(prev.dateStr);
+                                  setSelectedDay(prev.dayNum);
+                                  setSelectedWeek(null);
+                                }
+                              }}
+                              disabled={monthDaysOptions.findIndex(d => d.dateStr === selectedDateStr) <= 0}
+                              className={`p-1.5 rounded-lg border transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                                isLight
+                                  ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 shadow-2xs'
+                                  : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+                              }`}
+                              title="Dia anterior"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentIdx = monthDaysOptions.findIndex(d => d.dateStr === selectedDateStr);
+                                if (currentIdx !== -1 && currentIdx < monthDaysOptions.length - 1) {
+                                  const next = monthDaysOptions[currentIdx + 1];
+                                  setSelectedDateStr(next.dateStr);
+                                  setSelectedDay(next.dayNum);
+                                  setSelectedWeek(null);
+                                }
+                              }}
+                              disabled={monthDaysOptions.findIndex(d => d.dateStr === selectedDateStr) >= monthDaysOptions.length - 1}
+                              className={`p-1.5 rounded-lg border transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                                isLight
+                                  ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 shadow-2xs'
+                                  : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+                              }`}
+                              title="Próximo dia"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Mês Completo Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDateStr(null);
+                            setSelectedDay(null);
+                            setSelectedWeek(null);
+                          }}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
+                            !selectedDateStr
+                              ? isLight 
+                                ? 'bg-sky-600 text-white border-sky-600 shadow-xs font-black' 
+                                : 'bg-sky-500 text-white border-sky-400 shadow-xs font-black'
+                              : isLight
+                                ? 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border-slate-300 shadow-2xs'
+                                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-800'
+                          }`}
+                          title="Visualizar o somatório acumulado do mês inteiro"
+                        >
+                          <Calendar className="w-3 h-3" />
+                          <span>Mês Completo</span>
+                        </button>
+
+                        {/* Collapse / Expand Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setIsHourlyCalendarOpen(v => !v)}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
+                            isLight
+                              ? 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border-slate-300 shadow-2xs'
+                              : 'bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border-slate-800'
+                          }`}
+                          title={isHourlyCalendarOpen ? 'Recolher grade do calendário' : 'Expandir grade do calendário'}
+                        >
+                          <span>{isHourlyCalendarOpen ? 'Recolher' : 'Exibir Calendário'}</span>
+                          {isHourlyCalendarOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Interactive Calendar Grid */}
+                    {isHourlyCalendarOpen && (
+                      <div className="pt-1 space-y-1.5">
+                        {/* Weekday column headers */}
+                        <div className="grid grid-cols-7 gap-1 text-center">
+                          {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((wd, i) => (
+                            <div
+                              key={wd}
+                              className={`text-[10px] uppercase tracking-wider py-0.5 ${
+                                isLight
+                                  ? i === 0 || i === 6 ? 'text-slate-400 font-bold' : 'text-slate-700 font-black'
+                                  : i === 0 || i === 6 ? 'text-slate-500' : 'text-slate-400 font-black'
+                              }`}
+                            >
+                              {wd}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Calendar Days */}
+                        <div className="grid grid-cols-7 gap-1" id="hourly-calendar-grid">
+                          {calendarDays.map((cell) => {
+                            if (cell.isAdjacentMonth) {
+                              return (
+                                <div
+                                  key={`adj-${cell.dateStr}`}
+                                  className={`h-11 sm:h-12 rounded-lg border flex flex-col items-center justify-center select-none ${
+                                    isLight
+                                      ? 'border-slate-200/50 bg-slate-100/50 opacity-40'
+                                      : 'border-slate-900/40 bg-slate-950/20 opacity-25'
+                                  }`}
+                                >
+                                  <span className={`text-[10px] font-mono font-semibold ${isLight ? 'text-slate-400' : 'text-slate-600'}`}>
+                                    {cell.dayNum}
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            const isSelected = selectedDateStr === cell.dateStr;
+                            const hasEntries = cell.count > 0;
+
+                            let cellClass = '';
+                            if (isSelected) {
+                              cellClass = 'cal-day-selected-btn bg-sky-600 text-white border-sky-500 font-black shadow-md ring-2 ring-sky-400/70 scale-[1.03] z-10';
+                            } else if (hasEntries) {
+                              cellClass = isLight
+                                ? 'cal-day-has-entries bg-white hover:bg-emerald-50/50 border-emerald-300/90 text-slate-950 hover:border-emerald-500 shadow-xs'
+                                : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700/80 text-slate-200 hover:border-sky-400/60 shadow-2xs';
+                            } else {
+                              cellClass = isLight
+                                ? 'bg-white/80 hover:bg-slate-100/70 border-slate-200 text-slate-600 hover:text-slate-900 shadow-2xs'
+                                : 'bg-slate-950/40 hover:bg-slate-900/50 border-slate-800/40 text-slate-500 hover:text-slate-300';
+                            }
+
+                            return (
+                              <button
+                                key={cell.dateStr}
+                                type="button"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setSelectedDateStr(null);
+                                    setSelectedDay(null);
+                                    setSelectedWeek(null);
+                                  } else {
+                                    setSelectedDateStr(cell.dateStr);
+                                    setSelectedDay(cell.dayNum);
+                                    setSelectedWeek(null);
+                                  }
+                                }}
+                                className={`group relative h-11 sm:h-12 rounded-lg border flex flex-col items-center justify-between p-1 transition-all cursor-pointer ${cellClass}`}
+                                title={`Dia ${String(cell.dayNum).padStart(2, '0')}/${String(selectedMonthIdx + 1).padStart(2, '0')} (${getWeekdayName(cell.dateStr)}): ${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'}`}
+                              >
+                                <div className="flex items-center justify-between w-full px-0.5">
+                                  <span
+                                    className={`text-[11px] font-mono leading-none ${
+                                      isSelected
+                                        ? 'text-white font-black'
+                                        : hasEntries
+                                        ? isLight ? 'text-slate-950 font-black' : 'text-slate-200 font-bold'
+                                        : isLight ? 'text-slate-600 font-semibold' : 'text-slate-500'
+                                    }`}
+                                  >
+                                    {String(cell.dayNum).padStart(2, '0')}
+                                  </span>
+                                  {hasEntries && (
+                                    <span
+                                      className={`w-1.5 h-1.5 rounded-full ${
+                                        isSelected ? 'bg-white' : isLight ? 'bg-emerald-500' : 'bg-emerald-400'
+                                      }`}
+                                    />
+                                  )}
+                                </div>
+
+                                <div className="w-full flex items-center justify-center pb-0.5">
+                                  {hasEntries ? (
+                                    <span
+                                      className={`cal-badge-count text-[9px] font-mono px-1 py-0.2 rounded font-black leading-tight ${
+                                        isSelected
+                                          ? 'bg-sky-700 text-white shadow-2xs'
+                                          : isLight
+                                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                      }`}
+                                    >
+                                      {cell.count} un
+                                    </span>
+                                  ) : (
+                                    <span className={`text-[9px] font-mono ${isLight ? 'text-slate-400' : 'text-slate-700'}`}>-</span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Calendar Bottom Legend / Quick hint */}
+                        <div className={`flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t text-[10px] ${
+                          isLight ? 'border-slate-200 text-slate-600' : 'border-slate-800/50 text-slate-400'
+                        }`}>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded bg-sky-500 inline-block"></span>
+                              <span className={isLight ? 'text-slate-700 font-medium' : ''}>Selecionado</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded bg-emerald-500 inline-block"></span>
+                              <span className={isLight ? 'text-slate-700 font-medium' : ''}>Com Entradas</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className={`w-2 h-2 rounded inline-block ${isLight ? 'bg-slate-200 border border-slate-300' : 'bg-slate-800 border border-slate-700'}`}></span>
+                              <span className={isLight ? 'text-slate-700 font-medium' : ''}>Sem Entradas</span>
+                            </span>
+                          </div>
+
+                          {selectedDateStr ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDateStr(null);
+                                setSelectedDay(null);
+                                setSelectedWeek(null);
+                              }}
+                              className={`text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                                isLight ? 'text-sky-700 hover:text-sky-900' : 'text-sky-400 hover:text-sky-300'
+                              }`}
+                            >
+                              <X className="w-3 h-3" />
+                              <span>Limpar seleção (Voltar ao Mês Completo)</span>
+                            </button>
+                          ) : (
+                            <span className={`text-[10px] ${isLight ? 'text-slate-500 font-medium' : 'text-slate-500'}`}>
+                              Clique em qualquer dia para analisar a distribuição por horário
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summary Metric Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {/* Horário de Pico */}
+                    <div className={`p-2.5 rounded-xl flex items-center gap-2.5 border shadow-2xs ${
+                      isLight ? 'bg-white border-slate-200' : 'bg-slate-950/60 border-slate-800/60 shadow-sm'
+                    }`}>
+                      <div className={`p-2 rounded-lg border shrink-0 ${
+                        isLight ? 'bg-sky-100 text-sky-700 border-sky-200' : 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                      }`}>
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className={`text-[10px] block font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Horário de Pico</span>
+                        <span className={`text-xs font-black truncate block ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          {hourlyDistribution.peakHour ? `${hourlyDistribution.peakHour.label} (${hourlyDistribution.peakHour.total} un)` : 'Sem dados'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Total Catalogado */}
+                    <div className={`p-2.5 rounded-xl flex items-center gap-2.5 border shadow-2xs ${
+                      isLight ? 'bg-white border-slate-200' : 'bg-slate-950/60 border-slate-800/60 shadow-sm'
+                    }`}>
+                      <div className={`p-2 rounded-lg border shrink-0 ${
+                        isLight ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      }`}>
+                        <Package className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className={`text-[10px] block font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                          {selectedDateStr ? 'Total no Dia' : 'Total no Mês'}
+                        </span>
+                        <span className={`text-xs font-black block ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          {hourlyDistribution.totalInScope} {hourlyDistribution.totalInScope === 1 ? 'item' : 'itens'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Turno Principal */}
+                    <div className={`p-2.5 rounded-xl flex items-center gap-2.5 border shadow-2xs ${
+                      isLight ? 'bg-white border-slate-200' : 'bg-slate-950/60 border-slate-800/60 shadow-sm'
+                    }`}>
+                      <div className={`p-2 rounded-lg border shrink-0 ${
+                        isLight ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>
+                        <Sun className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className={`text-[10px] block font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Turno Principal</span>
+                        <span className={`text-xs font-black block truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          {(() => {
+                            const p = hourlyDistribution.periods;
+                            const max = Math.max(p.manha, p.tarde, p.noite, p.madrugada);
+                            if (max === 0) return 'Sem dados';
+                            if (max === p.tarde) return `Tarde (${p.tarde} un)`;
+                            if (max === p.manha) return `Manhã (${p.manha} un)`;
+                            if (max === p.noite) return `Noite (${p.noite} un)`;
+                            return `Madrugada (${p.madrugada} un)`;
+                          })()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Filtro por Hora */}
+                    <div className={`p-2.5 rounded-xl flex items-center justify-between gap-2 border shadow-2xs ${
+                      isLight ? 'bg-white border-slate-200' : 'bg-slate-950/60 border-slate-800/60 shadow-sm'
+                    }`}>
+                      <div className="min-w-0">
+                        <span className={`text-[10px] block font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Filtro por Hora</span>
+                        <span className={`text-xs font-black block truncate ${isLight ? 'text-sky-700' : 'text-sky-400'}`}>
+                          {selectedHour !== null ? `${String(selectedHour).padStart(2, '0')}:00 - ${String(selectedHour).padStart(2, '0')}:59` : 'Todas (24h)'}
+                        </span>
+                      </div>
+                      {selectedHour !== null && (
+                        <button
+                          onClick={() => setSelectedHour(null)}
+                          className={`px-2 py-1 text-[9px] rounded border font-bold transition-all cursor-pointer ${
+                            isLight
+                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                          }`}
+                          title="Limpar filtro de hora"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Hourly 24h Bar Chart */}
+                  <div className="space-y-1.5 pt-2">
+                    <div className={`flex justify-between items-center text-[10px] px-1 font-mono ${
+                      isLight ? 'text-slate-600 font-semibold' : 'text-slate-500'
+                    }`}>
+                      <span>00:00 (Madrugada)</span>
+                      <span>12:00 (Almoço / Tarde)</span>
+                      <span>23:00 (Noite)</span>
+                    </div>
+
+                    <div className={`h-64 w-full flex items-end gap-1 pt-8 border-b overflow-x-auto pb-2 px-1 scrollbar-thin ${
+                      isLight ? 'border-slate-200 scrollbar-thumb-slate-300 scrollbar-track-slate-100' : 'border-slate-800 scrollbar-thumb-slate-800 scrollbar-track-slate-950'
+                    }`}>
+                      {hourlyDistribution.hours.map((h) => {
+                        const isSelected = selectedHour === h.hour;
+                        const hasEntries = h.total > 0;
+                        const heightPercent = hourlyDistribution.maxCount > 0 
+                          ? Math.max(6, (h.total / hourlyDistribution.maxCount) * 75) 
+                          : 6;
+
+                        // Calculate percentages for stacked segments (Estoque, Openbox, RMA)
+                        const pctEstoque = hasEntries ? (h.estoque / h.total) * 100 : 0;
+                        const pctOpenbox = hasEntries ? (h.openbox / h.total) * 100 : 0;
+                        const pctRma = hasEntries ? (h.rma / h.total) * 100 : 0;
+
+                        return (
+                          <div
+                            key={h.hour}
+                            onClick={() => {
+                              setSelectedHour(isSelected ? null : h.hour);
+                            }}
+                            className="flex-1 min-w-[20px] max-w-[36px] flex flex-col items-center group relative h-full justify-end cursor-pointer"
+                          >
+                            {/* Stacked or colored bar */}
+                            <div
+                              style={{ height: `${heightPercent}%` }}
+                              className={`w-full rounded-t transition-all duration-300 relative flex flex-col-reverse overflow-hidden ${
+                                isSelected
+                                  ? 'ring-2 ring-sky-400 bg-sky-950/40 shadow-lg shadow-sky-500/20 z-10'
+                                  : hasEntries
+                                  ? 'bg-sky-500/30 group-hover:ring-1 group-hover:ring-sky-400/50'
+                                  : isLight
+                                  ? 'bg-slate-100 group-hover:bg-slate-200'
+                                  : 'bg-slate-900/60 group-hover:bg-slate-800'
+                              }`}
+                            >
+                              {hasEntries ? (
+                                <>
+                                  {pctEstoque > 0 && (
+                                    <div 
+                                      style={{ height: `${pctEstoque}%` }} 
+                                      className="w-full bg-emerald-500 transition-all duration-200" 
+                                      title={`Estoque: ${h.estoque}`}
+                                    />
+                                  )}
+                                  {pctOpenbox > 0 && (
+                                    <div 
+                                      style={{ height: `${pctOpenbox}%` }} 
+                                      className="w-full bg-amber-500 transition-all duration-200" 
+                                      title={`Openbox: ${h.openbox}`}
+                                    />
+                                  )}
+                                  {pctRma > 0 && (
+                                    <div 
+                                      style={{ height: `${pctRma}%` }} 
+                                      className="w-full bg-rose-500 transition-all duration-200" 
+                                      title={`RMA: ${h.rma}`}
+                                    />
+                                  )}
+                                </>
+                              ) : null}
+
+                              {/* Number label on top if has entries */}
+                              {hasEntries && (
+                                <span className={`absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-mono font-black ${
+                                  isLight ? 'text-slate-800' : 'text-slate-300'
+                                } group-hover:${isLight ? 'text-slate-950' : 'text-white'}`}>
+                                  {h.total}
+                                </span>
+                              )}
+
+                              {/* Floating tooltip */}
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 bg-slate-900 border border-slate-700 text-white font-mono text-[10px] px-3 py-2 rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 pointer-events-none whitespace-nowrap min-w-[130px]">
+                                <div className="font-bold text-sky-400 border-b border-slate-800 pb-1 mb-1">
+                                  {h.label} às {String(h.hour).padStart(2, '0')}:59
+                                </div>
+                                <div className="text-white font-extrabold text-xs mb-1">
+                                  {h.total} {h.total === 1 ? 'entrada' : 'entradas'}
+                                </div>
+                                {hasEntries && (
+                                  <div className="space-y-0.5 text-[9px] text-slate-300">
+                                    {h.estoque > 0 && <div className="text-emerald-400">Estoque: {h.estoque} un</div>}
+                                    {h.openbox > 0 && <div className="text-amber-400">Openbox: {h.openbox} un</div>}
+                                    {h.rma > 0 && <div className="text-rose-400">RMA: {h.rma} un</div>}
+                                  </div>
+                                )}
+                                <div className="text-[8px] text-slate-400 mt-1.5 pt-1 border-t border-slate-800">
+                                  {isSelected ? 'Clique para desmarcar' : 'Clique para filtrar a lista'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Hour label on X-axis */}
+                            <span className={`text-[8px] font-mono mt-1.5 font-semibold ${
+                              isSelected 
+                                ? isLight ? 'text-sky-700 font-black' : 'text-sky-400 font-black'
+                                : hasEntries 
+                                ? isLight ? 'text-slate-800 font-bold' : 'text-slate-300' 
+                                : isLight ? 'text-slate-400' : 'text-slate-600'
+                            }`}>
+                              {String(h.hour).padStart(2, '0')}h
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Legend and Shift Breakdown (Setores sem Descarte) */}
+                  <div className={`flex flex-wrap items-center justify-between gap-3 pt-2 text-[10px] border-t ${
+                    isLight ? 'border-slate-200 text-slate-600' : 'border-slate-800/40 text-slate-400'
+                  }`}>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className={`font-bold ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Setores:</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Estoque</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Openbox</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span> RMA</span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-[10px]">
+                      <span>Manhã: <strong className={`font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{hourlyDistribution.periods.manha}</strong></span>
+                      <span>Tarde: <strong className={`font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{hourlyDistribution.periods.tarde}</strong></span>
+                      <span>Noite: <strong className={`font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{hourlyDistribution.periods.noite}</strong></span>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -1748,6 +2441,19 @@ export default function ProductMovements({
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">
+                  {selectedHour !== null && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40 font-bold mr-2 mb-1 shadow-sm">
+                      <Clock className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Filtrando Horário: {String(selectedHour).padStart(2, '0')}:00 às {String(selectedHour).padStart(2, '0')}:59</span>
+                      <button
+                        onClick={() => setSelectedHour(null)}
+                        className="ml-1 hover:text-white p-0.5 rounded hover:bg-sky-500/30 cursor-pointer transition-colors"
+                        title="Remover filtro de horário"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
                   {selectedDateStr ? (
                     <span className="flex items-center flex-wrap gap-2">
                       <span>
@@ -1775,19 +2481,20 @@ export default function ProductMovements({
                     </span>
                   ) : (
                     <span>
-                      Exibindo todos os produtos catalogados na triagem técnica durante o mês de <strong className="text-white">{monthName}</strong>. Clique em um dia do calendário acima para filtrar.
+                      Exibindo todos os produtos catalogados na triagem técnica durante o mês de <strong className="text-white">{monthName}</strong>. Clique em um dia do calendário ou numa barra de horário acima para filtrar.
                     </span>
                   )}
                 </p>
               </div>
               
               <div className="flex items-center gap-2">
-                {(selectedDateStr !== null || selectedDay !== null || selectedWeek !== null) && (
+                {(selectedDateStr !== null || selectedDay !== null || selectedWeek !== null || selectedHour !== null) && (
                   <button
                     onClick={() => {
                       setSelectedDay(null);
                       setSelectedDateStr(null);
                       setSelectedWeek(null);
+                      setSelectedHour(null);
                     }}
                     className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg text-xs font-bold border border-slate-700/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                   >
@@ -1979,7 +2686,9 @@ export default function ProductMovements({
                   return (
                     <div 
                       key={item.id}
-                      className="unit-movement-card p-3 bg-slate-950/70 border border-slate-800/50 hover:border-slate-700/80 rounded-xl flex items-center justify-between gap-4 transition-all text-xs"
+                      onClick={() => onNavigateToStockUnit && onNavigateToStockUnit(item)}
+                      className="unit-movement-card p-3 bg-slate-950/70 border border-slate-800/50 hover:border-sky-500/60 hover:bg-slate-800/70 rounded-xl flex items-center justify-between gap-4 transition-all text-xs cursor-pointer group shadow-sm hover:shadow-md"
+                      title="Clique para ir direto a este produto no estoque"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`w-1.5 h-9 rounded-full ${
@@ -1987,7 +2696,9 @@ export default function ProductMovements({
                             ? 'bg-emerald-500' 
                             : item.destinationSector === 'Openbox' 
                               ? 'bg-amber-500' 
-                              : 'bg-rose-500'
+                              : item.destinationSector === 'Descarte'
+                                ? 'bg-purple-500'
+                                : 'bg-rose-500'
                         }`}></div>
 
                         <div className="min-w-0 space-y-0.5">
@@ -2001,9 +2712,9 @@ export default function ProductMovements({
                               </span>
                             )}
                           </div>
-                          <p className="unit-title font-bold text-white truncate text-xs">{item.baseProductName}</p>
+                          <p className="unit-title font-bold text-white truncate text-xs group-hover:text-sky-300 transition-colors">{item.baseProductName}</p>
                           <div className="flex items-center gap-1.5 text-[10px] text-slate-500 flex-wrap">
-                            <span className="unit-tracking font-mono text-slate-300">{item.trackingCode}</span>
+                            <span className="unit-tracking font-mono text-slate-300">{formatStiBadge(item.trackingCode)}</span>
                             {item.serialNumber && (
                               <>
                                 <span>•</span>
@@ -2016,7 +2727,9 @@ export default function ProductMovements({
                                 ? 'text-emerald-400' 
                                 : item.destinationSector === 'Openbox' 
                                   ? 'text-amber-400' 
-                                  : 'text-rose-400'
+                                  : item.destinationSector === 'Descarte'
+                                    ? 'text-purple-400'
+                                    : 'text-rose-400'
                             }`}>
                               Setor: {item.destinationSector}
                             </span>
@@ -2024,13 +2737,19 @@ export default function ProductMovements({
                         </div>
                       </div>
 
-                      <div className="text-right flex flex-col items-end gap-1 shrink-0">
+                      <div className="text-right flex flex-col items-end gap-1.5 shrink-0">
                         <span className="unit-date-badge font-mono text-[10px] text-slate-400 flex items-center gap-1 bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800/50">
                           {formattedDate} às {formattedTime}
                         </span>
-                        <span className="unit-entry-badge text-[9px] px-1.5 py-0.5 bg-sky-950/40 text-sky-400 border border-sky-800/30 rounded font-black uppercase">
-                          ENTRADA
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="unit-entry-badge text-[9px] px-1.5 py-0.5 bg-sky-950/40 text-sky-400 border border-sky-800/30 rounded font-black uppercase">
+                            ENTRADA
+                          </span>
+                          <span className="unit-stock-link text-[10px] font-bold text-sky-400 flex items-center gap-0.5 opacity-80 group-hover:opacity-100 group-hover:text-sky-300 transition-all">
+                            <span>Ver no estoque</span>
+                            <ArrowUpRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );

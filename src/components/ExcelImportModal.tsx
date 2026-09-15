@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, DestinationSectorType, PlatformType, PackageStatusType } from '../types';
 import { parseStockInventoryExcelFile, downloadStockInventoryTemplate } from '../utils/excelHelpers';
+import { formatStiInput, normalizeStiCode, isValidStiCode } from '../utils/stiFormatter';
 
 interface ExcelImportModalProps {
   isOpen: boolean;
@@ -137,7 +138,7 @@ export default function ExcelImportModal({
     const seenSerials = new Map<string, number>(); // normalized Serial -> row index
 
     return rows.map((row, idx) => {
-      const normSti = (row.sti || '').trim().toUpperCase();
+      const normSti = normalizeStiCode(row.sti || '').toUpperCase();
       const normSerial = (row.serialNumber || '').trim().toUpperCase();
 
       const hasSti = normSti !== '';
@@ -154,7 +155,7 @@ export default function ExcelImportModal({
         // 1. Check existing stock in database for STI collision
         const matchStiStock = hasSti
           ? existingUnits.find(u => {
-              const uSti = (u.trackingCode || '').trim().toUpperCase();
+              const uSti = normalizeStiCode(u.trackingCode || '').toUpperCase();
               return uSti !== '' && uSti === normSti;
             })
           : undefined;
@@ -357,7 +358,8 @@ export default function ExcelImportModal({
     setParsedRows(prev => {
       const updatedList = prev.map(r => {
         if (r.id !== id) return r;
-        const updated = { ...r, [field]: value };
+        const finalValue = field === 'sti' ? formatStiInput(value) : value;
+        const updated = { ...r, [field]: finalValue };
         if (field === 'packaging') {
           updated.packageStatus = determinePackageStatus(value);
         }
@@ -403,7 +405,7 @@ export default function ExcelImportModal({
 
         return {
           id: `tr-excel-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
-          trackingCode: row.sti.trim(),
+          trackingCode: normalizeStiCode(row.sti),
           serialNumber: row.serialNumber && row.serialNumber.trim() !== '' ? row.serialNumber.trim() : '',
           orderNumber: row.orderNumber && row.orderNumber.trim() !== '' ? row.orderNumber.trim() : '',
           baseProductId: row.matchedProduct?.id || `bp-import-${row.sku}`,
@@ -978,13 +980,14 @@ export default function ExcelImportModal({
                                   type="text"
                                   value={row.sti || ''}
                                   onChange={(e) => handleUpdateRowField(row.id, 'sti', e.target.value)}
-                                  placeholder="STI..."
+                                  placeholder="STI134920"
+                                  maxLength={9}
                                   className={`w-full px-2 py-1 rounded text-xs font-mono font-bold border transition-colors excel-input-sti ${
                                     isStiDup
                                       ? 'bg-rose-950/70 text-rose-200 border-rose-500 ring-1 ring-rose-500/50 excel-input-sti-dup'
                                       : 'bg-sky-950/50 text-sky-300 border-sky-500/40 focus:border-sky-400 focus:bg-sky-950/80'
                                   }`}
-                                  title={isStiDup ? `STI repetido: ${row.duplicateInfo.detail}` : 'Código STI / Rastreio da Devolução (Coluna A)'}
+                                  title={isStiDup ? `STI repetido: ${row.duplicateInfo.detail}` : 'Código STI / Rastreio da Devolução (Coluna A - Ex: STI134920)'}
                                 />
                                 {isStiDup && (
                                   <span className="text-[9px] text-rose-400 font-bold block excel-warn-sti">

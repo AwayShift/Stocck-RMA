@@ -54,6 +54,7 @@ import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 import { CategoryBadge } from './CategoryBadge';
 import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
 import { RichTextEditor } from './RichTextEditor';
+import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
 
 interface PhysicalStockProps {
   units: TriageUnit[];
@@ -250,6 +251,11 @@ export default function PhysicalStock({
   React.useEffect(() => {
     if (initialSelectedUnit) {
       setSelectedUnitId(initialSelectedUnit.id);
+      if (initialSelectedUnit.status === 'Baixado') {
+        setActiveTab('Baixado');
+      } else if (initialSelectedUnit.destinationSector) {
+        setActiveTab(initialSelectedUnit.destinationSector);
+      }
     }
   }, [initialSelectedUnit]);
 
@@ -321,12 +327,20 @@ export default function PhysicalStock({
 
       // Mandatory STI check for Openbox products, and clear STI if not Openbox
       if (updatedForm.destinationSector === 'Openbox') {
-        if (!updatedForm.trackingCode || !updatedForm.trackingCode.trim()) {
+        const normSti = normalizeStiCode(updatedForm.trackingCode);
+        if (!normSti) {
           setActionError('O Código STI é obrigatório para produtos no setor OpenBox.');
           setIsSavingEdit(false);
           setTimeout(() => setActionError(null), 4000);
           return;
         }
+        if (!isValidStiCode(normSti)) {
+          setActionError('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
+          setIsSavingEdit(false);
+          setTimeout(() => setActionError(null), 4000);
+          return;
+        }
+        updatedForm.trackingCode = normSti;
       } else {
         updatedForm.trackingCode = '';
       }
@@ -536,7 +550,7 @@ export default function PhysicalStock({
     const counts: Record<string, number> = {};
     units.forEach(u => {
       if (u.status === 'Estoque' && u.trackingCode && u.trackingCode.trim()) {
-        const key = u.trackingCode.trim().toLowerCase();
+        const key = normalizeStiCode(u.trackingCode).toLowerCase();
         counts[key] = (counts[key] || 0) + 1;
       }
     });
@@ -564,7 +578,7 @@ export default function PhysicalStock({
 
   const isDuplicateSti = (unit: TriageUnit) => {
     if (!unit.trackingCode || !unit.trackingCode.trim()) return false;
-    return duplicateStiSet.has(unit.trackingCode.trim().toLowerCase());
+    return duplicateStiSet.has(normalizeStiCode(unit.trackingCode).toLowerCase());
   };
 
   const isDuplicateSerial = (unit: TriageUnit) => {
@@ -1941,7 +1955,7 @@ export default function PhysicalStock({
                       {unit.trackingCode && unit.trackingCode.trim() !== '' && (
                         <button
                           type="button"
-                          onClick={(e) => handleCopyCode(unit.trackingCode!.replace(/^#/, ''), `sti-${unit.id}`, e)}
+                          onClick={(e) => handleCopyCode(normalizeStiCode(unit.trackingCode), `sti-${unit.id}`, e)}
                           className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
                             copiedCodeKey === `sti-${unit.id}`
                               ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
@@ -1958,7 +1972,7 @@ export default function PhysicalStock({
                             </>
                           ) : (
                             <>
-                              <span>#{unit.trackingCode.replace(/^#/, '')}</span>
+                              <span>{formatStiBadge(unit.trackingCode)}</span>
                               <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
                             </>
                           )}
@@ -2217,7 +2231,7 @@ export default function PhysicalStock({
                         {unit.trackingCode && unit.trackingCode.trim() !== '' && (
                           <button
                             type="button"
-                            onClick={(e) => handleCopyCode(unit.trackingCode!.replace(/^#/, ''), `sti-list-${unit.id}`, e)}
+                            onClick={(e) => handleCopyCode(normalizeStiCode(unit.trackingCode), `sti-list-${unit.id}`, e)}
                             className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
                               copiedCodeKey === `sti-list-${unit.id}`
                                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
@@ -2234,7 +2248,7 @@ export default function PhysicalStock({
                               </>
                             ) : (
                               <>
-                                <span>#{unit.trackingCode.replace(/^#/, '')}</span>
+                                <span>{formatStiBadge(unit.trackingCode)}</span>
                                 <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
                               </>
                             )}
@@ -2667,10 +2681,14 @@ export default function PhysicalStock({
                         </label>
                         <input 
                           type="text" 
-                          value={editForm.trackingCode} 
-                          onChange={(e) => setEditForm({ ...editForm, trackingCode: e.target.value })} 
+                          value={editForm.trackingCode || ''} 
+                          onChange={(e) => {
+                            const formatted = formatStiInput(e.target.value);
+                            setEditForm({ ...editForm, trackingCode: formatted });
+                          }} 
+                          maxLength={9}
                           className="w-full bg-slate-900 rounded-lg p-2.5 text-xs font-bold font-mono focus:outline-none border border-amber-500/50 text-amber-200 placeholder-amber-500/40 focus:border-amber-400"
-                          placeholder="Obrigatório para Openbox (Ex: 13509873)"
+                          placeholder="Ex: STI134920"
                         />
                       </div>
                     )}
@@ -3417,11 +3435,11 @@ export default function PhysicalStock({
                     </div>
                     <button
                       type="button"
-                      onClick={(e) => handleCopyCode(currentUnit.trackingCode.replace(/^#/, ''), 'sti', e)}
+                      onClick={(e) => handleCopyCode(normalizeStiCode(currentUnit.trackingCode), 'sti', e)}
                       className="w-full text-left font-mono text-xs sm:text-sm font-bold text-slate-200 bg-slate-900 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-800 block truncate transition-colors cursor-pointer group flex items-center justify-between"
                       title="Clique para copiar Código STI"
                     >
-                      <span className="truncate">{currentUnit.trackingCode.startsWith('#') ? currentUnit.trackingCode : `#${currentUnit.trackingCode}`}</span>
+                      <span className="truncate">{formatStiBadge(currentUnit.trackingCode)}</span>
                       <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60 text-slate-300 transition-opacity ml-1 shrink-0" />
                     </button>
                   </div>

@@ -938,6 +938,10 @@ export default function App() {
                 onSaveBatchDailyInflows={handleSaveBatchDailyInflows}
                 onDeleteDailyInflow={handleDeleteDailyInflow}
                 onSaveTriage={handleSaveTriage}
+                onNavigateToStockUnit={(unit) => {
+                  setSelectedTriageUnit(unit);
+                  setActiveTab('stock');
+                }}
                 userRole={userRole}
                 enableSpreadsheetImport={enableSpreadsheetImport}
                 enableSpreadsheetExport={enableSpreadsheetExport}

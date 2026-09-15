@@ -48,6 +48,7 @@ import {
 import { ImageZoomModal } from './ImageZoomModal';
 import { PlatformSelector } from './PlatformSelector';
 import { uploadFileToStorage } from '../lib/dbService';
+import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
 
 interface PendingItemsProps {
   items: PendingItem[];
@@ -673,6 +674,12 @@ export default function PendingItems({
       ? (formCustomReason.trim() || 'Outro Motivo não especificado')
       : formReason;
 
+    const cleanTracking = formTrackingCode.trim() ? normalizeStiCode(formTrackingCode) : '';
+    if (cleanTracking && !isValidStiCode(cleanTracking)) {
+      setFormError('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const itemToSave: PendingItem = {
@@ -681,7 +688,7 @@ export default function PendingItems({
         productName: formProductName.trim() || 'Produto em Análise',
         voltage: formVoltage,
         serialNumber: formSerial.trim(),
-        trackingCode: formTrackingCode.trim(),
+        trackingCode: cleanTracking,
         orderNumber: formOrderNumber.trim(),
         platform: formPlatform,
         priority: formPriority,
@@ -737,9 +744,16 @@ export default function PendingItems({
   const handleExecuteTransfer = async () => {
     if (!itemToTransfer) return;
 
-    if (transferDestination === 'Openbox' && !transferSti.trim()) {
-      setTransferError('Para movimentar este item para o estoque do Openbox, é obrigatório preencher o Código STI. Por favor, marque/informe o STI no campo indicado para prosseguir com a movimentação.');
-      return;
+    if (transferDestination === 'Openbox') {
+      const cleanSti = normalizeStiCode(transferSti);
+      if (!cleanSti) {
+        setTransferError('Para movimentar este item para o estoque do Openbox, é obrigatório preencher o Código STI. Por favor, marque/informe o STI no campo indicado para prosseguir com a movimentação.');
+        return;
+      }
+      if (!isValidStiCode(cleanSti)) {
+        setTransferError('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
+        return;
+      }
     }
 
     if (!transferSku.trim()) {
@@ -760,7 +774,7 @@ export default function PendingItems({
         sku: transferSku.trim().toUpperCase(),
         productName: transferProductName.trim(),
         voltage: transferVoltage,
-        trackingCode: transferSti.trim() || itemToTransfer.trackingCode || '',
+        trackingCode: transferDestination === 'Openbox' ? normalizeStiCode(transferSti) : (transferSti.trim() ? normalizeStiCode(transferSti) : itemToTransfer.trackingCode || ''),
         serialNumber: transferSerialNumber.trim() || itemToTransfer.serialNumber || '',
         orderNumber: transferOrderNumber.trim() || itemToTransfer.orderNumber || '',
         platform: transferPlatform
@@ -783,7 +797,7 @@ export default function PendingItems({
         baseProductVoltage: transferVoltage,
         platform: transferPlatform,
         serialNumber: transferSerialNumber.trim(),
-        trackingCode: transferDestination === 'Openbox' ? transferSti.trim() : '',
+        trackingCode: transferDestination === 'Openbox' ? normalizeStiCode(transferSti) : '',
         orderNumber: transferOrderNumber.trim(),
         customerReason: transferCustomerReason.trim() || 'Entrada de Estoque',
         deviceStatus: finalDeviceStatus,
@@ -1356,7 +1370,7 @@ export default function PendingItems({
                     {item.trackingCode && (
                       <div className="flex items-center justify-between text-slate-400">
                         <span className="text-slate-500">STI / Rastreio:</span>
-                        <span className="font-mono font-semibold text-slate-300">{item.trackingCode}</span>
+                        <span className="font-mono font-semibold text-slate-300">{normalizeStiCode(item.trackingCode)}</span>
                       </div>
                     )}
                     {item.serialNumber && (
@@ -1542,7 +1556,7 @@ export default function PendingItems({
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {item.trackingCode && (
                           <div className="font-mono text-slate-300 font-semibold text-xs">
-                            STI: {item.trackingCode}
+                            STI: {normalizeStiCode(item.trackingCode).replace(/^STI/i, '')}
                           </div>
                         )}
                         {item.orderNumber && (
@@ -1873,11 +1887,11 @@ export default function PendingItems({
                   <input
                     type="text"
                     value={formTrackingCode}
-                    onChange={(e) => setFormTrackingCode(e.target.value)}
-                    placeholder="Ex: STI-99201"
+                    onChange={(e) => setFormTrackingCode(formatStiInput(e.target.value))}
+                    placeholder="Ex: STI134920"
+                    maxLength={9}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">Opcional para pendências.</p>
                 </div>
 
                 <div>
@@ -2351,10 +2365,12 @@ export default function PendingItems({
                         type="text"
                         value={transferSti}
                         onChange={(e) => {
-                          setTransferSti(e.target.value);
-                          if (e.target.value.trim()) setTransferError(null);
+                          const formatted = formatStiInput(e.target.value);
+                          setTransferSti(formatted);
+                          if (formatted.trim()) setTransferError(null);
                         }}
-                        placeholder="Informe o Código STI (Ex: STI-882910)"
+                        placeholder="Ex: STI134920"
+                        maxLength={9}
                         className={`w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none transition-all ${
                           transferError && !transferSti.trim()
                             ? 'border-2 border-rose-500 focus:border-rose-400 shadow-sm shadow-rose-500/20'
