@@ -1893,6 +1893,84 @@ html.light #card-metric-resolvidos {
   border-color: #a7f3d0 !important;
 }
 
+/* =========================================================================
+   PENDING ITEMS TABLE VIEW (TABELA DE PENDÊNCIAS) LIGHT MODE
+   ========================================================================= */
+html.light #pendencias-table {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light #pendencias-table table thead tr {
+  background-color: #f1f5f9 !important;
+  border-bottom-color: #cbd5e1 !important;
+}
+
+html.light #pendencias-table table th {
+  color: #334155 !important;
+  font-weight: 800 !important;
+}
+
+html.light #pendencias-table table tbody tr {
+  border-bottom-color: #e2e8f0 !important;
+}
+
+html.light #pendencias-table table tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+
+/* High contrast for SKU in table */
+html.light #pendencias-table td .font-mono.text-amber-400,
+html.light #pendencias-table td .font-mono.text-amber-500,
+html.light #pendencias-table td .font-mono.text-amber-800 {
+  color: #92400e !important;
+  font-weight: 800 !important;
+}
+
+/* High contrast for Product Name in table */
+html.light #pendencias-table td .text-white {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+/* High contrast for STI in table */
+html.light #pendencias-table td .text-slate-300 {
+  color: #1e293b !important;
+}
+
+/* High contrast for Pedido in table */
+html.light #pendencias-table td .text-sky-400 {
+  color: #0369a1 !important;
+  font-weight: 700 !important;
+}
+
+/* High contrast for S/N & general secondary text in table */
+html.light #pendencias-table td .text-slate-400:not(.pendencias-reason-title):not(.pendencias-reason-notes) {
+  color: #475569 !important;
+}
+
+/* =========================================================================
+   CRITICAL: MOTIVO DA PENDÊNCIA (COLUNA E CONTEÚDO) LIGHT MODE CONTRAST
+   ========================================================================= */
+html.light .pendencias-reason-title,
+html.light #pendencias-table td .pendencias-reason-title,
+html.light #pendencias-table td div.text-amber-300\/90,
+html.light #pendencias-table td div.text-amber-300,
+html.light #pendencias-table td div.text-amber-400,
+html.light #pendencias-table td div.text-amber-800 {
+  color: #92400e !important; /* Deep rich amber-800: WCAG AAA contrast (7.2:1) on white */
+  font-weight: 800 !important;
+}
+
+html.light .pendencias-reason-notes,
+html.light #pendencias-table td .pendencias-reason-notes,
+html.light #pendencias-table td div.text-slate-400.truncate.mt-0\.5,
+html.light #pendencias-table td div.text-slate-600.truncate.mt-0\.5 {
+  color: #334155 !important; /* Slate-700: sharp legible notes on white */
+  font-weight: 500 !important;
+}
+
 html.light #card-metric-resolvidos:hover {
   border-color: #34d399 !important;
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15) !important;

@@ -1514,13 +1514,13 @@ export default function PendingItems({
                   return (
                     <tr 
                       key={item.id} 
-                      className={`transition-colors ${
+                      className={`transition-colors pendencias-table-row ${
                         isResolved 
-                          ? 'bg-slate-950/40 opacity-60 hover:opacity-100 hover:bg-slate-800/30' 
+                          ? 'bg-slate-950/40 opacity-60 hover:opacity-100 hover:bg-slate-800/30 is-resolved-row' 
                           : item.priority === 'Urgente'
-                          ? 'bg-rose-950/15 hover:bg-rose-950/25 border-l-2 border-l-rose-500'
+                          ? 'bg-rose-950/15 hover:bg-rose-950/25 border-l-2 border-l-rose-500 is-urgent-row'
                           : item.priority === 'Alta'
-                          ? 'bg-amber-950/10 hover:bg-amber-950/20 border-l-2 border-l-amber-500'
+                          ? 'bg-amber-950/10 hover:bg-amber-950/20 border-l-2 border-l-amber-500 is-high-row'
                           : 'hover:bg-slate-800/40'
                       }`}
                     >
@@ -1583,11 +1583,21 @@ export default function PendingItems({
 
                       {/* Pending Reason */}
                       <td className="py-3.5 px-4 max-w-[260px]">
-                        <div className={`text-xs truncate ${isResolved ? 'text-slate-400' : 'text-amber-300/90 font-medium'}`} title={item.pendingReason}>
+                        <div 
+                          className={`text-xs truncate font-bold pendencias-reason-title ${
+                            isResolved 
+                              ? 'text-slate-500 dark:text-slate-400 font-medium' 
+                              : 'text-amber-800 dark:text-amber-300 font-bold'
+                          }`} 
+                          title={item.pendingReason}
+                        >
                           {item.pendingReason}
                         </div>
                         {item.detailedNotes && (
-                          <div className="text-[10px] text-slate-400 truncate mt-0.5" title={item.detailedNotes}>
+                          <div 
+                            className="text-[11px] text-slate-600 dark:text-slate-400 font-medium truncate mt-0.5 pendencias-reason-notes" 
+                            title={item.detailedNotes}
+                          >
                             {item.detailedNotes}
                           </div>
                         )}
