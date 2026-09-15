@@ -21,15 +21,20 @@ import {
   CheckCircle2,
   Filter,
   X,
-  User
+  User,
+  Boxes
 } from 'lucide-react';
-import { TriageUnit, PlatformType, DestinationSectorType, isMigrationUnit, BaseProduct } from '../types';
+import { TriageUnit, PlatformType, DestinationSectorType, isMigrationUnit, BaseProduct, DailyInflowRecord } from '../types';
 import { getUnitResolvedPhotos } from '../utils/productImages';
 import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
+import ManualDailyInflowModal from './ManualDailyInflowModal';
 
 interface DashboardProps {
   units: TriageUnit[];
   products?: BaseProduct[];
+  dailyInflows?: DailyInflowRecord[];
+  onSaveDailyInflow?: (record: DailyInflowRecord) => Promise<void>;
+  onDeleteDailyInflow?: (id: string) => Promise<void>;
   pendingItemsCount?: number;
   onViewUnit: (unit: TriageUnit) => void;
   onUpdateUnit?: (unit: TriageUnit) => Promise<void>;
@@ -46,6 +51,9 @@ interface DashboardProps {
 export default function Dashboard({ 
   units, 
   products = [], 
+  dailyInflows = [],
+  onSaveDailyInflow,
+  onDeleteDailyInflow,
   pendingItemsCount = 0,
   onViewUnit, 
   onUpdateUnit,
@@ -59,6 +67,7 @@ export default function Dashboard({
   const [unitToExclude, setUnitToExclude] = useState<TriageUnit | null>(null);
   const [selectedPlatformFilter, setSelectedPlatformFilter] = useState<PlatformType | null>(null);
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<DestinationSectorType | null>(null);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
 
   const handleTogglePlatformFilter = (platform: PlatformType) => {
     setSelectedPlatformFilter(prev => prev === platform ? null : platform);
@@ -115,7 +124,13 @@ export default function Dashboard({
     return `${day} de ${month}, ${year}`;
   };
 
-  const totalReceivedToday = todayUnits.length;
+  const today = new Date();
+  const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const todayInflowRecord = dailyInflows.find(d => d.date === todayDateStr);
+
+  const manualInflowTotal = todayInflowRecord ? (Number(todayInflowRecord.totalDia) || 0) : 0;
+  const totalReceivedToday = Math.max(todayUnits.length, manualInflowTotal);
+  const manualSurplus = Math.max(0, manualInflowTotal - todayUnits.length);
 
   // Counters for today's sector destinations
   const sectorCountsToday = todayUnits.reduce((acc, curr) => {
@@ -192,6 +207,18 @@ export default function Dashboard({
               <ArrowRight className="w-3 h-3 text-amber-400" />
             </button>
           )}
+          {onSaveDailyInflow && (
+            <button
+              type="button"
+              onClick={() => setIsManualModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 hover:text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs"
+              title="Lançamento manual no contador diário"
+              id="dashboard-manual-inflow-btn"
+            >
+              <PlusCircle className="w-4 h-4 text-emerald-400" />
+              <span>+ Entrada Manual</span>
+            </button>
+          )}
           <div className="flex items-center gap-2 px-3.5 py-2 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 shadow-inner">
             <Calendar className="w-4 h-4 text-sky-400" />
             <span>{getFormattedLocalDate()}</span>
@@ -221,6 +248,11 @@ export default function Dashboard({
                 )}
               </div>
               <h3 className="text-4xl font-black text-white mt-1.5">{totalReceivedToday}</h3>
+              {manualSurplus > 0 && (
+                <p className="text-[11px] text-emerald-400 font-semibold mt-1 flex items-center gap-1">
+                  <span>{todayUnits.length} triados + {manualSurplus} manual</span>
+                </p>
+              )}
             </div>
             <div className="p-3 bg-sky-500/10 text-sky-400 rounded-xl">
               <Layers className="w-6 h-6" />
@@ -537,6 +569,47 @@ export default function Dashboard({
               </div>
             )}
 
+            {/* Today's Manual Inflow Summary Banner */}
+            {todayInflowRecord && (Number(todayInflowRecord.totalDia) > 0 || todayInflowRecord.notes) && (
+              <div className="mb-4 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm" id="dashboard-manual-inflow-banner">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 rounded-xl">
+                    <Boxes className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-sm">
+                        Lançamento Manual de Hoje: {todayInflowRecord.totalDia} {todayInflowRecord.totalDia === 1 ? 'item' : 'itens'}
+                      </span>
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                        Contador Ativo
+                      </span>
+                    </div>
+                    <p className="text-slate-400 text-xs mt-1">
+                      Estoque: <strong className="text-emerald-300">{todayInflowRecord.estoque || 0}</strong> • 
+                      RMA: <strong className="text-rose-300">{todayInflowRecord.rma || 0}</strong> • 
+                      Openbox: <strong className="text-amber-300">{todayInflowRecord.openbox || 0}</strong> • 
+                      ES: <strong className="text-purple-300">{todayInflowRecord.es || 0}</strong>
+                      {todayInflowRecord.notes && (
+                        <span className="text-slate-300 font-medium ml-1.5 italic">
+                          ({todayInflowRecord.notes})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                {onSaveDailyInflow && (
+                  <button
+                    type="button"
+                    onClick={() => setIsManualModalOpen(true)}
+                    className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl transition-all shadow-sm cursor-pointer"
+                  >
+                    Ajustar Quantidades
+                  </button>
+                )}
+              </div>
+            )}
+
             {todayUnits.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-4 border border-dashed border-slate-800 rounded-xl bg-slate-950" id="no-returns-today">
                 <Package className="w-12 h-12 text-slate-600 mb-3" />
@@ -824,6 +897,21 @@ export default function Dashboard({
             </div>
           </div>
         </div>
+      )}
+      {/* Manual Daily Entry Modal */}
+      {onSaveDailyInflow && (
+        <ManualDailyInflowModal
+          isOpen={isManualModalOpen}
+          onClose={() => setIsManualModalOpen(false)}
+          onSave={async (record) => {
+            await onSaveDailyInflow(record);
+          }}
+          onDelete={onDeleteDailyInflow}
+          initialData={todayInflowRecord || null}
+          defaultDate={todayDateStr}
+          allInflows={dailyInflows}
+          allUnits={units}
+        />
       )}
     </div>
   );

@@ -323,28 +323,17 @@ export default function ProductMovements({
     });
   }, [extendedUnits, selectedYear, selectedMonthIdx]);
 
-  // Filter and unify daily inflows covering the complete calendar weeks (including days from other months)
-  const extendedDailyInflows = useMemo(() => {
-    // 1. Get explicit daily inflows from collection within the weeks range
-    const explicitInflows = dailyInflows
-      .filter(item => item.date >= calendarBounds.minDateStr && item.date <= calendarBounds.maxDateStr)
-      .map(item => ({ ...item }));
-
-    const explicitDateMap = new Map<string, DailyInflowRecord>();
-    explicitInflows.forEach(item => {
-      explicitDateMap.set(item.date, item);
-    });
-
-    // 2. Aggregate triage units by day
-    const unitsByDay = new Map<string, { rma: number; estoque: number; openbox: number; es: number; total: number }>();
+  // 2. Aggregate triage units by day (shared across calendar and modal)
+  const unitsByDayMap = useMemo(() => {
+    const map = new Map<string, { rma: number; estoque: number; openbox: number; es: number; total: number }>();
     extendedUnits.forEach(u => {
       const parts = getDateParts(u.createdAt);
       if (parts) {
         const dStr = parts.dateStr;
-        if (!unitsByDay.has(dStr)) {
-          unitsByDay.set(dStr, { rma: 0, estoque: 0, openbox: 0, es: 0, total: 0 });
+        if (!map.has(dStr)) {
+          map.set(dStr, { rma: 0, estoque: 0, openbox: 0, es: 0, total: 0 });
         }
-        const bucket = unitsByDay.get(dStr)!;
+        const bucket = map.get(dStr)!;
         bucket.total++;
         if (u.destinationSector === 'Openbox') {
           bucket.openbox++;
@@ -357,13 +346,42 @@ export default function ProductMovements({
         }
       }
     });
+    return map;
+  }, [extendedUnits]);
+
+  // Filter and unify daily inflows covering the complete calendar weeks (including days from other months)
+  const extendedDailyInflows = useMemo(() => {
+    // 1. Get explicit daily inflows from collection within the weeks range
+    const explicitInflows = dailyInflows
+      .filter(item => item.date >= calendarBounds.minDateStr && item.date <= calendarBounds.maxDateStr)
+      .map(item => ({ ...item }));
+
+    const explicitDateMap = new Map<string, DailyInflowRecord>();
+    explicitInflows.forEach(item => {
+      explicitDateMap.set(item.date, item);
+    });
 
     // 3. Build unified records
     const unifiedMap = new Map<string, DailyInflowRecord>();
 
     // Add all explicit records
     explicitDateMap.forEach((rec, dateStr) => {
-      const uStats = unitsByDay.get(dateStr);
+      const uStats = unitsByDayMap.get(dateStr);
+
+      // If the record was explicitly saved by user (manual), strictly respect user's manual numbers!
+      if (rec.source === 'manual' && !rec.id?.startsWith('triage-auto-')) {
+        const total = Number(rec.rma || 0) + Number(rec.estoque || 0) + Number(rec.openbox || 0) + Number(rec.es || 0);
+        unifiedMap.set(dateStr, {
+          ...rec,
+          rma: Number(rec.rma || 0),
+          estoque: Number(rec.estoque || 0),
+          openbox: Number(rec.openbox || 0),
+          es: Number(rec.es || 0),
+          totalDia: total
+        });
+        return;
+      }
+
       if (uStats) {
         // If it was auto-generated from triage, use uStats totals directly
         if (rec.id?.startsWith('triage-auto-') || rec.source === 'auto') {
@@ -387,7 +405,7 @@ export default function ProductMovements({
         }
       } else {
         // If it was auto generated from triage and now has 0 units, skip phantom count
-        if (rec.id?.startsWith('triage-auto-')) {
+        if (rec.id?.startsWith('triage-auto-') || rec.source === 'auto') {
           // skip
         } else {
           unifiedMap.set(dateStr, rec);
@@ -396,7 +414,7 @@ export default function ProductMovements({
     });
 
     // Add any days with triaged units that don't have an explicit daily inflow record yet
-    unitsByDay.forEach((stats, dateStr) => {
+    unitsByDayMap.forEach((stats, dateStr) => {
       if (!unifiedMap.has(dateStr)) {
         unifiedMap.set(dateStr, {
           id: `triage-auto-${dateStr}`,
@@ -407,14 +425,14 @@ export default function ProductMovements({
           es: stats.es,
           totalDia: stats.total,
           notes: 'Lançamento automático de Triagem',
-          source: 'manual',
+          source: 'auto',
           updatedAt: new Date().toISOString()
         });
       }
     });
 
     return Array.from(unifiedMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [dailyInflows, calendarBounds, extendedUnits]);
+  }, [dailyInflows, calendarBounds, unitsByDayMap]);
 
   // Filter daily inflows strictly belonging to selectedMonth (for monthly totals/metrics)
   const monthDailyInflows = useMemo(() => {
@@ -761,12 +779,28 @@ export default function ProductMovements({
 
   // Handlers for manual and excel imports
   const handleOpenManualEntry = (dateStr?: string, existingRecord?: DailyInflowRecord) => {
-    if (existingRecord) {
-      setEditingInflow(existingRecord);
-      setDefaultEntryDate(existingRecord.date);
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    const targetDate = dateStr || (
+      (today.getFullYear() === selectedYear && today.getMonth() === selectedMonthIdx)
+        ? todayStr 
+        : `${selectedYear}-${String(selectedMonthIdx + 1).padStart(2, '0')}-01`
+    );
+
+    const matchedRecord = existingRecord || 
+      extendedDailyInflows.find(r => r.date === targetDate) || 
+      dailyInflows.find(r => r.date === targetDate);
+
+    if (matchedRecord) {
+      const cleanRecord = matchedRecord.id?.startsWith('triage-auto-')
+        ? { ...matchedRecord, id: undefined as any, source: 'manual' as const }
+        : matchedRecord;
+      setEditingInflow(cleanRecord);
+      setDefaultEntryDate(cleanRecord.date);
     } else {
       setEditingInflow(null);
-      setDefaultEntryDate(dateStr || `${selectedYear}-${String(selectedMonthIdx + 1).padStart(2, '0')}-01`);
+      setDefaultEntryDate(targetDate);
     }
     setIsManualModalOpen(true);
   };
@@ -1594,21 +1628,38 @@ export default function ProductMovements({
                               setSelectedDay(newSelected ? cell.dayNum : null);
                               setSelectedWeek(null);
                             }}
-                            className={`cal-day-cell aspect-square rounded-xl border flex flex-col justify-between p-2 cursor-pointer transition-all ${cellTierClass} ${adjacentStyle}`}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenManualEntry(cell.dateStr);
+                            }}
+                            className={`group cal-day-cell aspect-square rounded-xl border flex flex-col justify-between p-2 cursor-pointer transition-all ${cellTierClass} ${adjacentStyle}`}
                             title={cell.isAdjacentMonth 
-                              ? `${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${formatBrDate(cell.dateStr)} (Mês ${cell.monthLabel} - conta na semana)`
-                              : `${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${cell.dayNum} de ${monthName}`
+                              ? `${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${formatBrDate(cell.dateStr)} (Mês ${cell.monthLabel} - clique duas vezes para editar)`
+                              : `${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${cell.dayNum} de ${monthName} (clique duas vezes para editar)`
                             }
                           >
                             <div className="flex items-center justify-between w-full">
                               <span className={`cal-day-number text-[11px] font-mono leading-none font-bold ${cell.isAdjacentMonth ? 'text-amber-400/90' : ''}`}>
                                 {cell.dayNum}
                               </span>
-                              {cell.isAdjacentMonth && cell.monthLabel && (
-                                <span className="text-[8px] uppercase font-black text-amber-400/90 px-1 rounded bg-amber-500/10">
-                                  {cell.monthLabel}
-                                </span>
-                              )}
+                              <div className="flex items-center gap-1">
+                                {cell.isAdjacentMonth && cell.monthLabel && (
+                                  <span className="text-[8px] uppercase font-black text-amber-400/90 px-1 rounded bg-amber-500/10">
+                                    {cell.monthLabel}
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenManualEntry(cell.dateStr);
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-700/60 transition-all cursor-pointer"
+                                  title={`Editar ou lançar quantidades para ${formatBrDate(cell.dateStr)}`}
+                                >
+                                  <Edit2 className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
                             </div>
                             
                             {hasEntries ? (
@@ -2009,6 +2060,8 @@ export default function ProductMovements({
         onDelete={handleDeleteInflowRecord}
         initialData={editingInflow}
         defaultDate={defaultEntryDate}
+        allInflows={extendedDailyInflows}
+        unitsByDayMap={unitsByDayMap}
       />
 
     </div>

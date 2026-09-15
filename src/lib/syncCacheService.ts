@@ -396,10 +396,20 @@ export const syncDailyInflowsIncrementally = async (
   const lastSync = syncMeta.lastSyncDailyInflows;
 
   if (forceFull || currentCached.length === 0 || !lastSync) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('daily_inflows')
       .select(INFLOW_COLUMNS)
       .order('date', { ascending: true });
+
+    if (error) {
+      console.warn('Initial daily inflows projection failed, trying select(*):', error);
+      const fallback = await supabase
+        .from('daily_inflows')
+        .select('*')
+        .order('date', { ascending: true });
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       console.error('Error fetching full daily inflows:', error);
@@ -418,7 +428,7 @@ export const syncDailyInflowsIncrementally = async (
   }
 
   try {
-    const [updatedRes, idsRes] = await Promise.all([
+    let [updatedRes, idsRes] = await Promise.all([
       supabase
         .from('daily_inflows')
         .select(INFLOW_COLUMNS)
@@ -430,28 +440,40 @@ export const syncDailyInflowsIncrementally = async (
     ]);
 
     if (updatedRes.error) {
-      return currentCached;
+      const fallback = await supabase
+        .from('daily_inflows')
+        .select('*')
+        .gt('updated_at', lastSync)
+        .order('updated_at', { ascending: true });
+      if (!fallback.error && fallback.data) {
+        updatedRes.data = fallback.data;
+        updatedRes.error = null;
+      }
     }
 
-    let validIdSet: Set<string> | null = null;
+    const validIdSet = new Set<string>();
+    const validDateSet = new Set<string>();
     if (!idsRes.error && idsRes.data) {
-      validIdSet = new Set(idsRes.data.map(r => r.id || r.date));
+      idsRes.data.forEach(r => {
+        if (r.id) validIdSet.add(r.id);
+        if (r.date) validDateSet.add(r.date);
+      });
     }
 
     const inflowMap = new Map<string, DailyInflowRecord>();
     currentCached.forEach(d => {
-      const key = d.id || d.date;
-      if (!validIdSet || validIdSet.has(key)) {
-        inflowMap.set(key, d);
+      // Retain cached record if either id or date exists in Supabase (or if idsRes failed)
+      const isValid = idsRes.error || !idsRes.data || validIdSet.has(d.id) || validDateSet.has(d.date);
+      if (isValid && d.date) {
+        inflowMap.set(d.date, d);
       }
     });
 
     if (updatedRes.data && updatedRes.data.length > 0) {
       updatedRes.data.forEach(r => {
         const inflow = mapSupabaseToDailyInflow(r);
-        const key = inflow.id || inflow.date;
-        if (!validIdSet || validIdSet.has(key)) {
-          inflowMap.set(key, inflow);
+        if (inflow.date) {
+          inflowMap.set(inflow.date, inflow);
         }
       });
     }
@@ -755,11 +777,10 @@ export const updateLocalCacheItem = <T extends { id?: string }>(
     memoryTriageUnits = list;
     persistToStorage(CACHE_KEY_TRIAGE_UNITS, list);
   } else if (collectionName === 'daily_inflows') {
-    const list = [...getCachedDailyInflows()];
-    const idx = list.findIndex(d => d.id === item.id || d.date === (item as any).date);
-    if (idx >= 0) list[idx] = item as any;
-    else list.push(item as any);
-    list.sort((a, b) => a.date.localeCompare(b.date));
+    const inflowItem = item as any;
+    const list = getCachedDailyInflows().filter(d => d.id !== inflowItem.id && d.date !== inflowItem.date);
+    list.push(inflowItem);
+    list.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     memoryDailyInflows = list;
     persistToStorage(CACHE_KEY_DAILY_INFLOWS, list);
   } else if (collectionName === 'pending_items') {
@@ -791,7 +812,8 @@ export const removeLocalCacheItem = (
     memoryTriageUnits = list;
     persistToStorage(CACHE_KEY_TRIAGE_UNITS, list);
   } else if (collectionName === 'daily_inflows') {
-    const list = getCachedDailyInflows().filter(d => d.id !== cleanId && (d as any).date !== cleanId);
+    const datePart = cleanId.startsWith('inflow-') ? cleanId.replace('inflow-', '') : cleanId;
+    const list = getCachedDailyInflows().filter(d => d.id !== cleanId && d.date !== cleanId && d.date !== datePart);
     memoryDailyInflows = list;
     persistToStorage(CACHE_KEY_DAILY_INFLOWS, list);
   } else if (collectionName === 'pending_items') {

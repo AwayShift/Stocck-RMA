@@ -16,6 +16,7 @@ import {
   getActiveDbProvider, 
   getSupabaseClient,
   generateUUID,
+  isValidUUID,
   mapProductToSupabase, 
   mapSupabaseToProduct,
   mapTriageUnitToSupabase,
@@ -708,70 +709,166 @@ export const seedDailyInflows = async () => {
   }
 };
 
-export const saveDailyInflow = async (record: DailyInflowRecord): Promise<void> => {
+export const saveDailyInflow = async (record: DailyInflowRecord): Promise<DailyInflowRecord> => {
   const total = Number(record.rma || 0) + Number(record.estoque || 0) + Number(record.openbox || 0) + Number(record.es || 0);
   const now = new Date().toISOString();
+  
+  // Normalize date string (YYYY-MM-DD)
+  const cleanDate = record.date ? record.date.substring(0, 10) : new Date().toISOString().substring(0, 10);
+
+  // Ensure we do not use pseudo IDs like inflow- or triage-auto- for Postgres UUID columns
+  const targetId = (record.id && isValidUUID(record.id.trim()))
+    ? record.id.trim()
+    : (record.id && !record.id.startsWith('triage-auto-') && !record.id.startsWith('inflow-') ? record.id.trim() : generateUUID());
+
   const payload: DailyInflowRecord = {
     ...record,
+    id: targetId,
+    date: cleanDate,
+    rma: Number(record.rma || 0),
+    estoque: Number(record.estoque || 0),
+    openbox: Number(record.openbox || 0),
+    es: Number(record.es || 0),
     totalDia: total,
+    notes: (record.notes || '').trim(),
+    source: 'manual',
     createdAt: record.createdAt || now,
     updatedAt: now
   };
 
-  updateLocalCacheItem('daily_inflows', payload);
-
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('daily_inflows').upsert(mapDailyInflowToSupabase(payload));
-    recordDbOperation('write', 1);
-    createAuditLog(
-      'SAVE_DAILY_INFLOW',
-      `Salvou registro de fluxo de entrada diário para ${payload.date}: ${payload.totalDia} itens (Supabase).`
-    );
+    try {
+      // 1. Check if an existing row exists for this date in Supabase to reuse its exact primary key
+      const { data: existingRows } = await supabase
+        .from('daily_inflows')
+        .select('id')
+        .eq('date', cleanDate);
+
+      if (existingRows && existingRows.length > 0) {
+        payload.id = existingRows[0].id;
+        
+        // Clean up duplicate rows for this date if any exist in the database
+        if (existingRows.length > 1) {
+          const duplicateIds = existingRows.slice(1).map(r => r.id);
+          await supabase.from('daily_inflows').delete().in('id', duplicateIds);
+        }
+      }
+
+      let row = mapDailyInflowToSupabase(payload);
+      let { error } = await supabase.from('daily_inflows').upsert(row);
+
+      // 2. If Postgres threw an invalid UUID syntax error, generate a compliant UUID
+      if (error && (error.message?.includes('uuid') || error.code === '22P02')) {
+        const validUuid = generateUUID();
+        payload.id = validUuid;
+        row.id = validUuid;
+        const retry = await supabase.from('daily_inflows').upsert(row);
+        error = retry.error;
+      }
+
+      // 3. Fallback: if upsert had conflict, update directly by date or id
+      if (error) {
+        console.warn('Supabase daily_inflows upsert error, attempting update fallback by date:', error);
+        await supabase
+          .from('daily_inflows')
+          .update(row)
+          .eq('date', cleanDate);
+      }
+
+      recordDbOperation('write', 1);
+      createAuditLog(
+        'SAVE_DAILY_INFLOW',
+        `Salvou registro de fluxo de entrada diário para ${payload.date}: ${payload.totalDia} itens (Supabase).`
+      );
+    } catch (err) {
+      console.warn('Silent saveDailyInflow Supabase error:', err);
+    }
   }
+
+  // Update local memory and localStorage cache
+  updateLocalCacheItem('daily_inflows', payload);
+  return payload;
 };
 
 export const saveBatchDailyInflows = async (records: DailyInflowRecord[]): Promise<number> => {
   if (!records || records.length === 0) return 0;
   const now = new Date().toISOString();
 
-  const formattedRecords = records.map(r => {
+  // Deduplicate by date before inserting
+  const byDateMap = new Map<string, DailyInflowRecord>();
+  records.forEach(r => {
     const total = Number(r.rma || 0) + Number(r.estoque || 0) + Number(r.openbox || 0) + Number(r.es || 0);
-    return {
+    const cleanDate = r.date ? r.date.substring(0, 10) : new Date().toISOString().substring(0, 10);
+    const targetId = (r.id && isValidUUID(r.id.trim()))
+      ? r.id.trim()
+      : (r.id && !r.id.startsWith('triage-auto-') && !r.id.startsWith('inflow-') ? r.id.trim() : generateUUID());
+
+    byDateMap.set(cleanDate, {
       ...r,
+      id: targetId,
+      date: cleanDate,
       totalDia: total,
       createdAt: r.createdAt || now,
       updatedAt: now
-    };
+    });
   });
+
+  const formattedRecords = Array.from(byDateMap.values());
+  formattedRecords.forEach(r => updateLocalCacheItem('daily_inflows', r));
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    const rows = formattedRecords.map(mapDailyInflowToSupabase);
-    await supabase.from('daily_inflows').upsert(rows);
-    recordDbOperation('write', formattedRecords.length);
-    createAuditLog(
-      'IMPORT_EXCEL_INFLOWS',
-      `Importou lote de fluxo diário de entradas: ${formattedRecords.length} dias registrados (Supabase).`
-    );
+    try {
+      const rows = formattedRecords.map(mapDailyInflowToSupabase);
+      const { error } = await supabase.from('daily_inflows').upsert(rows);
+      if (error) {
+        console.warn('Batch daily inflows upsert error:', error);
+      }
+      recordDbOperation('write', formattedRecords.length);
+      createAuditLog(
+        'IMPORT_EXCEL_INFLOWS',
+        `Importou lote de fluxo diário de entradas: ${formattedRecords.length} dias registrados (Supabase).`
+      );
+    } catch (err) {
+      console.warn('Silent saveBatchDailyInflows Supabase error:', err);
+    }
     return formattedRecords.length;
   }
 
   return formattedRecords.length;
 };
 
-export const deleteDailyInflow = async (id: string): Promise<void> => {
-  const cleanId = (id || '').trim();
-  if (!cleanId) return;
+export const deleteDailyInflow = async (idOrDate: string): Promise<void> => {
+  const raw = (idOrDate || '').trim();
+  if (!raw) return;
+
+  const datePart = raw.startsWith('inflow-') ? raw.replace('inflow-', '') : raw;
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(datePart);
+  const isUuid = isValidUUID(raw);
 
   // Immediately remove from local memory and storage cache
-  removeLocalCacheItem('daily_inflows', cleanId);
+  removeLocalCacheItem('daily_inflows', raw);
+  if (isDate) {
+    removeLocalCacheItem('daily_inflows', datePart);
+    removeLocalCacheItem('daily_inflows', `inflow-${datePart}`);
+  }
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('daily_inflows').delete().eq('id', cleanId);
-    recordDbOperation('delete', 1);
-    createAuditLog('DELETE_DAILY_INFLOW', `Excluiu registro de fluxo de entrada diário ID: ${cleanId} (Supabase).`);
+    try {
+      if (isDate) {
+        await supabase.from('daily_inflows').delete().eq('date', datePart);
+      } else if (isUuid) {
+        await supabase.from('daily_inflows').delete().eq('id', raw);
+      } else {
+        await supabase.from('daily_inflows').delete().or(`id.eq.${raw},date.eq.${raw}`);
+      }
+      recordDbOperation('delete', 1);
+      createAuditLog('DELETE_DAILY_INFLOW', `Excluiu registro de fluxo de entrada diário: ${raw} (Supabase).`);
+    } catch (err) {
+      console.warn('Silent deleteDailyInflow error:', err);
+    }
   }
 };
 
@@ -1112,7 +1209,12 @@ export const getInitialDailyInflows = async (limitCount: number = 1000): Promise
       }
 
       if (!error && data) {
-        const list = data.map(mapSupabaseToDailyInflow);
+        const dateMap = new Map<string, DailyInflowRecord>();
+        data.forEach(r => {
+          const item = mapSupabaseToDailyInflow(r);
+          if (item.date) dateMap.set(item.date, item);
+        });
+        const list = Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
         updateWholeCollectionCache('daily_inflows', list);
         return list;
       }

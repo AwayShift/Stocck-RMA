@@ -481,7 +481,7 @@ export default function App() {
   const handleSaveDailyInflow = async (record: DailyInflowRecord) => {
     await saveDailyInflow(record);
     setDailyInflows(prev => {
-      const index = prev.findIndex(r => r.id === record.id);
+      const index = prev.findIndex(r => r.id === record.id || r.date === record.date);
       if (index >= 0) {
         const next = [...prev];
         next[index] = record;
@@ -494,8 +494,8 @@ export default function App() {
   const handleSaveBatchDailyInflows = async (records: DailyInflowRecord[]) => {
     const result = await saveBatchDailyInflows(records);
     setDailyInflows(prev => {
-      const map = new Map<string, DailyInflowRecord>(prev.map(r => [r.id, r]));
-      records.forEach(r => map.set(r.id, r));
+      const map = new Map<string, DailyInflowRecord>(prev.map(r => [r.date, r]));
+      records.forEach(r => map.set(r.date, r));
       return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
     });
     return result;
@@ -505,7 +505,7 @@ export default function App() {
     const cleanId = (id || '').trim();
     if (!cleanId) return;
     await deleteDailyInflow(cleanId);
-    setDailyInflows(prev => prev.filter(r => r.id !== cleanId));
+    setDailyInflows(prev => prev.filter(r => r.id !== cleanId && r.date !== cleanId));
   };
 
   // Catálogo de Base actions (Zero-Read Post-Write Optimization)
@@ -857,6 +857,9 @@ export default function App() {
               <Dashboard 
                 units={triageUnits}
                 products={products}
+                dailyInflows={dailyInflows}
+                onSaveDailyInflow={handleSaveDailyInflow}
+                onDeleteDailyInflow={handleDeleteDailyInflow}
                 pendingItemsCount={pendingItems.filter(p => p.status !== 'Resolvido').length}
                 onViewUnit={handleViewUnitDetails}
                 onUpdateUnit={handleSaveTriage}

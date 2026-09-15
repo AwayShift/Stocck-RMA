@@ -709,6 +709,11 @@ DROP POLICY IF EXISTS "Public storage delete product-images" ON storage.objects;
 CREATE POLICY "Public storage delete product-images" ON storage.objects FOR DELETE USING (bucket_id = 'product-images');
 `;
 
+export function isValidUUID(str: string): boolean {
+  if (!str || typeof str !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str.trim());
+}
+
 /**
  * Generates a valid UUID v4 compliant string
  * Ensures universal compatibility with both UUID and TEXT columns in PostgreSQL
@@ -811,13 +816,15 @@ export const setHasPendingExtendedCols = (supported: boolean): void => {
 const STORAGE_FEAT_TRIAGE_CREATED_BY_COL = 'stocckrma_feat_triage_created_by_col';
 let memoryHasTriageCreatedByCol: boolean | null = null;
 
-export const getHasTriageCreatedByCol = (): boolean | null => {
+export const getHasTriageCreatedByCol = (): boolean => {
   if (memoryHasTriageCreatedByCol !== null) return memoryHasTriageCreatedByCol;
   try {
     const val = localStorage.getItem(STORAGE_FEAT_TRIAGE_CREATED_BY_COL);
     if (val === 'true') memoryHasTriageCreatedByCol = true;
-    else if (val === 'false') memoryHasTriageCreatedByCol = false;
-  } catch {}
+    else memoryHasTriageCreatedByCol = false;
+  } catch {
+    memoryHasTriageCreatedByCol = false;
+  }
   return memoryHasTriageCreatedByCol;
 };
 
@@ -833,7 +840,7 @@ export const getTriageColumns = (): string => {
   if (getHasExcludeDailyCol() !== false) {
     cols += ', exclude_from_daily_count';
   }
-  if (getHasTriageCreatedByCol() !== false) {
+  if (getHasTriageCreatedByCol() === true) {
     cols += ', created_by';
   }
   return cols;
@@ -977,7 +984,9 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
 };
 
 export const mapDailyInflowToSupabase = (d: DailyInflowRecord) => {
-  const cleanId = (d.id && d.id.trim()) ? d.id.trim() : generateUUID();
+  const cleanId = (d.id && isValidUUID(d.id.trim())) 
+    ? d.id.trim() 
+    : (d.id && !d.id.startsWith('triage-auto-') && !d.id.startsWith('inflow-') ? d.id.trim() : generateUUID());
   const now = new Date().toISOString();
   return {
     id: cleanId,
