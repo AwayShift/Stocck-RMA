@@ -378,47 +378,38 @@ export default function ProductMovements({
     explicitDateMap.forEach((rec, dateStr) => {
       const uStats = unitsByDayMap.get(dateStr);
 
-      // If the record was explicitly saved by user (manual), strictly respect user's manual numbers!
-      if (rec.source === 'manual' && !rec.id?.startsWith('triage-auto-')) {
-        const total = Number(rec.rma || 0) + Number(rec.estoque || 0) + Number(rec.openbox || 0) + Number(rec.es || 0);
+      if (uStats && uStats.total > 0) {
+        // Triage units exist in the system for this day!
+        // We ensure real triaged units are never suppressed or hidden by 0s.
+        const rma = Math.max(Number(rec.rma || 0), uStats.rma);
+        const estoque = Math.max(Number(rec.estoque || 0), uStats.estoque);
+        const openbox = Math.max(Number(rec.openbox || 0), uStats.openbox);
+        const es = Math.max(Number(rec.es || 0), uStats.es);
+        const totalDia = rma + estoque + openbox + es;
+
         unifiedMap.set(dateStr, {
           ...rec,
-          rma: Number(rec.rma || 0),
-          estoque: Number(rec.estoque || 0),
-          openbox: Number(rec.openbox || 0),
-          es: Number(rec.es || 0),
-          totalDia: total
+          rma,
+          estoque,
+          openbox,
+          es,
+          totalDia,
+          notes: rec.notes || (rec.source === 'manual' ? '' : 'Lançamento automático de Triagem')
         });
-        return;
-      }
-
-      if (uStats) {
-        // If it was auto-generated from triage, use uStats totals directly
-        if (rec.id?.startsWith('triage-auto-') || rec.source === 'auto') {
-          unifiedMap.set(dateStr, {
-            ...rec,
-            rma: uStats.rma,
-            estoque: uStats.estoque,
-            openbox: uStats.openbox,
-            es: uStats.es,
-            totalDia: uStats.total
-          });
-        } else {
-          unifiedMap.set(dateStr, {
-            ...rec,
-            rma: Math.max(rec.rma || 0, uStats.rma),
-            estoque: Math.max(rec.estoque || 0, uStats.estoque),
-            openbox: Math.max(rec.openbox || 0, uStats.openbox),
-            es: Math.max(rec.es || 0, uStats.es),
-            totalDia: Math.max(rec.totalDia || 0, uStats.total)
-          });
-        }
       } else {
-        // If it was auto generated from triage and now has 0 units, skip phantom count
+        // No triaged units on this day
         if (rec.id?.startsWith('triage-auto-') || rec.source === 'auto') {
-          // skip
+          // If it was auto-generated and now has 0 units, skip phantom
         } else {
-          unifiedMap.set(dateStr, rec);
+          const total = Number(rec.rma || 0) + Number(rec.estoque || 0) + Number(rec.openbox || 0) + Number(rec.es || 0);
+          unifiedMap.set(dateStr, {
+            ...rec,
+            rma: Number(rec.rma || 0),
+            estoque: Number(rec.estoque || 0),
+            openbox: Number(rec.openbox || 0),
+            es: Number(rec.es || 0),
+            totalDia: total
+          });
         }
       }
     });
@@ -1790,7 +1781,7 @@ export default function ProductMovements({
                               e.stopPropagation();
                               handleOpenManualEntry(cell.dateStr);
                             }}
-                            className={`group cal-day-cell aspect-square rounded-xl border flex flex-col justify-between p-2 cursor-pointer transition-all ${cellTierClass} ${adjacentStyle}`}
+                            className={`group cal-day-cell aspect-square rounded-xl border flex flex-col justify-start p-1.5 sm:p-2 cursor-pointer transition-all ${cellTierClass} ${adjacentStyle}`}
                             title={cell.isAdjacentMonth 
                               ? `${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${formatBrDate(cell.dateStr)} (Mês ${cell.monthLabel} - clique duas vezes para editar)`
                               : `${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'} no dia ${cell.dayNum} de ${monthName} (clique duas vezes para editar)`
@@ -1820,12 +1811,12 @@ export default function ProductMovements({
                               </div>
                             </div>
                             
-                            {hasEntries ? (
-                              <span className="cal-count text-[10px] font-mono tracking-tighter self-end leading-none font-bold">
-                                {cell.count} un
-                              </span>
-                            ) : (
-                              <span className="text-[8px] opacity-0 leading-none">0</span>
+                            {hasEntries && (
+                              <div className="mt-1 flex items-center">
+                                <span className="cal-count text-[10px] font-mono tracking-tighter leading-none font-black px-1.5 py-0.5 rounded-md">
+                                  {cell.count} un
+                                </span>
+                              </div>
                             )}
                           </div>
                         );
@@ -2086,11 +2077,11 @@ export default function ProductMovements({
                               cellClass = 'cal-day-selected-btn bg-sky-600 text-white border-sky-500 font-black shadow-md ring-2 ring-sky-400/70 scale-[1.03] z-10';
                             } else if (hasEntries) {
                               cellClass = isLight
-                                ? 'cal-day-has-entries bg-white hover:bg-emerald-50/50 border-emerald-300/90 text-slate-950 hover:border-emerald-500 shadow-xs'
+                                ? 'cal-day-has-entries bg-emerald-50/90 hover:bg-emerald-100/90 border-emerald-400 text-slate-950 hover:border-emerald-600 shadow-xs'
                                 : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700/80 text-slate-200 hover:border-sky-400/60 shadow-2xs';
                             } else {
                               cellClass = isLight
-                                ? 'bg-white/80 hover:bg-slate-100/70 border-slate-200 text-slate-600 hover:text-slate-900 shadow-2xs'
+                                ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700 hover:text-slate-950 shadow-2xs'
                                 : 'bg-slate-950/40 hover:bg-slate-900/50 border-slate-800/40 text-slate-500 hover:text-slate-300';
                             }
 
@@ -2109,7 +2100,7 @@ export default function ProductMovements({
                                     setSelectedWeek(null);
                                   }
                                 }}
-                                className={`group relative h-11 sm:h-12 rounded-lg border flex flex-col items-center justify-between p-1 transition-all cursor-pointer ${cellClass}`}
+                                className={`group relative h-11 sm:h-12 rounded-lg border flex flex-col items-center justify-start p-1 transition-all cursor-pointer gap-0.5 ${cellClass}`}
                                 title={`Dia ${String(cell.dayNum).padStart(2, '0')}/${String(selectedMonthIdx + 1).padStart(2, '0')} (${getWeekdayName(cell.dateStr)}): ${cell.count} ${cell.count === 1 ? 'entrada' : 'entradas'}`}
                               >
                                 <div className="flex items-center justify-between w-full px-0.5">
@@ -2133,7 +2124,7 @@ export default function ProductMovements({
                                   )}
                                 </div>
 
-                                <div className="w-full flex items-center justify-center pb-0.5">
+                                <div className="w-full flex items-center justify-center">
                                   {hasEntries ? (
                                     <span
                                       className={`cal-badge-count text-[9px] font-mono px-1 py-0.2 rounded font-black leading-tight ${
@@ -2781,6 +2772,7 @@ export default function ProductMovements({
         defaultDate={defaultEntryDate}
         allInflows={extendedDailyInflows}
         unitsByDayMap={unitsByDayMap}
+        allUnits={units}
       />
 
     </div>

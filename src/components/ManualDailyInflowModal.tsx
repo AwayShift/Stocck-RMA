@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Calendar, 
   Trash2, 
@@ -16,7 +16,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { DailyInflowRecord, TriageUnit } from '../types';
+import { DailyInflowRecord, TriageUnit, isMigrationUnit } from '../types';
 import { getWeekdayName, formatBrDate } from '../utils/excelHelpers';
 
 interface TriageStats {
@@ -88,6 +88,41 @@ export default function ManualDailyInflowModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Helper to extract triage stats for any date
+  const getTriageStatsForDate = useCallback((targetDate: string): TriageStats | null => {
+    if (!targetDate) return null;
+    if (unitsByDayMap && unitsByDayMap.has(targetDate)) {
+      return unitsByDayMap.get(targetDate)!;
+    }
+    if (allUnits && allUnits.length > 0) {
+      let rmaCount = 0, estoqueCount = 0, openboxCount = 0, esCount = 0, totalCount = 0;
+      allUnits.forEach(u => {
+        if (u.excludeFromDailyCount || isMigrationUnit(u)) return;
+        const dStr = (u.createdAt || '').substring(0, 10);
+        if (dStr === targetDate) {
+          totalCount++;
+          if (u.destinationSector === 'Openbox') openboxCount++;
+          else if (u.destinationSector === 'Principal') estoqueCount++;
+          else if ((u.destinationSector as string) === 'Descarte') esCount++;
+          else rmaCount++;
+        }
+      });
+      if (totalCount > 0) {
+        return { rma: rmaCount, estoque: estoqueCount, openbox: openboxCount, es: esCount, total: totalCount };
+      }
+    }
+    return null;
+  }, [unitsByDayMap, allUnits]);
+
+  // Current date's triage stats
+  const currentTriageStats = useMemo(() => {
+    if (!date) return null;
+    const stats = getTriageStatsForDate(date);
+    if (stats) return stats;
+    if (existingTriageStats && initialData?.date === date) return existingTriageStats;
+    return null;
+  }, [date, getTriageStatsForDate, existingTriageStats, initialData]);
+
   // Synchronize state when modal opens or initialData/defaultDate changes
   useEffect(() => {
     if (!isOpen) return;
@@ -99,7 +134,9 @@ export default function ManualDailyInflowModal({
     const matchedRecord = (initialData?.date === targetDate ? initialData : null) || 
       allInflows?.find(r => r.date === targetDate);
 
-    if (matchedRecord) {
+    const tStats = getTriageStatsForDate(targetDate);
+
+    if (matchedRecord && (matchedRecord.rma > 0 || matchedRecord.estoque > 0 || matchedRecord.openbox > 0 || matchedRecord.es > 0)) {
       setRma(Number(matchedRecord.rma || 0));
       setEstoque(Number(matchedRecord.estoque || 0));
       setOpenbox(Number(matchedRecord.openbox || 0));
@@ -107,6 +144,16 @@ export default function ManualDailyInflowModal({
       setNotes(matchedRecord.notes || '');
       setExistingRecordId(
         matchedRecord.id && !matchedRecord.id.startsWith('triage-auto-') ? matchedRecord.id : null
+      );
+    } else if (tStats && tStats.total > 0) {
+      // Auto prefill from live triages in the system!
+      setRma(tStats.rma);
+      setEstoque(tStats.estoque);
+      setOpenbox(tStats.openbox);
+      setEs(tStats.es);
+      setNotes(matchedRecord?.notes || '');
+      setExistingRecordId(
+        matchedRecord?.id && !matchedRecord.id.startsWith('triage-auto-') ? matchedRecord.id : null
       );
     } else {
       setRma(0);
@@ -116,7 +163,7 @@ export default function ManualDailyInflowModal({
       setNotes('');
       setExistingRecordId(null);
     }
-  }, [isOpen, initialData, defaultDate, allInflows]);
+  }, [isOpen, initialData, defaultDate, allInflows, getTriageStatsForDate]);
 
   // When date is manually changed in the date picker
   const handleDateChange = (newDate: string) => {
@@ -126,7 +173,9 @@ export default function ManualDailyInflowModal({
     const matchedRecord = allInflows?.find(r => r.date === newDate) || 
       (initialData?.date === newDate ? initialData : null);
 
-    if (matchedRecord) {
+    const tStats = getTriageStatsForDate(newDate);
+
+    if (matchedRecord && (matchedRecord.rma > 0 || matchedRecord.estoque > 0 || matchedRecord.openbox > 0 || matchedRecord.es > 0)) {
       setRma(Number(matchedRecord.rma || 0));
       setEstoque(Number(matchedRecord.estoque || 0));
       setOpenbox(Number(matchedRecord.openbox || 0));
@@ -134,6 +183,15 @@ export default function ManualDailyInflowModal({
       setNotes(matchedRecord.notes || '');
       setExistingRecordId(
         matchedRecord.id && !matchedRecord.id.startsWith('triage-auto-') ? matchedRecord.id : null
+      );
+    } else if (tStats && tStats.total > 0) {
+      setRma(tStats.rma);
+      setEstoque(tStats.estoque);
+      setOpenbox(tStats.openbox);
+      setEs(tStats.es);
+      setNotes(matchedRecord?.notes || '');
+      setExistingRecordId(
+        matchedRecord?.id && !matchedRecord.id.startsWith('triage-auto-') ? matchedRecord.id : null
       );
     } else {
       // Clear fields for fresh entry on that day
@@ -326,6 +384,60 @@ export default function ManualDailyInflowModal({
               <div className="inflow-banner-empty flex items-center gap-2 text-[11px] text-slate-400 font-medium bg-slate-800/40 border border-slate-800 px-2.5 py-1 rounded-lg">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 text-slate-500" />
                 <span>Nenhum lançamento manual para esta data ainda. Preencha e clique em salvar.</span>
+              </div>
+            )}
+
+            {/* Automatic Triage Stats Helper Card */}
+            {currentTriageStats && currentTriageStats.total > 0 && (
+              <div className="inflow-triage-card bg-sky-950/40 border border-sky-500/30 p-3 rounded-2xl space-y-2 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="inflow-triage-title flex items-center gap-1.5 text-xs font-bold text-sky-400">
+                    <Boxes className="w-4 h-4 text-sky-400" />
+                    <span>Triagens Registradas no Sistema ({currentTriageStats.total} {currentTriageStats.total === 1 ? 'item' : 'itens'})</span>
+                  </div>
+                  <span className="inflow-triage-badge text-[10px] font-black px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                    Detalhamento Ativo
+                  </span>
+                </div>
+                <div className="inflow-triage-summary text-xs text-slate-300 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <span>Estoque: <strong className="text-white">{currentTriageStats.estoque}</strong></span>
+                  <span className="text-slate-500">•</span>
+                  <span>RMA: <strong className="text-white">{currentTriageStats.rma}</strong></span>
+                  <span className="text-slate-500">•</span>
+                  <span>Openbox: <strong className="text-white">{currentTriageStats.openbox}</strong></span>
+                  {currentTriageStats.es > 0 && (
+                    <>
+                      <span className="text-slate-500">•</span>
+                      <span>ES: <strong className="text-white">{currentTriageStats.es}</strong></span>
+                    </>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstoque(currentTriageStats.estoque);
+                      setRma(currentTriageStats.rma);
+                      setOpenbox(currentTriageStats.openbox);
+                      setEs(currentTriageStats.es);
+                    }}
+                    className="inflow-btn-substitute px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  >
+                    Preencher com as triagens
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstoque(prev => Number(prev || 0) + currentTriageStats.estoque);
+                      setRma(prev => Number(prev || 0) + currentTriageStats.rma);
+                      setOpenbox(prev => Number(prev || 0) + currentTriageStats.openbox);
+                      setEs(prev => Number(prev || 0) + currentTriageStats.es);
+                    }}
+                    className="inflow-btn-sum px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  >
+                    Somar às triagens
+                  </button>
+                </div>
               </div>
             )}
           </div>

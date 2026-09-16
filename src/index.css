@@ -1112,38 +1112,40 @@ html.light .cal-weekday-header {
 html.light .cal-day-empty {
   background-color: #ffffff !important;
   border-color: #cbd5e1 !important;
-  color: #1e293b !important;
+  color: #0f172a !important;
 }
 html.light .cal-day-empty .cal-day-number {
   color: #0f172a !important;
   font-weight: 800 !important;
 }
 html.light .cal-day-empty:hover {
-  background-color: #f8fafc !important;
+  background-color: #f1f5f9 !important;
   border-color: #94a3b8 !important;
 }
 
 html.light .cal-day-tier1 {
-  background-color: #f0f4ff !important;
-  border-color: #c7d2fe !important;
-  color: #1e1b4b !important;
+  background-color: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1e3a8a !important;
 }
 html.light .cal-day-tier1 .cal-day-number {
-  color: #1e1b4b !important;
+  color: #1e3a8a !important;
   font-weight: 800 !important;
 }
 html.light .cal-day-tier1 .cal-count {
-  color: #3730a3 !important;
+  background-color: #dbeafe !important;
+  color: #1e40af !important;
+  border: 1px solid #93c5fd !important;
   font-weight: 900 !important;
 }
 html.light .cal-day-tier1:hover {
-  background-color: #e0e7ff !important;
-  border-color: #818cf8 !important;
+  background-color: #dbeafe !important;
+  border-color: #3b82f6 !important;
 }
 
 html.light .cal-day-tier2 {
   background-color: #e0e7ff !important;
-  border-color: #a5b4fc !important;
+  border-color: #818cf8 !important;
   color: #1e1b4b !important;
 }
 html.light .cal-day-tier2 .cal-day-number {
@@ -1151,44 +1153,117 @@ html.light .cal-day-tier2 .cal-day-number {
   font-weight: 900 !important;
 }
 html.light .cal-day-tier2 .cal-count {
-  color: #312e81 !important;
+  background-color: #c7d2fe !important;
+  color: #1e1b4b !important;
+  border: 1px solid #818cf8 !important;
   font-weight: 900 !important;
 }
 html.light .cal-day-tier2:hover {
   background-color: #c7d2fe !important;
-  border-color: #6366f1 !important;
-}
-
-html.light .cal-day-tier3 {
-  background-color: #c7d2fe !important;
-  border-color: #818cf8 !important;
-  color: #1e1b4b !important;
-  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.15) !important;
-}
-html.light .cal-day-tier3 .cal-day-number {
-  color: #0f172a !important;
-  font-weight: 900 !important;
-}
-html.light .cal-day-tier3 .cal-count {
-  color: #1e1b4b !important;
-  font-weight: 900 !important;
-}
-html.light .cal-day-tier3:hover {
-  background-color: #a5b4fc !important;
   border-color: #4f46e5 !important;
 }
 
+html.light .cal-day-tier3 {
+  background-color: #fae8ff !important;
+  border-color: #e879f9 !important;
+  color: #701a75 !important;
+  box-shadow: 0 2px 6px rgba(217, 70, 239, 0.15) !important;
+}
+html.light .cal-day-tier3 .cal-day-number {
+  color: #701a75 !important;
+  font-weight: 900 !important;
+}
+html.light .cal-day-tier3 .cal-count {
+  background-color: #f5d0fe !important;
+  color: #701a75 !important;
+  border: 1px solid #e879f9 !important;
+  font-weight: 900 !important;
+}
+html.light .cal-day-tier3:hover {
+  background-color: #f5d0fe !important;
+  border-color: #c026d3 !important;
+}
+
 html.light .cal-day-selected {
-  background-color: #4338ca !important;
-  border-color: #3730a3 !important;
+  background-color: #2563eb !important;
+  border-color: #1d4ed8 !important;
   color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(67, 56, 202, 0.35) !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35) !important;
 }
 html.light .cal-day-selected .cal-day-number,
 html.light .cal-day-selected .cal-count,
 html.light .cal-day-selected span {
   color: #ffffff !important;
   font-weight: 900 !important;
+}
+
+/* Inflow Triage Card in Manual Inflow Modal */
+html.light .inflow-triage-card {
+  background-color: #f0f9ff !important;
+  border-color: #7dd3fc !important;
+}
+html.light .inflow-triage-title {
+  color: #0369a1 !important;
+}
+html.light .inflow-triage-summary {
+  color: #0f172a !important;
+}
+html.light .inflow-triage-summary strong {
+  color: #0284c7 !important;
+}
+
+/* Modal Inflow Light Mode Styles */
+html.light #manual-inflow-modal-card {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+html.light #manual-inflow-modal-header {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+html.light #manual-inflow-modal-header h2 {
+  color: #0f172a !important;
+}
+html.light .inflow-header-sub {
+  color: #64748b !important;
+}
+html.light .inflow-date-input {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.light .inflow-btn-nav {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+html.light .inflow-sector-card {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+html.light .inflow-sector-input {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.light .inflow-stepper-btn {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+html.light .inflow-notes-input {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.light .inflow-total-card {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+html.light .inflow-modal-footer {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
 }
 
 /* Hourly Calendar Picker (Light Mode Contrast & Visual Enhancements) */
