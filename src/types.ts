@@ -67,6 +67,9 @@ export interface PendingItem {
   transferredToStock?: boolean;
   transferredUnitId?: string; // If promoted to TriageUnit
   destinationSectorSuggested?: DestinationSectorType;
+  registrationNumber?: string; // Número de registro único da pendência (Ex: REG-00001)
+  linkedUnitId?: string; // ID da unidade de triagem/estoque físico vinculada
+  linkedUnitTrackingCode?: string; // Código STI / Rastreio da unidade vinculada
 }
 
 export interface TriageUnit {
@@ -95,6 +98,8 @@ export interface TriageUnit {
   source?: 'manual' | 'excel' | 'migration';
   isMigration?: boolean;
   excludeFromDailyCount?: boolean; // Se verdadeiro, não contabiliza no contador de entrada diária
+  pendingRegistrationNumber?: string; // Número de registro da pendência vinculada (Ex: REG-00001)
+  pendingItemId?: string; // ID da pendência vinculada
   createdBy?: {
     uid?: string;
     email?: string;

@@ -33,7 +33,12 @@ import {
   getHasExcludeDailyCol,
   setHasTriageCreatedByCol,
   getHasTriageCreatedByCol,
-  setHasPendingExtendedCols
+  setHasPendingExtendedCols,
+  getHasPendingExtendedCols,
+  getHasPendingRegistrationCol,
+  setHasPendingRegistrationCol,
+  getHasTriagePendingCols,
+  setHasTriagePendingCols
 } from './supabase';
 import {
   getCachedBaseProducts,
@@ -55,6 +60,13 @@ import {
 } from './syncCacheService';
 import { getCurrentActiveAuthUser } from './supabaseAuth';
 import { uploadImageToCloudStorage, uploadImageUrlToCloudStorage } from './storageService';
+import {
+  generatePendingRegistrationNumber,
+  ensurePendingRegistrationNumber,
+  normalizeRegistrationNumber,
+  validateUniqueOrderNumber,
+  validatePendingItemLink
+} from '../utils/pendingRegistrationHelper';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -448,9 +460,24 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
   }
 
   const now = new Date().toISOString();
+  const cachedPending = getCachedPendingItems();
+
+  // Regra 1: "um pedido só pode ter um registro de pendência"
+  if (item.orderNumber && item.orderNumber.trim()) {
+    const orderValidation = validateUniqueOrderNumber(item.orderNumber, item.id, cachedPending);
+    if (!orderValidation.valid) {
+      throw new Error(orderValidation.error || 'Número de pedido duplicado em outra pendência.');
+    }
+  }
+
+  // Gera ou normaliza número de registro sequencial único
+  const regNumber = item.registrationNumber && item.registrationNumber.trim()
+    ? normalizeRegistrationNumber(item.registrationNumber)
+    : ensurePendingRegistrationNumber(item, cachedPending);
 
   const payload: PendingItem = {
     ...item,
+    registrationNumber: regNumber,
     sku: (item.sku || '').trim().toUpperCase(),
     productName: (item.productName || '').trim(),
     voltage: item.voltage || 'Bivolt',
@@ -474,6 +501,8 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
   if (item.resolvedAt !== undefined) payload.resolvedAt = item.resolvedAt;
   if (item.transferredToStock !== undefined) payload.transferredToStock = item.transferredToStock;
   if (item.transferredUnitId !== undefined) payload.transferredUnitId = item.transferredUnitId;
+  if (item.linkedUnitId !== undefined) payload.linkedUnitId = item.linkedUnitId;
+  if (item.linkedUnitTrackingCode !== undefined) payload.linkedUnitTrackingCode = item.linkedUnitTrackingCode;
   if (item.destinationSectorSuggested !== undefined) payload.destinationSectorSuggested = item.destinationSectorSuggested;
   if (item.priority !== undefined) payload.priority = item.priority;
 
@@ -482,16 +511,56 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
   const supabase = getSupabaseClient();
   if (supabase) {
     const row = mapPendingItemToSupabase(payload);
-    const { error } = await supabase.from('pending_items').upsert(row);
+    let { error } = await supabase.from('pending_items').upsert(row);
     if (error) {
       console.warn('Supabase upsert pending_items error, trying fallback:', error);
-      setHasPendingExtendedCols(false);
-      const fallbackRow = { ...row };
-      delete (fallbackRow as any).priority;
-      delete (fallbackRow as any).resolved_at;
-      delete (fallbackRow as any).transferred_to_stock;
-      delete (fallbackRow as any).transferred_unit_id;
-      delete (fallbackRow as any).destination_sector_suggested;
+
+      if (
+        error.message?.includes('registration_number') ||
+        error.code === 'PGRST204' ||
+        error.code === '42703'
+      ) {
+        if (error.message?.includes('registration_number')) {
+          setHasPendingRegistrationCol(false);
+        }
+      }
+
+      if (
+        error.message?.includes('priority') ||
+        error.message?.includes('resolved_at') ||
+        error.message?.includes('transferred_') ||
+        error.message?.includes('destination_sector_suggested') ||
+        error.message?.includes('created_by')
+      ) {
+        setHasPendingExtendedCols(false);
+      }
+
+      // Safe guaranteed fallback with base columns.
+      // Note: registrationNumber, linkedUnit, etc. are already preserved inside detailed_notes!
+      const fallbackRow: any = {
+        id: row.id,
+        sku: row.sku || '',
+        product_name: row.product_name || '',
+        voltage: row.voltage || 'Bivolt',
+        serial_number: row.serial_number || '',
+        tracking_code: row.tracking_code || '',
+        order_number: row.order_number || '',
+        platform: row.platform || 'Mercado Livre',
+        pending_reason: row.pending_reason || '',
+        detailed_notes: row.detailed_notes || '',
+        status: row.status || 'Pendente',
+        photos: Array.isArray(row.photos) ? row.photos : [],
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+
+      if (row.created_by && !error.message?.includes('created_by')) {
+        fallbackRow.created_by = row.created_by;
+      }
+      if (row.priority && !error.message?.includes('priority') && getHasPendingExtendedCols() !== false) {
+        fallbackRow.priority = row.priority;
+      }
+
       const fbRes = await supabase.from('pending_items').upsert(fallbackRow);
       if (fbRes.error) {
         console.error('Supabase fallback pending_items save error:', fbRes.error);
@@ -501,7 +570,7 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
     recordDbOperation('write', 1);
     createAuditLog(
       'SAVE_PENDING_ITEM',
-      `Salvou item em pendência (Supabase) SKU: [${payload.sku}] ${payload.productName}. Motivo: ${payload.pendingReason}`
+      `Salvou item em pendência [${payload.registrationNumber}] SKU: [${payload.sku}] ${payload.productName}. Motivo: ${payload.pendingReason}`
     );
   }
 
@@ -565,6 +634,8 @@ export const transferPendingItemToStock = async (
     photosBox?: string[];
     photosAccessories?: string[];
     excludeFromDailyCount?: boolean;
+    pendingRegistrationNumber?: string;
+    pendingItemId?: string;
   }
 ): Promise<TriageUnit> => {
   const newTriageId = `tr-pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -598,33 +669,143 @@ export const transferPendingItemToStock = async (
     photosAccessories: triageDetails?.photosAccessories || [],
     createdAt: new Date().toISOString(),
     status: 'Estoque',
-    excludeFromDailyCount: Boolean(triageDetails?.excludeFromDailyCount)
+    excludeFromDailyCount: Boolean(triageDetails?.excludeFromDailyCount),
+    pendingRegistrationNumber: pendingItem.registrationNumber || undefined,
+    pendingItemId: pendingItem.id
   };
 
   // 1. Save unit to physical stock
   await saveTriageUnit(newUnit);
 
-  // 2. Mark pending item as resolved and transferred
+  // 2. Mark pending item as resolved and transferred using resilient savePendingItem
+  const updatedPendingItem: PendingItem = {
+    ...pendingItem,
+    status: 'Resolvido',
+    transferredToStock: true,
+    transferredUnitId: newTriageId,
+    linkedUnitId: newTriageId,
+    linkedUnitTrackingCode: finalTracking,
+    destinationSectorSuggested: destinationSector,
+    resolvedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  await savePendingItem(updatedPendingItem);
+
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.from('pending_items').update({
-      status: 'Resolvido',
-      transferred_to_stock: true,
-      transferred_unit_id: newTriageId,
-      destination_sector_suggested: destinationSector,
-      resolved_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }).eq('id', pendingItem.id);
-
-    recordDbOperation('write', 1);
-
     await createAuditLog(
       'TRANSFER_PENDING_TO_STOCK',
-      `Transferiu item da pendência [${pendingItem.sku}] para o estoque físico no setor [${destinationSector}] (Supabase). Triagem ID: ${newTriageId}`
+      `Transferiu item da pendência [${pendingItem.registrationNumber || pendingItem.sku}] para o estoque físico no setor [${destinationSector}] (Supabase). Triagem ID: ${newTriageId}`
     );
   }
 
   return newUnit;
+};
+
+/**
+ * Função para vincular uma pendência registrada a um produto inserido no estoque físico.
+ * Regras obrigatórias:
+ * 1. Um pedido só pode ter um registro de pendência.
+ * 2. A pendência só pode ser registrada em um único produto.
+ */
+export const linkPendingItemToProduct = async (
+  pendingRegOrId: string,
+  triageUnitId: string
+): Promise<{ success: boolean; pendingItem: PendingItem; triageUnit: TriageUnit }> => {
+  const pendingItems = getCachedPendingItems();
+  const triageUnits = getCachedTriageUnits();
+
+  const unit = triageUnits.find(u => u.id === triageUnitId);
+  if (!unit) {
+    throw new Error(`Unidade de estoque físico com ID "${triageUnitId}" não foi encontrada.`);
+  }
+
+  const validation = validatePendingItemLink(pendingRegOrId, triageUnitId, pendingItems, triageUnits);
+  if (!validation.valid || !validation.pendingItem) {
+    throw new Error(validation.error || 'Falha ao validar vínculo da pendência.');
+  }
+
+  const targetPending = validation.pendingItem;
+  const now = new Date().toISOString();
+
+  // 1. Atualiza unidade de estoque com o registro da pendência
+  const updatedUnit: TriageUnit = {
+    ...unit,
+    pendingRegistrationNumber: targetPending.registrationNumber,
+    pendingItemId: targetPending.id,
+    updatedAt: now
+  };
+  await saveTriageUnit(updatedUnit);
+
+  // 2. Atualiza a pendência como vinculada e resolvida
+  const updatedPending: PendingItem = {
+    ...targetPending,
+    status: 'Resolvido',
+    resolvedAt: now,
+    transferredToStock: true,
+    transferredUnitId: unit.id,
+    linkedUnitId: unit.id,
+    linkedUnitTrackingCode: unit.trackingCode || '',
+    updatedAt: now
+  };
+  await savePendingItem(updatedPending);
+
+  await createAuditLog(
+    'LINK_PENDING_TO_PRODUCT',
+    `Vinculou o registro de pendência [${targetPending.registrationNumber || targetPending.id}] ao produto em estoque [${unit.trackingCode || unit.baseProductName}] (ID: ${unit.id}).`
+  );
+
+  return {
+    success: true,
+    pendingItem: updatedPending,
+    triageUnit: updatedUnit
+  };
+};
+
+/**
+ * Desvincula uma pendência de um produto no estoque físico
+ */
+export const unlinkPendingItemFromProduct = async (triageUnitId: string): Promise<void> => {
+  const pendingItems = getCachedPendingItems();
+  const triageUnits = getCachedTriageUnits();
+
+  const unit = triageUnits.find(u => u.id === triageUnitId);
+  if (!unit) return;
+
+  const now = new Date().toISOString();
+
+  // Localiza pendência vinculada
+  const linkedPending = pendingItems.find(p => 
+    (unit.pendingItemId && p.id === unit.pendingItemId) ||
+    (unit.pendingRegistrationNumber && p.registrationNumber === unit.pendingRegistrationNumber) ||
+    p.transferredUnitId === unit.id ||
+    p.linkedUnitId === unit.id
+  );
+
+  if (linkedPending) {
+    const updatedPending: PendingItem = {
+      ...linkedPending,
+      transferredToStock: false,
+      transferredUnitId: undefined,
+      linkedUnitId: undefined,
+      linkedUnitTrackingCode: undefined,
+      updatedAt: now
+    };
+    await savePendingItem(updatedPending);
+  }
+
+  const updatedUnit: TriageUnit = {
+    ...unit,
+    pendingRegistrationNumber: undefined,
+    pendingItemId: undefined,
+    updatedAt: now
+  };
+  await saveTriageUnit(updatedUnit);
+
+  await createAuditLog(
+    'UNLINK_PENDING_FROM_PRODUCT',
+    `Desvinculou pendência do produto no estoque [${unit.trackingCode || unit.baseProductName}] (ID: ${unit.id}).`
+  );
 };
 
 // Default daily inflows
@@ -1445,10 +1626,12 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
     const row = mapTriageUnitToSupabase(savedUnit);
     let { error } = await supabase.from('triage_units').upsert(row);
 
-    // If upsert failed due to missing column (e.g. exclude_from_daily_count or created_by), mark feature disabled and retry immediately
+    // If upsert failed due to missing column (e.g. exclude_from_daily_count, created_by, or pending columns), mark feature disabled and retry immediately
     if (error && (
       error.message?.includes('exclude_from_daily_count') || 
       error.message?.includes('created_by') ||
+      error.message?.includes('pending_registration_number') ||
+      error.message?.includes('pending_item_id') ||
       error.code === 'PGRST204' || 
       error.code === '42703'
     )) {
@@ -1458,9 +1641,16 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
       if (error.message?.includes('exclude_from_daily_count')) {
         setHasExcludeDailyCol(false);
       }
+      if (error.message?.includes('pending_registration_number') || error.message?.includes('pending_item_id')) {
+        setHasTriagePendingCols(false);
+      }
       const retryRow = { ...row };
       if (getHasExcludeDailyCol() === false) delete retryRow.exclude_from_daily_count;
       if (getHasTriageCreatedByCol() === false) delete retryRow.created_by;
+      if (getHasTriagePendingCols() === false) {
+        delete (retryRow as any).pending_registration_number;
+        delete (retryRow as any).pending_item_id;
+      }
       const retryRes = await supabase.from('triage_units').upsert(retryRow);
       error = retryRes.error;
     }
@@ -1508,12 +1698,74 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
     }
   }
 
+  // Sincroniza vínculo com a pendência automaticamente
+  try {
+    const pendingList = getCachedPendingItems();
+    const matchedPending = (savedUnit.pendingRegistrationNumber || savedUnit.pendingItemId)
+      ? pendingList.find(p => 
+          (savedUnit.pendingItemId && p.id === savedUnit.pendingItemId) ||
+          (savedUnit.pendingRegistrationNumber && p.registrationNumber && p.registrationNumber.toUpperCase() === savedUnit.pendingRegistrationNumber.toUpperCase())
+        )
+      : null;
+
+    // Se houver pendências antigas anteriormente vinculadas a esta unidade que deixaram de ser, desvincula
+    const oldLinkedPending = pendingList.filter(p => 
+      (p.transferredUnitId === savedUnit.id || p.linkedUnitId === savedUnit.id) &&
+      (!matchedPending || p.id !== matchedPending.id)
+    );
+    for (const oldP of oldLinkedPending) {
+      await savePendingItem({
+        ...oldP,
+        transferredToStock: false,
+        transferredUnitId: undefined,
+        linkedUnitId: undefined,
+        linkedUnitTrackingCode: undefined,
+        updatedAt: now
+      });
+    }
+
+    if (matchedPending && (!matchedPending.transferredToStock || matchedPending.transferredUnitId !== savedUnit.id)) {
+      const updatedPending: PendingItem = {
+        ...matchedPending,
+        status: 'Resolvido',
+        resolvedAt: matchedPending.resolvedAt || now,
+        transferredToStock: true,
+        transferredUnitId: savedUnit.id,
+        linkedUnitId: savedUnit.id,
+        linkedUnitTrackingCode: savedUnit.trackingCode || '',
+        updatedAt: now
+      };
+      await savePendingItem(updatedPending);
+    }
+  } catch (syncErr) {
+    console.warn('Erro ao sincronizar vínculo da pendência em saveTriageUnit:', syncErr);
+  }
+
   return savedUnit;
 };
 
 export const deleteTriageUnit = async (id: string, trackingCode?: string, name?: string): Promise<void> => {
   const cleanId = (id || '').trim();
   if (!cleanId) return;
+
+  // Se havia pendência vinculada, desvincula
+  try {
+    const pendingList = getCachedPendingItems();
+    const linkedPending = pendingList.find(p => p.transferredUnitId === cleanId || p.linkedUnitId === cleanId);
+    if (linkedPending) {
+      const updatedPending: PendingItem = {
+        ...linkedPending,
+        transferredToStock: false,
+        transferredUnitId: undefined,
+        linkedUnitId: undefined,
+        linkedUnitTrackingCode: undefined,
+        updatedAt: new Date().toISOString()
+      };
+      await savePendingItem(updatedPending);
+    }
+  } catch (err) {
+    console.warn('Erro ao desvincular pendência ao deletar triagem:', err);
+  }
 
   // Immediately remove from local memory and storage cache
   removeLocalCacheItem('triage_units', cleanId);

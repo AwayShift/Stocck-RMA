@@ -24,9 +24,11 @@ import {
   RefreshCw,
   ArrowRight,
   Clock,
-  User
+  User,
+  Hash,
+  FileText
 } from 'lucide-react';
-import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType } from '../types';
+import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType, PendingItem } from '../types';
 import { PlatformSelector } from './PlatformSelector';
 import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 import { RichTextEditor } from './RichTextEditor';
@@ -34,6 +36,7 @@ import { getBaseProductImages } from '../utils/productImages';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { getCurrentActiveAuthUser } from '../lib/supabaseAuth';
 import { formatStiInput, isValidStiCode, normalizeStiCode } from '../utils/stiFormatter';
+import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
 
 export interface TriageSummaryData {
   product: BaseProduct;
@@ -59,6 +62,7 @@ export interface TriageSummaryData {
 interface RmaEntryProps {
   products: BaseProduct[];
   units?: TriageUnit[];
+  pendingItems?: PendingItem[];
   onSaveTriage: (unit: TriageUnit) => Promise<void>;
   onNavigateToStock: () => void;
   isLight?: boolean;
@@ -72,6 +76,7 @@ interface RmaEntryProps {
 export default function RmaEntry({ 
   products, 
   units = [], 
+  pendingItems = [],
   onSaveTriage, 
   onNavigateToStock, 
   isLight = false,
@@ -147,6 +152,84 @@ export default function RmaEntry({
   const [platform, setPlatform] = useState<PlatformType>('Mercado Livre');
   const [customerReason, setCustomerReason] = useState('');
   const [excludeFromDailyCount, setExcludeFromDailyCount] = useState(false);
+
+  // Pending Items linking state
+  const [pendingRegistrationNumber, setPendingRegistrationNumber] = useState('');
+  const [selectedPendingItem, setSelectedPendingItem] = useState<PendingItem | null>(null);
+  const [isPendingSelectorOpen, setIsPendingSelectorOpen] = useState(false);
+  const pendingSelectorRef = useRef<HTMLDivElement>(null);
+
+  // Available pending items (unlinked, adhering to rule: 1 pendência = 1 produto)
+  const availablePendingItems = useMemo(() => {
+    return pendingItems.filter(item => {
+      if (!item.registrationNumber) return false;
+      const isLinkedToUnit = units.some(u => 
+        (u.pendingRegistrationNumber && u.pendingRegistrationNumber.toLowerCase() === item.registrationNumber!.toLowerCase()) ||
+        (u.pendingItemId && u.pendingItemId === item.id)
+      );
+      return !isLinkedToUnit;
+    });
+  }, [pendingItems, units]);
+
+  // Validation for pending registration link
+  const pendingLinkValidation = useMemo(() => {
+    if (!pendingRegistrationNumber.trim()) return { valid: true };
+    return validatePendingItemLink(pendingRegistrationNumber, undefined, pendingItems, units);
+  }, [pendingRegistrationNumber, units, pendingItems]);
+
+  // Function to pull data from a selected pending item
+  const handleApplyPendingItem = (item: PendingItem) => {
+    setSelectedPendingItem(item);
+    setPendingRegistrationNumber(item.registrationNumber || '');
+    setIsPendingSelectorOpen(false);
+
+    if (item.orderNumber) {
+      setOrderNumber(item.orderNumber);
+    }
+    if (item.platform) {
+      setPlatform(item.platform as PlatformType);
+    }
+    if (item.trackingCode) {
+      setTrackingCode(item.trackingCode);
+    }
+    if (item.serialNumber) {
+      setSerials([item.serialNumber]);
+    }
+    if (item.pendingReason) {
+      setCustomerReason(item.pendingReason);
+    }
+    if (item.detailedNotes) {
+      setNotes(item.detailedNotes);
+    }
+    if (item.photos && item.photos.length > 0) {
+      setPhotosProduct(prev => Array.from(new Set([...prev, ...item.photos!])));
+    }
+    if (item.sku) {
+      const match = products.find(p => p.sku.toLowerCase() === item.sku.toLowerCase());
+      if (match) {
+        setSelectedProductId(match.id);
+        setProductSearchTerm(`[${match.sku}] ${match.name}`);
+      } else {
+        setProductSearchTerm(item.sku);
+      }
+    }
+  };
+
+  const handleClearPendingLink = () => {
+    setSelectedPendingItem(null);
+    setPendingRegistrationNumber('');
+  };
+
+  // Close pending selector on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pendingSelectorRef.current && !pendingSelectorRef.current.contains(e.target as Node)) {
+        setIsPendingSelectorOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Helpers to manage multiple serial lines for the same SKU
   const handleAddSerialLine = () => {
@@ -259,6 +342,8 @@ export default function RmaEntry({
     setTrackingCode('');
     setOrderNumber('');
     setSerials(['']);
+    setPendingRegistrationNumber('');
+    setSelectedPendingItem(null);
     setUrlPhotoInput('');
     setUrlPhotoError(null);
     setErrorMessage('');
@@ -561,6 +646,20 @@ export default function RmaEntry({
     // Target list of units to create (if only 1 line and empty, creates 1 unit with empty serial)
     const targetSerials = cleanSerials.length > 0 ? cleanSerials : [''];
 
+    // Rule 2: "a pendencia so pode ser registrada em um produto"
+    if (pendingRegistrationNumber.trim()) {
+      if (!pendingLinkValidation.valid) {
+        setErrorMessage(pendingLinkValidation.error || 'Erro de vinculação com a pendência.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (targetSerials.length > 1) {
+        setErrorMessage('Uma pendência só pode ser vinculada a 1 único produto físico no estoque. Para cadastrar múltiplas unidades, registre-as separadamente.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     let finalPhotosProduct = [...photosProduct];
@@ -623,6 +722,8 @@ export default function RmaEntry({
           createdAt: new Date(baseTimestamp + i * 150).toISOString(),
           status: 'Estoque',
           excludeFromDailyCount: excludeFromDailyCount,
+          pendingRegistrationNumber: pendingRegistrationNumber.trim() || undefined,
+          pendingItemId: selectedPendingItem?.id || (pendingRegistrationNumber.trim() ? findPendingItemByRegistrationNumber(pendingRegistrationNumber.trim(), pendingItems)?.id : undefined),
           createdBy: creator ? {
             uid: creator.uid,
             email: creator.email,
@@ -725,6 +826,159 @@ export default function RmaEntry({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Side Column: Fields (7 cols) */}
             <div className="lg:col-span-7 space-y-4">
+              {/* Optional Step: Vincular a uma Pendência Registrada */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3" id="rma-step-pending-link">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 bg-sky-500/15 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md border border-sky-500/30">
+                      <Hash className="w-3 h-3" />
+                    </span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                      Vincular a uma Pendência (Nº de Registro)
+                    </span>
+                    <span className="text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
+                      Opcional
+                    </span>
+                  </div>
+                  {pendingRegistrationNumber && (
+                    <button
+                      type="button"
+                      onClick={handleClearPendingLink}
+                      className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                      <span>Desvincular</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                  {/* Manual input or scan of registration number */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                      <span>Nº de Registro</span>
+                      <span className="text-[10px] font-normal text-slate-500 font-mono">REG-XXXX</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Ex: REG-0001"
+                        value={pendingRegistrationNumber}
+                        onChange={(e) => {
+                          const val = e.target.value.trim().toUpperCase();
+                          setPendingRegistrationNumber(val);
+                          const found = pendingItems.find(p => p.registrationNumber?.toUpperCase() === val);
+                          if (found) {
+                            setSelectedPendingItem(found);
+                          } else {
+                            setSelectedPendingItem(null);
+                          }
+                        }}
+                        className={`w-full px-3 h-[38px] bg-slate-950 rounded-lg text-xs font-mono transition-all border uppercase ${
+                          !pendingLinkValidation.valid 
+                            ? 'border-rose-500 text-rose-300 focus:border-rose-400' 
+                            : pendingRegistrationNumber 
+                            ? 'border-sky-500 text-sky-200 focus:border-sky-400' 
+                            : 'border-slate-800 text-slate-200 focus:border-sky-500'
+                        }`}
+                        id="input-pending-registration-number"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dropdown to pick from open pending items */}
+                  <div className="space-y-1 relative" ref={pendingSelectorRef}>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                      <span>Pendências Abertas</span>
+                      <span className="text-[10px] text-sky-400 font-bold">{availablePendingItems.length} disponíveis</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsPendingSelectorOpen(!isPendingSelectorOpen)}
+                      className="w-full px-3 h-[38px] bg-slate-950 border border-slate-800 rounded-lg text-xs text-left text-slate-300 flex items-center justify-between hover:border-slate-700 transition-colors cursor-pointer"
+                      id="btn-select-open-pending"
+                    >
+                      <span className="truncate">
+                        {selectedPendingItem 
+                          ? `${selectedPendingItem.registrationNumber || 'REG'} - ${selectedPendingItem.sku || selectedPendingItem.productName}` 
+                          : 'Selecionar da lista de pendências...'}
+                      </span>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
+                    </button>
+
+                    {isPendingSelectorOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-800">
+                        {availablePendingItems.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-slate-500">
+                            Nenhuma pendência pendente de vinculação.
+                          </div>
+                        ) : (
+                          availablePendingItems.map((item) => (
+                            <div
+                              key={item.id}
+                              onClick={() => handleApplyPendingItem(item)}
+                              className="p-2.5 hover:bg-slate-800/80 cursor-pointer transition-colors text-xs"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-mono font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
+                                  {item.registrationNumber || 'SEM REG'}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  {item.orderNumber ? `Ped: ${item.orderNumber}` : item.platform || ''}
+                                </span>
+                              </div>
+                              <div className="font-medium text-slate-200 mt-1 truncate">
+                                {item.productName || item.sku}
+                              </div>
+                              <div className="text-[10px] text-amber-400/90 truncate mt-0.5">
+                                Motivo: {item.pendingReason}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Validation and Link Status Feedback */}
+                {!pendingLinkValidation.valid && (
+                  <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{pendingLinkValidation.error}</span>
+                  </div>
+                )}
+
+                {pendingRegistrationNumber && pendingLinkValidation.valid && (
+                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs space-y-1">
+                    <div className="flex items-center justify-between text-emerald-300 font-bold">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Vínculo 1:1 Válido ({pendingRegistrationNumber})</span>
+                      </div>
+                      {selectedPendingItem && (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyPendingItem(selectedPendingItem)}
+                          className="text-[11px] text-sky-300 hover:text-sky-200 underline font-normal cursor-pointer"
+                        >
+                          Reaplicar dados da pendência
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Ao concluir a triagem, esta pendência será automaticamente finalizada e conectada ao produto inserido no estoque físico.
+                    </p>
+                    {serials.length > 1 && (
+                      <div className="p-2 bg-amber-500/15 border border-amber-500/40 rounded text-amber-300 text-[11px] font-semibold mt-1 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Atenção: Você adicionou {serials.length} seriais. Uma pendência só pode ser vinculada a 1 único produto físico.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Step 1: Produto do Catálogo & Números de Série (Agile Focus) */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-product-serials">
                 <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">

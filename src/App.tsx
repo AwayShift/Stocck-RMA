@@ -889,6 +889,7 @@ export default function App() {
               <RmaEntry 
                 products={products}
                 units={triageUnits}
+                pendingItems={pendingItems}
                 onSaveTriage={handleSaveTriage}
                 onNavigateToStock={() => setActiveTab('stock')}
                 isLight={isLight}
@@ -900,6 +901,7 @@ export default function App() {
               <PhysicalStock 
                 units={triageUnits}
                 products={products}
+                pendingItems={pendingItems}
                 onUpdateUnit={handleSaveTriage}
                 onDeleteUnit={handleDeleteTriage}
                 onCheckoutUnit={handleCheckoutTriage}

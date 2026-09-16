@@ -34,7 +34,9 @@ import {
   AlertOctagon,
   Tag,
   FileText,
-  CheckSquare
+  CheckSquare,
+  Link as LinkIcon,
+  Hash
 } from 'lucide-react';
 import { 
   PendingItem, 
@@ -49,6 +51,11 @@ import { ImageZoomModal } from './ImageZoomModal';
 import { PlatformSelector } from './PlatformSelector';
 import { uploadFileToStorage } from '../lib/dbService';
 import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
+import { 
+  generatePendingRegistrationNumber, 
+  validateUniqueOrderNumber, 
+  ensurePendingRegistrationNumber 
+} from '../utils/pendingRegistrationHelper';
 
 interface PendingItemsProps {
   items: PendingItem[];
@@ -77,6 +84,8 @@ interface PendingItemsProps {
       photosBox?: string[];
       photosAccessories?: string[];
       excludeFromDailyCount?: boolean;
+      pendingRegistrationNumber?: string;
+      pendingItemId?: string;
     }
   ) => Promise<TriageUnit>;
   userRole?: string | null;
@@ -195,6 +204,7 @@ export default function PendingItems({
   const [zoomTitle, setZoomTitle] = useState<string>('');
 
   // Form State
+  const [formRegistrationNumber, setFormRegistrationNumber] = useState('');
   const [formSku, setFormSku] = useState('');
   const [formProductName, setFormProductName] = useState('');
   const [formVoltage, setFormVoltage] = useState<'110V' | '220V' | 'Bivolt' | 'N/A'>('Bivolt');
@@ -211,6 +221,13 @@ export default function PendingItems({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Rule 1: "um pedido só pode ter um registro de pendencia"
+  const orderDuplicateWarning = useMemo(() => {
+    if (!formOrderNumber.trim()) return null;
+    const val = validateUniqueOrderNumber(formOrderNumber, editingItem?.id, items);
+    return val.valid ? null : val.error;
+  }, [formOrderNumber, editingItem, items]);
 
   // In-App Feedback & Notifications
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -409,6 +426,7 @@ export default function PendingItems({
       const term = searchTerm.toLowerCase().trim();
       const matchesSearch = 
         !term ||
+        (item.registrationNumber && item.registrationNumber.toLowerCase().includes(term)) ||
         (item.sku && item.sku.toLowerCase().includes(term)) ||
         (item.productName && item.productName.toLowerCase().includes(term)) ||
         (item.serialNumber && item.serialNumber.toLowerCase().includes(term)) ||
@@ -471,6 +489,8 @@ export default function PendingItems({
   // Open Form for New Item
   const handleOpenNewModal = () => {
     setEditingItem(null);
+    const nextReg = generatePendingRegistrationNumber(items);
+    setFormRegistrationNumber(nextReg);
     setFormSku('');
     setFormProductName('');
     setFormVoltage('Bivolt');
@@ -492,6 +512,8 @@ export default function PendingItems({
   // Open Form for Editing Item
   const handleOpenEditModal = (item: PendingItem) => {
     setEditingItem(item);
+    const reg = item.registrationNumber || ensurePendingRegistrationNumber(item, items);
+    setFormRegistrationNumber(reg);
     setFormSku(item.sku || '');
     setFormProductName(item.productName || '');
     setFormVoltage((item.voltage as any) || 'Bivolt');
@@ -680,10 +702,17 @@ export default function PendingItems({
       return;
     }
 
+    // Regra 1: Um pedido só pode ter um registro de pendência
+    if (orderDuplicateWarning) {
+      setFormError(orderDuplicateWarning);
+      return;
+    }
+
     setIsSaving(true);
     try {
       const itemToSave: PendingItem = {
         id: editingItem ? editingItem.id : `pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        registrationNumber: formRegistrationNumber || generatePendingRegistrationNumber(items),
         sku: formSku.trim().toUpperCase() || 'PENDENCIA',
         productName: formProductName.trim() || 'Produto em Análise',
         voltage: formVoltage,
@@ -696,6 +725,11 @@ export default function PendingItems({
         detailedNotes: formDetailedNotes.trim(),
         status: formStatus,
         photos: formPhotos,
+        linkedUnitId: editingItem?.linkedUnitId,
+        linkedUnitTrackingCode: editingItem?.linkedUnitTrackingCode,
+        transferredToStock: editingItem?.transferredToStock,
+        transferredUnitId: editingItem?.transferredUnitId,
+        destinationSectorSuggested: editingItem?.destinationSectorSuggested,
         createdAt: editingItem ? editingItem.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -704,9 +738,10 @@ export default function PendingItems({
       setIsFormModalOpen(false);
       setActionSuccess(editingItem ? 'Registro de pendência atualizado com sucesso!' : 'Novo item de pendência cadastrado com sucesso!');
       setTimeout(() => setActionSuccess(null), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao salvar pendência:', err);
-      setFormError('Ocorreu um erro ao salvar o registro no banco de dados.');
+      const msg = err?.message ? `Erro ao salvar no banco: ${err.message}` : 'Ocorreu um erro ao salvar o registro no banco de dados.';
+      setFormError(msg);
     } finally {
       setIsSaving(false);
     }
@@ -769,8 +804,10 @@ export default function PendingItems({
     setTransferError(null);
     setIsTransferring(true);
     try {
+      const regNum = itemToTransfer.registrationNumber || ensurePendingRegistrationNumber(itemToTransfer, items);
       const updatedItem = {
         ...itemToTransfer,
+        registrationNumber: regNum,
         sku: transferSku.trim().toUpperCase(),
         productName: transferProductName.trim(),
         voltage: transferVoltage,
@@ -807,7 +844,9 @@ export default function PendingItems({
         photosProduct: transferPhotosProduct,
         photosBox: transferPhotosBox,
         photosAccessories: transferPhotosAccessories,
-        excludeFromDailyCount: transferExcludeDailyCount
+        excludeFromDailyCount: transferExcludeDailyCount,
+        pendingRegistrationNumber: regNum,
+        pendingItemId: itemToTransfer.id
       });
 
       setIsTransferModalOpen(false);
@@ -1347,9 +1386,13 @@ export default function PendingItems({
                     </div>
                   </div>
 
-                  {/* SKU & Title */}
+                  {/* Registration Number, SKU & Link Status */}
                   <div className="mb-2.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded border text-sky-400 bg-sky-500/10 border-sky-500/30 flex items-center gap-1" title="Número de Registro da Pendência">
+                        <Hash className="w-3 h-3 text-sky-400" />
+                        {item.registrationNumber || 'REG-S/N'}
+                      </span>
                       <span className={`pending-sku-badge font-mono text-xs font-bold px-2 py-0.5 rounded border ${
                         isResolved 
                           ? 'text-slate-400 bg-slate-800/60 border-slate-700/50' 
@@ -1357,6 +1400,12 @@ export default function PendingItems({
                       }`}>
                         {item.sku || 'SEM SKU'}
                       </span>
+                      {item.transferredToStock && (
+                        <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/30 flex items-center gap-1" title="Vinculado a produto no estoque">
+                          <LinkIcon className="w-3 h-3 text-emerald-400" />
+                          <span>{item.linkedUnitTrackingCode ? `Vinculado (${item.linkedUnitTrackingCode})` : 'Vinculado ao Estoque'}</span>
+                        </span>
+                      )}
                     </div>
                     <h4 className={`pending-card-title text-sm mt-1.5 line-clamp-2 leading-snug ${
                       isResolved ? 'text-slate-300 font-semibold' : 'text-white font-bold'
@@ -1371,6 +1420,12 @@ export default function PendingItems({
                       <div className="flex items-center justify-between text-slate-400">
                         <span className="text-slate-500">STI / Rastreio:</span>
                         <span className="font-mono font-semibold text-slate-300">{normalizeStiCode(item.trackingCode)}</span>
+                      </div>
+                    )}
+                    {item.orderNumber && (
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span className="text-slate-500">Nº Pedido:</span>
+                        <span className="font-mono font-semibold text-sky-400 truncate max-w-[180px]">{item.orderNumber}</span>
                       </div>
                     )}
                     {item.serialNumber && (
@@ -1496,6 +1551,7 @@ export default function PendingItems({
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-3.5 px-4">Nº Registro</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4">Prioridade</th>
                   <th className="py-3.5 px-4">SKU / Produto</th>
@@ -1524,6 +1580,20 @@ export default function PendingItems({
                           : 'hover:bg-slate-800/40'
                       }`}
                     >
+                      {/* Nº Registro */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 border border-sky-500/25 px-2 py-0.5 rounded flex items-center gap-1 w-fit">
+                          <Hash className="w-3 h-3 text-sky-400" />
+                          <span>{item.registrationNumber || '-'}</span>
+                        </span>
+                        {item.transferredToStock && (
+                          <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
+                            <LinkIcon className="w-2.5 h-2.5" />
+                            <span>{item.linkedUnitTrackingCode || 'No Estoque'}</span>
+                          </div>
+                        )}
+                      </td>
+
                       {/* Status */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadge(item.status)}`}>
@@ -1802,6 +1872,34 @@ export default function PendingItems({
                 </div>
               )}
 
+              {/* Registration Number Identification Banner */}
+              <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-3.5 flex items-center justify-between gap-3" id="pending-reg-header-banner">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center font-mono font-bold text-sm border border-sky-500/30">
+                    <Hash className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
+                      Número de Registro da Pendência
+                    </div>
+                    <div className="font-mono text-base font-black text-white tracking-wide flex items-center gap-2">
+                      <span>{formRegistrationNumber || 'REG-NOVO'}</span>
+                      <span className="text-[10px] font-sans font-normal px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                        Único
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right hidden sm:block">
+                  <span className="text-[10px] text-slate-400 block">
+                    Vínculo 1:1 obrigatório
+                  </span>
+                  <span className="text-[10px] text-sky-400/80 font-medium">
+                    1 Pedido = 1 Pendência = 1 Produto
+                  </span>
+                </div>
+              </div>
+
               {/* Row 1: SKU with autocomplete + Nome do Produto */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* SKU */}
@@ -1905,17 +2003,29 @@ export default function PendingItems({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Número de Pedido
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span>Número de Pedido</span>
+                    <span className="text-[10px] text-slate-500 font-normal">Máx 1 registro por pedido</span>
                   </label>
                   <input
                     type="text"
                     value={formOrderNumber}
                     onChange={(e) => setFormOrderNumber(e.target.value)}
                     placeholder="Ex: 20000081726"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                    className={`w-full bg-slate-950 border rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none transition-colors ${
+                      orderDuplicateWarning 
+                        ? 'border-rose-500 focus:border-rose-400 text-rose-200' 
+                        : 'border-slate-800 focus:border-sky-500'
+                    }`}
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">Opcional.</p>
+                  {orderDuplicateWarning ? (
+                    <p className="text-[11px] text-rose-400 mt-1 font-semibold flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                      <span>{orderDuplicateWarning}</span>
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-500 mt-1">Opcional. Cada pedido só pode ter uma única pendência.</p>
+                  )}
                 </div>
 
                 <div>
@@ -2210,6 +2320,36 @@ export default function PendingItems({
                 <div>
                   <div className="font-bold text-rose-300">Atenção no Preenchimento</div>
                   <p className="mt-0.5 text-rose-200/90 leading-relaxed">{transferError}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Registration Number Link Banner */}
+            {itemToTransfer && (
+              <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-3.5 flex items-center justify-between gap-3" id="transfer-reg-link-banner">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center font-mono font-bold text-sm border border-sky-500/30">
+                    <Hash className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase font-bold text-sky-400 tracking-wider">
+                      Registro de Pendência Vinculado
+                    </div>
+                    <div className="font-mono text-base font-black text-white flex items-center gap-2">
+                      <span>{itemToTransfer.registrationNumber || ensurePendingRegistrationNumber(itemToTransfer, items)}</span>
+                      <span className="text-[10px] font-sans font-medium px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        Vínculo 1:1 ao Estoque
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right hidden sm:block">
+                  <span className="text-xs text-emerald-400 font-semibold block">
+                    Vinculação Automática
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Este item será marcado como resolvido e vinculado
+                  </span>
                 </div>
               </div>
             )}

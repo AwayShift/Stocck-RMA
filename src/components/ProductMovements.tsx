@@ -1747,13 +1747,7 @@ export default function ProductMovements({
                         let cellTierClass = 'cal-day-empty';
 
                         if (hasEntries) {
-                          if (cell.count <= 10) {
-                            cellTierClass = 'cal-day-tier1';
-                          } else if (cell.count <= 40) {
-                            cellTierClass = 'cal-day-tier2';
-                          } else {
-                            cellTierClass = 'cal-day-tier3';
-                          }
+                          cellTierClass = 'cal-day-tier2';
                         }
 
                         if (isSelected) {
@@ -2077,7 +2071,7 @@ export default function ProductMovements({
                               cellClass = 'cal-day-selected-btn bg-sky-600 text-white border-sky-500 font-black shadow-md ring-2 ring-sky-400/70 scale-[1.03] z-10';
                             } else if (hasEntries) {
                               cellClass = isLight
-                                ? 'cal-day-has-entries bg-emerald-50/90 hover:bg-emerald-100/90 border-emerald-400 text-slate-950 hover:border-emerald-600 shadow-xs'
+                                ? 'cal-day-has-entries bg-indigo-50/90 hover:bg-indigo-100/90 border-indigo-300 text-slate-950 hover:border-indigo-500 shadow-xs'
                                 : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700/80 text-slate-200 hover:border-sky-400/60 shadow-2xs';
                             } else {
                               cellClass = isLight
@@ -2118,7 +2112,7 @@ export default function ProductMovements({
                                   {hasEntries && (
                                     <span
                                       className={`w-1.5 h-1.5 rounded-full ${
-                                        isSelected ? 'bg-white' : isLight ? 'bg-emerald-500' : 'bg-emerald-400'
+                                        isSelected ? 'bg-white' : isLight ? 'bg-indigo-500' : 'bg-indigo-400'
                                       }`}
                                     />
                                   )}
@@ -2131,8 +2125,8 @@ export default function ProductMovements({
                                         isSelected
                                           ? 'bg-sky-700 text-white shadow-2xs'
                                           : isLight
-                                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                          ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                                          : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
                                       }`}
                                     >
                                       {cell.count} un

@@ -349,10 +349,17 @@ export const SUPABASE_QUICK_PATCH_SQL = `-- ====================================
 -- ========================================================
 
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS exclude_from_daily_count BOOLEAN DEFAULT FALSE;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS pending_registration_number TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS pending_item_id TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS registration_number TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS linked_unit_id TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS linked_unit_tracking_code TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_to_stock BOOLEAN DEFAULT FALSE;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_unit_id TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS destination_sector_suggested TEXT;
+CREATE INDEX IF NOT EXISTS idx_pending_items_reg ON pending_items(registration_number);
+CREATE INDEX IF NOT EXISTS idx_triage_units_pending_reg ON triage_units(pending_registration_number);
 `;
 
 export const SUPABASE_SQL_SCHEMA = `-- ========================================================
@@ -447,6 +454,8 @@ ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS checkout_date TIMESTAMPTZ;
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual';
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS is_migration BOOLEAN DEFAULT FALSE;
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS exclude_from_daily_count BOOLEAN DEFAULT FALSE;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS pending_registration_number TEXT;
+ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS pending_item_id TEXT;
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_triage_units_status ON triage_units(status);
@@ -454,6 +463,7 @@ CREATE INDEX IF NOT EXISTS idx_triage_units_sector ON triage_units(destination_s
 CREATE INDEX IF NOT EXISTS idx_triage_units_tracking ON triage_units(tracking_code);
 CREATE INDEX IF NOT EXISTS idx_triage_units_order ON triage_units(order_number);
 CREATE INDEX IF NOT EXISTS idx_triage_units_sku ON triage_units(base_product_sku);
+CREATE INDEX IF NOT EXISTS idx_triage_units_pending_reg ON triage_units(pending_registration_number);
 
 -- 3. Histórico de Entradas / Fluxo Diário
 CREATE TABLE IF NOT EXISTS daily_inflows (
@@ -521,12 +531,16 @@ ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_to_stock BOOLEAN DEFAULT FALSE;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_unit_id TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS destination_sector_suggested TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS registration_number TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS linked_unit_id TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS linked_unit_tracking_code TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_pending_items_sku ON pending_items(sku);
 CREATE INDEX IF NOT EXISTS idx_pending_items_status ON pending_items(status);
 CREATE INDEX IF NOT EXISTS idx_pending_items_tracking ON pending_items(tracking_code);
 CREATE INDEX IF NOT EXISTS idx_pending_items_order ON pending_items(order_number);
+CREATE INDEX IF NOT EXISTS idx_pending_items_reg ON pending_items(registration_number);
 
 -- 5. Casos e Rastreamento
 CREATE TABLE IF NOT EXISTS cases (
@@ -835,6 +849,46 @@ export const setHasTriageCreatedByCol = (supported: boolean): void => {
   } catch {}
 };
 
+const STORAGE_FEAT_PENDING_REGISTRATION_COL = 'stocckrma_feat_pending_registration_col';
+let memoryHasPendingRegistrationCol: boolean | null = null;
+
+export const getHasPendingRegistrationCol = (): boolean | null => {
+  if (memoryHasPendingRegistrationCol !== null) return memoryHasPendingRegistrationCol;
+  try {
+    const val = localStorage.getItem(STORAGE_FEAT_PENDING_REGISTRATION_COL);
+    if (val === 'true') memoryHasPendingRegistrationCol = true;
+    else if (val === 'false') memoryHasPendingRegistrationCol = false;
+  } catch {}
+  return memoryHasPendingRegistrationCol;
+};
+
+export const setHasPendingRegistrationCol = (supported: boolean): void => {
+  memoryHasPendingRegistrationCol = supported;
+  try {
+    localStorage.setItem(STORAGE_FEAT_PENDING_REGISTRATION_COL, supported ? 'true' : 'false');
+  } catch {}
+};
+
+const STORAGE_FEAT_TRIAGE_PENDING_COLS = 'stocckrma_feat_triage_pending_cols';
+let memoryHasTriagePendingCols: boolean | null = null;
+
+export const getHasTriagePendingCols = (): boolean | null => {
+  if (memoryHasTriagePendingCols !== null) return memoryHasTriagePendingCols;
+  try {
+    const val = localStorage.getItem(STORAGE_FEAT_TRIAGE_PENDING_COLS);
+    if (val === 'true') memoryHasTriagePendingCols = true;
+    else if (val === 'false') memoryHasTriagePendingCols = false;
+  } catch {}
+  return memoryHasTriagePendingCols;
+};
+
+export const setHasTriagePendingCols = (supported: boolean): void => {
+  memoryHasTriagePendingCols = supported;
+  try {
+    localStorage.setItem(STORAGE_FEAT_TRIAGE_PENDING_COLS, supported ? 'true' : 'false');
+  } catch {}
+};
+
 export const getTriageColumns = (): string => {
   let cols = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration';
   if (getHasExcludeDailyCol() !== false) {
@@ -887,6 +941,22 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     rawNotes = rawNotes ? `${rawNotes}\n${creatorMeta}` : creatorMeta;
   }
 
+  if (u.pendingRegistrationNumber) {
+    const regMeta = `[PENDING_REG:${u.pendingRegistrationNumber}]`;
+    rawNotes = rawNotes.replace(/\[PENDING_REG:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${regMeta}` : regMeta;
+  } else {
+    rawNotes = rawNotes.replace(/\[PENDING_REG:.*?\]\s*/g, '').trim();
+  }
+
+  if (u.pendingItemId) {
+    const idMeta = `[PENDING_ID:${u.pendingItemId}]`;
+    rawNotes = rawNotes.replace(/\[PENDING_ID:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${idMeta}` : idMeta;
+  } else {
+    rawNotes = rawNotes.replace(/\[PENDING_ID:.*?\]\s*/g, '').trim();
+  }
+
   const payload: any = {
     id: cleanId,
     tracking_code: u.trackingCode ?? '',
@@ -913,6 +983,13 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     is_migration: Boolean(u.isMigration),
     updated_at: now
   };
+
+  if (u.pendingRegistrationNumber && getHasTriagePendingCols() !== false) {
+    payload.pending_registration_number = u.pendingRegistrationNumber;
+  }
+  if (u.pendingItemId && getHasTriagePendingCols() !== false) {
+    payload.pending_item_id = u.pendingItemId;
+  }
 
   // Only include exclude_from_daily_count column if not known to be missing in PostgreSQL schema
   if (getHasExcludeDailyCol() !== false) {
@@ -945,9 +1022,35 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
     } catch {}
   }
 
+  let pendingRegistrationNumber: string | undefined = undefined;
+  if (r.pending_registration_number) {
+    pendingRegistrationNumber = r.pending_registration_number;
+  } else if (r.pendingRegistrationNumber) {
+    pendingRegistrationNumber = r.pendingRegistrationNumber;
+  } else if (decompressedNotes.includes('[PENDING_REG:')) {
+    const regMatch = decompressedNotes.match(/\[PENDING_REG:(.*?)\]/);
+    if (regMatch && regMatch[1]) {
+      pendingRegistrationNumber = regMatch[1].trim();
+    }
+  }
+
+  let pendingItemId: string | undefined = undefined;
+  if (r.pending_item_id) {
+    pendingItemId = r.pending_item_id;
+  } else if (r.pendingItemId) {
+    pendingItemId = r.pendingItemId;
+  } else if (decompressedNotes.includes('[PENDING_ID:')) {
+    const idMatch = decompressedNotes.match(/\[PENDING_ID:(.*?)\]/);
+    if (idMatch && idMatch[1]) {
+      pendingItemId = idMatch[1].trim();
+    }
+  }
+
   const cleanNotes = decompressedNotes
     .replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '')
     .replace(/\[CREATED_BY:\{.*?\}\]\s*/g, '')
+    .replace(/\[PENDING_REG:.*?\]\s*/g, '')
+    .replace(/\[PENDING_ID:.*?\]\s*/g, '')
     .trim();
 
   return {
@@ -979,6 +1082,8 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
       r.excludeFromDailyCount === true ||
       hasExcludeMarker
     ),
+    pendingRegistrationNumber: pendingRegistrationNumber,
+    pendingItemId: pendingItemId,
     createdBy: createdBy
   };
 };
@@ -1020,6 +1125,25 @@ export const mapSupabaseToDailyInflow = (r: any): DailyInflowRecord => ({
 export const mapPendingItemToSupabase = (p: PendingItem) => {
   const cleanId = (p.id && p.id.trim()) ? p.id.trim() : generateUUID();
   const now = new Date().toISOString();
+
+  let rawNotes = p.detailedNotes || '';
+  if (p.registrationNumber) {
+    const regMeta = `[REG_NUM:${p.registrationNumber}]`;
+    rawNotes = rawNotes.replace(/\[REG_NUM:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${regMeta}` : regMeta;
+  }
+  const unitIdToLink = p.transferredUnitId || p.linkedUnitId;
+  if (unitIdToLink) {
+    const linkMeta = `[LINKED_UNIT:${unitIdToLink}]`;
+    rawNotes = rawNotes.replace(/\[LINKED_UNIT:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${linkMeta}` : linkMeta;
+  }
+  if (p.linkedUnitTrackingCode) {
+    const stiMeta = `[LINKED_STI:${p.linkedUnitTrackingCode}]`;
+    rawNotes = rawNotes.replace(/\[LINKED_STI:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${stiMeta}` : stiMeta;
+  }
+
   const payload: any = {
     id: cleanId,
     sku: p.sku || '',
@@ -1030,7 +1154,7 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
     order_number: p.orderNumber || '',
     platform: p.platform || 'Mercado Livre',
     pending_reason: compressText(p.pendingReason || ''),
-    detailed_notes: compressText(p.detailedNotes || ''),
+    detailed_notes: compressText(rawNotes),
     status: p.status || 'Pendente',
     priority: p.priority || 'Média',
     photos: Array.isArray(p.photos) ? p.photos : [],
@@ -1039,39 +1163,78 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
     created_by: p.createdBy || null
   };
 
+  if (p.registrationNumber && getHasPendingRegistrationCol() !== false) {
+    payload.registration_number = p.registrationNumber;
+  }
+
   // Only include extended columns if supported by remote schema
   if (getHasPendingExtendedCols() !== false) {
     payload.resolved_at = p.resolvedAt || null;
     payload.transferred_to_stock = Boolean(p.transferredToStock);
-    payload.transferred_unit_id = p.transferredUnitId || null;
+    payload.transferred_unit_id = unitIdToLink || null;
     payload.destination_sector_suggested = p.destinationSectorSuggested || 'RMA';
   }
 
   return payload;
 };
 
-export const mapSupabaseToPendingItem = (r: any): PendingItem => ({
-  id: r.id,
-  sku: r.sku || '',
-  productName: r.product_name || r.productName || '',
-  voltage: r.voltage || 'Bivolt',
-  serialNumber: r.serial_number || r.serialNumber || '',
-  trackingCode: r.tracking_code || r.trackingCode || '',
-  orderNumber: r.order_number || r.orderNumber || '',
-  platform: r.platform || 'Mercado Livre',
-  pendingReason: decompressText(r.pending_reason || r.pendingReason || ''),
-  detailedNotes: decompressText(r.detailed_notes || r.detailedNotes || ''),
-  status: r.status || 'Pendente',
-  priority: (r.priority as any) || 'Média',
-  photos: Array.isArray(r.photos) ? r.photos : [],
-  createdAt: r.created_at || r.createdAt,
-  updatedAt: r.updated_at || r.updatedAt,
-  createdBy: r.created_by || r.createdBy,
-  resolvedAt: r.resolved_at || r.resolvedAt || null,
-  transferredToStock: Boolean(r.transferred_to_stock ?? r.transferredToStock),
-  transferredUnitId: r.transferred_unit_id || r.transferredUnitId,
-  destinationSectorSuggested: r.destination_sector_suggested || r.destinationSectorSuggested || 'RMA'
-});
+export const mapSupabaseToPendingItem = (r: any): PendingItem => {
+  const decompressedNotes = decompressText(r.detailed_notes || r.detailedNotes || '');
+
+  let regNum: string | undefined = undefined;
+  if (r.registration_number) {
+    regNum = r.registration_number;
+  } else if (r.registrationNumber) {
+    regNum = r.registrationNumber;
+  } else if (decompressedNotes.includes('[REG_NUM:')) {
+    const match = decompressedNotes.match(/\[REG_NUM:(.*?)\]/);
+    if (match && match[1]) regNum = match[1].trim();
+  }
+
+  let linkedUnitId: string | undefined = r.transferred_unit_id || r.transferredUnitId;
+  if (!linkedUnitId && decompressedNotes.includes('[LINKED_UNIT:')) {
+    const match = decompressedNotes.match(/\[LINKED_UNIT:(.*?)\]/);
+    if (match && match[1]) linkedUnitId = match[1].trim();
+  }
+
+  let linkedUnitTrackingCode: string | undefined = undefined;
+  if (decompressedNotes.includes('[LINKED_STI:')) {
+    const match = decompressedNotes.match(/\[LINKED_STI:(.*?)\]/);
+    if (match && match[1]) linkedUnitTrackingCode = match[1].trim();
+  }
+
+  const cleanNotes = decompressedNotes
+    .replace(/\[REG_NUM:.*?\]\s*/g, '')
+    .replace(/\[LINKED_UNIT:.*?\]\s*/g, '')
+    .replace(/\[LINKED_STI:.*?\]\s*/g, '')
+    .trim();
+
+  return {
+    id: r.id,
+    sku: r.sku || '',
+    productName: r.product_name || r.productName || '',
+    voltage: r.voltage || 'Bivolt',
+    serialNumber: r.serial_number || r.serialNumber || '',
+    trackingCode: r.tracking_code || r.trackingCode || '',
+    orderNumber: r.order_number || r.orderNumber || '',
+    platform: r.platform || 'Mercado Livre',
+    pendingReason: decompressText(r.pending_reason || r.pendingReason || ''),
+    detailedNotes: cleanNotes,
+    status: r.status || 'Pendente',
+    priority: (r.priority as any) || 'Média',
+    photos: Array.isArray(r.photos) ? r.photos : [],
+    createdAt: r.created_at || r.createdAt,
+    updatedAt: r.updated_at || r.updatedAt,
+    createdBy: r.created_by || r.createdBy,
+    resolvedAt: r.resolved_at || r.resolvedAt || null,
+    transferredToStock: Boolean(r.transferred_to_stock ?? r.transferredToStock ?? linkedUnitId),
+    transferredUnitId: linkedUnitId,
+    destinationSectorSuggested: r.destination_sector_suggested || r.destinationSectorSuggested || 'RMA',
+    registrationNumber: regNum,
+    linkedUnitId: linkedUnitId,
+    linkedUnitTrackingCode: linkedUnitTrackingCode
+  };
+};
 
 export const mapUserToSupabase = (u: UserAccount) => ({
   uid: u.uid,

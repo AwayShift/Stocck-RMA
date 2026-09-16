@@ -41,9 +41,10 @@ import {
   Undo2,
   Calendar,
   ShoppingCart,
-  User
+  User,
+  Hash
 } from 'lucide-react';
-import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType } from '../types';
+import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType, PendingItem } from '../types';
 import ExcelImportModal from './ExcelImportModal';
 import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
 import { ImageZoomModal } from './ImageZoomModal';
@@ -55,10 +56,12 @@ import { CategoryBadge } from './CategoryBadge';
 import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
 import { RichTextEditor } from './RichTextEditor';
 import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
+import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
 
 interface PhysicalStockProps {
   units: TriageUnit[];
   products?: BaseProduct[];
+  pendingItems?: PendingItem[];
   onUpdateUnit: (unit: TriageUnit) => Promise<void>;
   onDeleteUnit: (id: string) => Promise<void>;
   onCheckoutUnit: (id: string) => Promise<void>;
@@ -90,6 +93,7 @@ const stripHtml = (html?: string): string => {
 export default function PhysicalStock({ 
   units, 
   products = [],
+  pendingItems = [],
   onUpdateUnit, 
   onDeleteUnit, 
   onCheckoutUnit,
@@ -315,6 +319,24 @@ export default function PhysicalStock({
 
       // Ensure platform is properly set (or empty string/undefined)
       updatedForm.platform = (editForm.platform || '') as any;
+
+      // Validate pending registration link if specified
+      if (updatedForm.pendingRegistrationNumber && updatedForm.pendingRegistrationNumber.trim()) {
+        const val = validatePendingItemLink(updatedForm.pendingRegistrationNumber, updatedForm.id, pendingItems, units);
+        if (!val.valid) {
+          setActionError(val.error || 'Erro ao vincular número de registro de pendência.');
+          setIsSavingEdit(false);
+          setTimeout(() => setActionError(null), 5000);
+          return;
+        }
+        const item = findPendingItemByRegistrationNumber(updatedForm.pendingRegistrationNumber, pendingItems);
+        if (item) {
+          updatedForm.pendingItemId = item.id;
+        }
+      } else {
+        updatedForm.pendingRegistrationNumber = undefined;
+        updatedForm.pendingItemId = undefined;
+      }
       
       // If destinationSector is 'Principal' and photos are empty, auto-reference base product images
       if (updatedForm.destinationSector === 'Principal' && (!updatedForm.photosProduct || updatedForm.photosProduct.length === 0)) {
@@ -1951,6 +1973,12 @@ export default function PhysicalStock({
                             <span>Serial Repetido</span>
                           </span>
                         )}
+                        {unit.pendingRegistrationNumber && (
+                          <span className="bg-sky-500/15 text-sky-300 border border-sky-500/30 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-1" title={`Vinculado à Pendência: ${unit.pendingRegistrationNumber}`}>
+                            <Hash className="w-2.5 h-2.5 text-sky-400" />
+                            <span>{unit.pendingRegistrationNumber}</span>
+                          </span>
+                        )}
                       </div>
                       {unit.trackingCode && unit.trackingCode.trim() !== '' && (
                         <button
@@ -2292,6 +2320,12 @@ export default function PhysicalStock({
                             <span>Serial Repetido</span>
                           </span>
                         )}
+                        {unit.pendingRegistrationNumber && (
+                          <span className="bg-sky-500/15 text-sky-300 border border-sky-500/30 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-1" title={`Vinculado à Pendência: ${unit.pendingRegistrationNumber}`}>
+                            <Hash className="w-2.5 h-2.5 text-sky-400" />
+                            <span>{unit.pendingRegistrationNumber}</span>
+                          </span>
+                        )}
                         {unit.platform ? (
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}>
                             {unit.platform}
@@ -2493,6 +2527,17 @@ export default function PhysicalStock({
                     }`}>
                       <CheckCircle2 className="w-3.5 h-3.5 text-rose-500" />
                       Baixado
+                    </span>
+                  )}
+
+                  {currentUnit.pendingRegistrationNumber && (
+                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md border flex items-center gap-1.5 ${
+                      isLight
+                        ? 'bg-sky-50 text-sky-800 border-sky-300'
+                        : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                    }`} title={`Vinculado à Pendência: ${currentUnit.pendingRegistrationNumber}`}>
+                      <Hash className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Pendência: {currentUnit.pendingRegistrationNumber}</span>
                     </span>
                   )}
 
@@ -2704,6 +2749,23 @@ export default function PhysicalStock({
                         onChange={(e) => setEditForm({ ...editForm, orderNumber: e.target.value })} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
                         placeholder="Ex: 2000008172648"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Hash className="w-3 h-3 text-sky-400" />
+                          <span>Nº Registro da Pendência</span>
+                        </span>
+                        <span className="text-slate-500 font-normal text-[10px]">(1 pendência = 1 produto)</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        value={editForm.pendingRegistrationNumber || ''} 
+                        onChange={(e) => setEditForm({ ...editForm, pendingRegistrationNumber: e.target.value.trim().toUpperCase() })} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-sky-400 font-mono uppercase focus:outline-none focus:border-sky-500" 
+                        placeholder="Ex: REG-0001"
                       />
                     </div>
 
@@ -3546,6 +3608,21 @@ export default function PhysicalStock({
                           title="Clique para copiar Número do Pedido"
                         >
                           <span>{currentUnit.orderNumber}</span>
+                          <Copy className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      </div>
+                    )}
+                    {currentUnit.pendingRegistrationNumber && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400 font-semibold text-[11px]">Nº Pendência:</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCode(currentUnit.pendingRegistrationNumber || '', 'pendingReg', e)}
+                          className="font-mono text-[11px] font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 rounded transition-colors cursor-pointer group flex items-center gap-1"
+                          title="Clique para copiar Número de Registro de Pendência"
+                        >
+                          <Hash className="w-2.5 h-2.5 text-sky-400" />
+                          <span>{currentUnit.pendingRegistrationNumber}</span>
                           <Copy className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
                         </button>
                       </div>
