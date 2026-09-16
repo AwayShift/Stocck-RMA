@@ -159,17 +159,6 @@ export default function RmaEntry({
   const [isPendingSelectorOpen, setIsPendingSelectorOpen] = useState(false);
   const pendingSelectorRef = useRef<HTMLDivElement>(null);
 
-  // Available pending items (unlinked, adhering to rule: 1 pendência = 1 produto)
-  const availablePendingItems = useMemo(() => {
-    return pendingItems.filter(item => {
-      if (!item.registrationNumber) return false;
-      const isLinkedToUnit = units.some(u => 
-        (u.pendingRegistrationNumber && u.pendingRegistrationNumber.toLowerCase() === item.registrationNumber!.toLowerCase()) ||
-        (u.pendingItemId && u.pendingItemId === item.id)
-      );
-      return !isLinkedToUnit;
-    });
-  }, [pendingItems, units]);
 
   // Validation for pending registration link
   const pendingLinkValidation = useMemo(() => {
@@ -195,12 +184,7 @@ export default function RmaEntry({
     if (item.serialNumber) {
       setSerials([item.serialNumber]);
     }
-    if (item.pendingReason) {
-      setCustomerReason(item.pendingReason);
-    }
-    if (item.detailedNotes) {
-      setNotes(item.detailedNotes);
-    }
+    // Não insere informações no laudo técnico e nem no motivo / reclamação a pedido do operador
     if (item.photos && item.photos.length > 0) {
       setPhotosProduct(prev => Array.from(new Set([...prev, ...item.photos!])));
     }
@@ -570,6 +554,51 @@ export default function RmaEntry({
     return products.find(p => p.id === selectedProductId) || null;
   }, [products, selectedProductId]);
 
+  // Active SKU entered or selected in the RMA form
+  const activeSku = useMemo(() => {
+    if (selectedProduct?.sku) return selectedProduct.sku.trim().toUpperCase();
+    if (productSearchTerm.trim()) {
+      const bracketMatch = productSearchTerm.match(/^\[(.*?)\]/);
+      if (bracketMatch && bracketMatch[1]) {
+        return bracketMatch[1].trim().toUpperCase();
+      }
+      const found = products.find(p => p.sku.toLowerCase() === productSearchTerm.trim().toLowerCase());
+      if (found) return found.sku.trim().toUpperCase();
+      return productSearchTerm.trim().toUpperCase();
+    }
+    return '';
+  }, [selectedProduct, productSearchTerm, products]);
+
+  // Available pending items (unlinked, strictly corresponding to activeSku, adhering to rule: 1 pendência = 1 produto)
+  const availablePendingItems = useMemo(() => {
+    if (!activeSku) return [];
+    return pendingItems.filter(item => {
+      if (!item.registrationNumber) return false;
+
+      // Rule: Must strictly correspond to current RMA SKU
+      const itemSku = (item.sku || '').trim().toUpperCase();
+      if (itemSku !== activeSku) return false;
+
+      // Adhering to rule: 1 pendência = 1 produto físico (cannot be linked to an existing unit in stock)
+      const isLinkedToUnit = units.some(u => 
+        (u.pendingRegistrationNumber && u.pendingRegistrationNumber.toLowerCase() === item.registrationNumber!.toLowerCase()) ||
+        (u.pendingItemId && u.pendingItemId === item.id)
+      );
+      return !isLinkedToUnit;
+    });
+  }, [pendingItems, units, activeSku]);
+
+  // Auto-clear pending link if the selected product SKU changes to a different SKU
+  useEffect(() => {
+    if (selectedPendingItem && activeSku) {
+      const itemSku = (selectedPendingItem.sku || '').trim().toUpperCase();
+      if (itemSku && itemSku !== activeSku) {
+        setSelectedPendingItem(null);
+        setPendingRegistrationNumber('');
+      }
+    }
+  }, [activeSku, selectedPendingItem]);
+
   // Sync search input with selected product or allow free typing
   const handleSelectProduct = (p: BaseProduct) => {
     setSelectedProductId(p.id);
@@ -826,159 +855,6 @@ export default function RmaEntry({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Side Column: Fields (7 cols) */}
             <div className="lg:col-span-7 space-y-4">
-              {/* Optional Step: Vincular a uma Pendência Registrada */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3" id="rma-step-pending-link">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 bg-sky-500/15 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md border border-sky-500/30">
-                      <Hash className="w-3 h-3" />
-                    </span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                      Vincular a uma Pendência (Nº de Registro)
-                    </span>
-                    <span className="text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
-                      Opcional
-                    </span>
-                  </div>
-                  {pendingRegistrationNumber && (
-                    <button
-                      type="button"
-                      onClick={handleClearPendingLink}
-                      className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                      <span>Desvincular</span>
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
-                  {/* Manual input or scan of registration number */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                      <span>Nº de Registro</span>
-                      <span className="text-[10px] font-normal text-slate-500 font-mono">REG-XXXX</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Ex: REG-0001"
-                        value={pendingRegistrationNumber}
-                        onChange={(e) => {
-                          const val = e.target.value.trim().toUpperCase();
-                          setPendingRegistrationNumber(val);
-                          const found = pendingItems.find(p => p.registrationNumber?.toUpperCase() === val);
-                          if (found) {
-                            setSelectedPendingItem(found);
-                          } else {
-                            setSelectedPendingItem(null);
-                          }
-                        }}
-                        className={`w-full px-3 h-[38px] bg-slate-950 rounded-lg text-xs font-mono transition-all border uppercase ${
-                          !pendingLinkValidation.valid 
-                            ? 'border-rose-500 text-rose-300 focus:border-rose-400' 
-                            : pendingRegistrationNumber 
-                            ? 'border-sky-500 text-sky-200 focus:border-sky-400' 
-                            : 'border-slate-800 text-slate-200 focus:border-sky-500'
-                        }`}
-                        id="input-pending-registration-number"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Dropdown to pick from open pending items */}
-                  <div className="space-y-1 relative" ref={pendingSelectorRef}>
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                      <span>Pendências Abertas</span>
-                      <span className="text-[10px] text-sky-400 font-bold">{availablePendingItems.length} disponíveis</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsPendingSelectorOpen(!isPendingSelectorOpen)}
-                      className="w-full px-3 h-[38px] bg-slate-950 border border-slate-800 rounded-lg text-xs text-left text-slate-300 flex items-center justify-between hover:border-slate-700 transition-colors cursor-pointer"
-                      id="btn-select-open-pending"
-                    >
-                      <span className="truncate">
-                        {selectedPendingItem 
-                          ? `${selectedPendingItem.registrationNumber || 'REG'} - ${selectedPendingItem.sku || selectedPendingItem.productName}` 
-                          : 'Selecionar da lista de pendências...'}
-                      </span>
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
-                    </button>
-
-                    {isPendingSelectorOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-800">
-                        {availablePendingItems.length === 0 ? (
-                          <div className="p-3 text-center text-xs text-slate-500">
-                            Nenhuma pendência pendente de vinculação.
-                          </div>
-                        ) : (
-                          availablePendingItems.map((item) => (
-                            <div
-                              key={item.id}
-                              onClick={() => handleApplyPendingItem(item)}
-                              className="p-2.5 hover:bg-slate-800/80 cursor-pointer transition-colors text-xs"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="font-mono font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
-                                  {item.registrationNumber || 'SEM REG'}
-                                </span>
-                                <span className="text-[10px] text-slate-400">
-                                  {item.orderNumber ? `Ped: ${item.orderNumber}` : item.platform || ''}
-                                </span>
-                              </div>
-                              <div className="font-medium text-slate-200 mt-1 truncate">
-                                {item.productName || item.sku}
-                              </div>
-                              <div className="text-[10px] text-amber-400/90 truncate mt-0.5">
-                                Motivo: {item.pendingReason}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Validation and Link Status Feedback */}
-                {!pendingLinkValidation.valid && (
-                  <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                    <span>{pendingLinkValidation.error}</span>
-                  </div>
-                )}
-
-                {pendingRegistrationNumber && pendingLinkValidation.valid && (
-                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs space-y-1">
-                    <div className="flex items-center justify-between text-emerald-300 font-bold">
-                      <div className="flex items-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>Vínculo 1:1 Válido ({pendingRegistrationNumber})</span>
-                      </div>
-                      {selectedPendingItem && (
-                        <button
-                          type="button"
-                          onClick={() => handleApplyPendingItem(selectedPendingItem)}
-                          className="text-[11px] text-sky-300 hover:text-sky-200 underline font-normal cursor-pointer"
-                        >
-                          Reaplicar dados da pendência
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-300">
-                      Ao concluir a triagem, esta pendência será automaticamente finalizada e conectada ao produto inserido no estoque físico.
-                    </p>
-                    {serials.length > 1 && (
-                      <div className="p-2 bg-amber-500/15 border border-amber-500/40 rounded text-amber-300 text-[11px] font-semibold mt-1 flex items-center gap-1.5">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                        <span>Atenção: Você adicionou {serials.length} seriais. Uma pendência só pode ser vinculada a 1 único produto físico.</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
               {/* Step 1: Produto do Catálogo & Números de Série (Agile Focus) */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-product-serials">
                 <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
@@ -1464,9 +1340,9 @@ export default function RmaEntry({
               </div>
             </div>
 
-            {/* Right Side Column: Media Station & Fast Submission (5 cols) */}
+            {/* Right Side Column: Media Station, Pending Link & Fast Submission (5 cols) */}
             <div className="lg:col-span-5 space-y-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5 sticky top-4" id="rma-step-photos">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-photos">
                 <div className="border-b border-slate-800/80 pb-2.5 flex justify-between items-center">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
                     <Clipboard className="text-sky-400 w-4 h-4" />
@@ -1636,7 +1512,216 @@ export default function RmaEntry({
                     </div>
                   )}
                 </div>
+              </div>
 
+              {/* Vincular a uma Pendência (Embaixo da opção de Fotos & Mídia) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3" id="rma-step-pending-link">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 bg-sky-500/15 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md border border-sky-500/30">
+                      <Hash className="w-3 h-3" />
+                    </span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                      Vincular a uma Pendência (Nº de Registro)
+                    </span>
+                    <span className="text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
+                      Opcional
+                    </span>
+                  </div>
+                  {pendingRegistrationNumber && (
+                    <button
+                      type="button"
+                      onClick={handleClearPendingLink}
+                      className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                      id="btn-unlink-pending"
+                    >
+                      <X className="w-3 h-3" />
+                      <span>Desvincular</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Apenas a Caixa de Seleção de Pendências Abertas (filtradas estritamente pelo SKU do produto) */}
+                <div className="space-y-1 relative" ref={pendingSelectorRef}>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <span>Pendências Abertas</span>
+                      {activeSku ? (
+                        <span className="text-[10px] font-mono text-sky-400 font-bold bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
+                          SKU: {activeSku}
+                        </span>
+                      ) : null}
+                    </label>
+                    <div>
+                      {activeSku ? (
+                        <span className={`text-[10px] font-bold ${
+                          availablePendingItems.length > 0 ? 'text-sky-400' : 'text-slate-500'
+                        }`}>
+                          {availablePendingItems.length} {availablePendingItems.length === 1 ? 'disponível' : 'disponíveis'}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-400/90 font-medium">
+                          Aguardando SKU no Passo 1
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!activeSku) return;
+                      setIsPendingSelectorOpen(!isPendingSelectorOpen);
+                    }}
+                    disabled={!activeSku}
+                    className={`w-full px-3.5 h-[40px] bg-slate-950 border rounded-lg text-xs text-left flex items-center justify-between transition-colors ${
+                      !activeSku
+                        ? 'border-slate-800/80 text-slate-500 cursor-not-allowed bg-slate-950/50'
+                        : selectedPendingItem
+                        ? 'border-sky-500 bg-sky-950/20 text-sky-200 cursor-pointer shadow-sm'
+                        : 'border-slate-800 text-slate-300 hover:border-slate-700 cursor-pointer'
+                    }`}
+                    id="btn-select-open-pending"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                      {selectedPendingItem ? (
+                        <>
+                          <span className="font-mono font-bold text-sky-400 bg-sky-500/20 px-2 py-0.5 rounded border border-sky-500/30 shrink-0 text-[11px]">
+                            {selectedPendingItem.registrationNumber || 'REG'}
+                          </span>
+                          <span className="truncate font-medium text-white">
+                            {selectedPendingItem.productName || selectedPendingItem.sku}
+                            {selectedPendingItem.orderNumber && ` (Ped: ${selectedPendingItem.orderNumber})`}
+                          </span>
+                        </>
+                      ) : !activeSku ? (
+                        <span className="text-slate-500 italic">
+                          Informe ou selecione o SKU no Passo 1 para carregar as pendências...
+                        </span>
+                      ) : availablePendingItems.length === 0 ? (
+                        <span className="text-slate-400">
+                          Nenhuma pendência aberta encontrada para o SKU "{activeSku}"
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">
+                          Selecionar da lista de pendências abertas ({availablePendingItems.length} disponíveis para SKU {activeSku})...
+                        </span>
+                      )}
+                    </div>
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${isPendingSelectorOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Dropdown de pendências abertas filtradas estritamente por SKU */}
+                  {isPendingSelectorOpen && activeSku && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700/90 rounded-xl shadow-2xl z-30 max-h-60 overflow-y-auto divide-y divide-slate-800">
+                      <div className="p-2 bg-slate-900/95 text-[10px] text-slate-400 flex items-center justify-between border-b border-slate-800 sticky top-0 backdrop-blur-sm z-10 font-medium">
+                        <span className="font-bold text-slate-300">
+                          Pendências para o SKU <span className="font-mono text-sky-400 font-bold">{activeSku}</span>
+                        </span>
+                        <span className="text-slate-500">{availablePendingItems.length} encontradas</span>
+                      </div>
+
+                      {selectedPendingItem && (
+                        <div
+                          onClick={() => {
+                            handleClearPendingLink();
+                            setIsPendingSelectorOpen(false);
+                          }}
+                          className="p-2.5 hover:bg-slate-800/80 cursor-pointer text-xs text-slate-400 italic flex items-center gap-1.5 border-b border-slate-800/60"
+                        >
+                          <X className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Não vincular a nenhuma pendência (Desvincular)</span>
+                        </div>
+                      )}
+
+                      {availablePendingItems.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-400 space-y-1">
+                          <p className="font-semibold text-slate-300">Nenhuma pendência em aberto para este SKU.</p>
+                          <p className="text-[11px] text-slate-500">Apenas pendências correspondentes ao SKU "{activeSku}" aparecem aqui.</p>
+                        </div>
+                      ) : (
+                        availablePendingItems.map((item) => {
+                          const isSelected = selectedPendingItem?.id === item.id;
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => handleApplyPendingItem(item)}
+                              className={`p-2.5 hover:bg-slate-800/80 cursor-pointer transition-colors text-xs ${
+                                isSelected ? 'bg-sky-500/15 border-l-2 border-sky-400' : ''
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20 text-[11px]">
+                                    {item.registrationNumber || 'SEM REG'}
+                                  </span>
+                                  <span className="font-mono text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
+                                    SKU: {item.sku}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  {item.orderNumber ? `Ped: ${item.orderNumber}` : item.platform || ''}
+                                </span>
+                              </div>
+                              <div className="font-medium text-slate-200 mt-1 truncate">
+                                {item.productName || item.sku}
+                              </div>
+                              <div className="flex items-center justify-between gap-2 text-[10px] text-amber-400/90 truncate mt-0.5">
+                                <span className="truncate">Motivo: {item.pendingReason}</span>
+                                {item.trackingCode && (
+                                  <span className="text-slate-400 font-mono shrink-0">
+                                    {item.trackingCode}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Feedback de Validação e Vínculo */}
+                {!pendingLinkValidation.valid && (
+                  <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{pendingLinkValidation.error}</span>
+                  </div>
+                )}
+
+                {pendingRegistrationNumber && pendingLinkValidation.valid && (
+                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs space-y-1">
+                    <div className="flex items-center justify-between text-emerald-300 font-bold">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Vínculo 1:1 Válido ({pendingRegistrationNumber})</span>
+                      </div>
+                      {selectedPendingItem && (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyPendingItem(selectedPendingItem)}
+                          className="text-[11px] text-sky-300 hover:text-sky-200 underline font-normal cursor-pointer"
+                        >
+                          Reaplicar dados da pendência
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Ao concluir a triagem, esta pendência será vinculada ao produto no estoque físico e permanecerá em aberto para acompanhamento.
+                    </p>
+                    {serials.filter(s => s && s.trim()).length > 1 && (
+                      <div className="p-2 bg-amber-500/15 border border-amber-500/40 rounded text-amber-300 text-[11px] font-semibold mt-1 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Atenção: Você adicionou múltiplos seriais. Uma pendência só pode ser vinculada a 1 único produto físico.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Bloco de Finalização & Salvar */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-submit">
                 {/* Opção de Contador Diário */}
                 <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                   <label className="flex items-start gap-2.5 cursor-pointer select-none">
@@ -1659,7 +1744,7 @@ export default function RmaEntry({
                 </div>
 
                 {/* Prominent Action Button */}
-                <div className="pt-2 border-t border-slate-800/80">
+                <div>
                   <button 
                     type="submit"
                     disabled={isSubmitting}

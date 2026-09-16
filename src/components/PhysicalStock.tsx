@@ -42,7 +42,8 @@ import {
   Calendar,
   ShoppingCart,
   User,
-  Hash
+  Hash,
+  Link2
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType, PendingItem } from '../types';
 import ExcelImportModal from './ExcelImportModal';
@@ -251,6 +252,98 @@ export default function PhysicalStock({
   const [isCustomEditPackageStatus, setIsCustomEditPackageStatus] = useState(false);
   const [customEditPackageStatusText, setCustomEditPackageStatusText] = useState('');
 
+  // SKU-based pending items selector for edit mode
+  const [isEditPendingSelectorOpen, setIsEditPendingSelectorOpen] = useState(false);
+  const editPendingSelectorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (editPendingSelectorRef.current && !editPendingSelectorRef.current.contains(event.target as Node)) {
+        setIsEditPendingSelectorOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const availableEditPendingItems = useMemo(() => {
+    if (!pendingItems || pendingItems.length === 0 || !editForm) return [];
+    
+    // Strict SKU matching: if editForm.sku is present, ONLY show pending items matching that SKU
+    const normalizedSku = (editForm.sku || '').trim().toLowerCase();
+    if (!normalizedSku) return [];
+
+    return pendingItems.filter((item) => {
+      // Is it already linked to this unit?
+      const isAlreadyLinkedToThisUnit = 
+        (editForm.pendingRegistrationNumber && item.registrationNumber && editForm.pendingRegistrationNumber.toUpperCase() === item.registrationNumber.toUpperCase()) ||
+        (editForm.pendingItemId && item.id === editForm.pendingItemId) ||
+        (item.linkedUnitId && item.linkedUnitId === editForm.id);
+
+      // Must be open / pending (or already linked to this unit)
+      const isPending = !item.status || (item.status !== 'Resolvido' && item.status !== 'Cancelado') || isAlreadyLinkedToThisUnit;
+      if (!isPending) return false;
+
+      // Strict SKU comparison
+      const itemSku = (item.sku || '').trim().toLowerCase();
+      if (!itemSku || itemSku !== normalizedSku) return false;
+
+      // Must not be linked to ANOTHER unit
+      const isLinkedToAnotherUnit = units.some((u) => {
+        if (u.id === editForm.id) return false;
+        return (
+          (u.pendingRegistrationNumber && item.registrationNumber && u.pendingRegistrationNumber.toLowerCase() === item.registrationNumber.toLowerCase()) ||
+          (u.pendingItemId && item.id && u.pendingItemId === item.id) ||
+          (item.linkedUnitId && item.linkedUnitId === u.id)
+        );
+      });
+      if (isLinkedToAnotherUnit) return false;
+
+      return true;
+    });
+  }, [pendingItems, editForm?.sku, editForm?.id, editForm?.pendingRegistrationNumber, editForm?.pendingItemId, units]);
+
+  const editPendingLinkValidation = useMemo(() => {
+    if (!editForm || !editForm.pendingRegistrationNumber || !editForm.pendingRegistrationNumber.trim()) {
+      return { valid: true };
+    }
+    return validatePendingItemLink(editForm.pendingRegistrationNumber, editForm.id, pendingItems, units);
+  }, [editForm?.pendingRegistrationNumber, editForm?.id, pendingItems, units]);
+
+  const handleSelectEditPendingItem = (item: PendingItem) => {
+    if (!editForm) return;
+    const updated = { ...editForm };
+    updated.pendingRegistrationNumber = item.registrationNumber || undefined;
+    updated.pendingItemId = item.id;
+
+    // Pull other relevant fields if currently empty (without modifying notes/laudo or customerReason/motivo)
+    if (!updated.orderNumber && item.orderNumber) {
+      updated.orderNumber = item.orderNumber;
+    }
+    if (!updated.serialNumber && item.serialNumber) {
+      updated.serialNumber = item.serialNumber;
+    }
+    if (!updated.platform && item.platform) {
+      updated.platform = item.platform as any;
+    }
+    if (item.trackingCode && (!updated.trackingCode || updated.trackingCode.trim() === '')) {
+      updated.trackingCode = item.trackingCode;
+    }
+
+    setEditForm(updated);
+    setIsEditPendingSelectorOpen(false);
+  };
+
+  const handleClearEditPendingLink = () => {
+    if (!editForm) return;
+    setEditForm({
+      ...editForm,
+      pendingRegistrationNumber: undefined,
+      pendingItemId: undefined
+    });
+    setIsEditPendingSelectorOpen(false);
+  };
+
   // If initialSelectedUnit changed from parent, keep local state in sync
   React.useEffect(() => {
     if (initialSelectedUnit) {
@@ -276,6 +369,7 @@ export default function PhysicalStock({
     setCustomEditDeviceStatusText('');
     setIsCustomEditPackageStatus(false);
     setCustomEditPackageStatusText('');
+    setIsEditPendingSelectorOpen(false);
   };
 
   const handleStartEdit = (unit: TriageUnit) => {
@@ -1974,9 +2068,12 @@ export default function PhysicalStock({
                           </span>
                         )}
                         {unit.pendingRegistrationNumber && (
-                          <span className="bg-sky-500/15 text-sky-300 border border-sky-500/30 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-1" title={`Vinculado à Pendência: ${unit.pendingRegistrationNumber}`}>
-                            <Hash className="w-2.5 h-2.5 text-sky-400" />
-                            <span>{unit.pendingRegistrationNumber}</span>
+                          <span 
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-sky-400 bg-sky-500/10 border border-sky-500/20 hover:bg-sky-500/20 transition-colors cursor-help" 
+                            title={`Vinculado à Pendência: ${unit.pendingRegistrationNumber}`}
+                          >
+                            <Link2 className="w-2.5 h-2.5 text-sky-400" />
+                            <span>Vinculado</span>
                           </span>
                         )}
                       </div>
@@ -2321,9 +2418,12 @@ export default function PhysicalStock({
                           </span>
                         )}
                         {unit.pendingRegistrationNumber && (
-                          <span className="bg-sky-500/15 text-sky-300 border border-sky-500/30 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-1" title={`Vinculado à Pendência: ${unit.pendingRegistrationNumber}`}>
-                            <Hash className="w-2.5 h-2.5 text-sky-400" />
-                            <span>{unit.pendingRegistrationNumber}</span>
+                          <span 
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-sky-400 bg-sky-500/10 border border-sky-500/20 hover:bg-sky-500/20 transition-colors cursor-help" 
+                            title={`Vinculado à Pendência: ${unit.pendingRegistrationNumber}`}
+                          >
+                            <Link2 className="w-2.5 h-2.5 text-sky-400" />
+                            <span>Vinculado</span>
                           </span>
                         )}
                         {unit.platform ? (
@@ -2752,21 +2852,124 @@ export default function PhysicalStock({
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center justify-between">
-                        <span className="flex items-center gap-1">
+                    <div className="relative" ref={editPendingSelectorRef}>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
                           <Hash className="w-3 h-3 text-sky-400" />
                           <span>Nº Registro da Pendência</span>
-                        </span>
-                        <span className="text-slate-500 font-normal text-[10px]">(1 pendência = 1 produto)</span>
-                      </label>
-                      <input 
-                        type="text" 
-                        value={editForm.pendingRegistrationNumber || ''} 
-                        onChange={(e) => setEditForm({ ...editForm, pendingRegistrationNumber: e.target.value.trim().toUpperCase() })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-sky-400 font-mono uppercase focus:outline-none focus:border-sky-500" 
-                        placeholder="Ex: REG-0001"
-                      />
+                        </label>
+                        {editForm.pendingRegistrationNumber && (
+                          <button
+                            type="button"
+                            onClick={handleClearEditPendingLink}
+                            className="text-[10px] text-rose-400 hover:text-rose-300 flex items-center gap-0.5 cursor-pointer transition-colors"
+                            title="Remover vínculo com a pendência"
+                            id="btn-edit-clear-pending"
+                          >
+                            <X className="w-3 h-3" />
+                            <span>Desvincular</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Dropdown selector trigger */}
+                      <button
+                        type="button"
+                        onClick={() => setIsEditPendingSelectorOpen(!isEditPendingSelectorOpen)}
+                        className={`w-full p-2.5 rounded-lg text-xs text-left flex items-center justify-between transition-colors border cursor-pointer ${
+                          editForm.pendingRegistrationNumber
+                            ? 'bg-sky-950/40 border-sky-500 text-sky-200'
+                            : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-600'
+                        }`}
+                        id="btn-edit-select-pending"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-1.5">
+                          {editForm.pendingRegistrationNumber ? (
+                            <>
+                              <span className="font-mono font-bold text-sky-400 bg-sky-500/20 px-1.5 py-0.5 rounded text-[10px] border border-sky-500/30 shrink-0">
+                                {editForm.pendingRegistrationNumber}
+                              </span>
+                              <span className="truncate text-[11px] text-slate-200 font-medium">
+                                {(() => {
+                                  const matched = (pendingItems || []).find(p => p.registrationNumber === editForm.pendingRegistrationNumber);
+                                  return matched ? (matched.orderNumber ? `Ped: ${matched.orderNumber}` : matched.platform || 'Vinculada') : 'Vinculada';
+                                })()}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400 truncate text-[11px]">
+                              {availableEditPendingItems.length > 0
+                                ? `Puxar pendência (${availableEditPendingItems.length} disponíveis SKU ${editForm.sku})...`
+                                : `Nenhuma pendência aberta para SKU ${editForm.sku}`}
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${isEditPendingSelectorOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Dropdown list of pending items filtered strictly by SKU */}
+                      {isEditPendingSelectorOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800">
+                          <div className="p-2 bg-slate-900 text-[10px] text-slate-400 flex items-center justify-between sticky top-0 backdrop-blur-sm z-10 border-b border-slate-800 font-medium">
+                            <span className="font-bold text-slate-300">
+                              Pendências Abertas (SKU <span className="font-mono text-sky-400">{editForm.sku}</span>)
+                            </span>
+                            <span className="text-sky-400 font-mono font-bold">{availableEditPendingItems.length}</span>
+                          </div>
+
+                          {editForm.pendingRegistrationNumber && (
+                            <div
+                              onClick={handleClearEditPendingLink}
+                              className="p-2 hover:bg-slate-800 cursor-pointer text-xs text-rose-300 flex items-center gap-1.5 transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5 text-rose-400" />
+                              <span>Remover vínculo atual (Desvincular)</span>
+                            </div>
+                          )}
+
+                          {availableEditPendingItems.length === 0 ? (
+                            <div className="p-3 text-center text-xs text-slate-400 space-y-1">
+                              <p className="text-slate-300 font-medium">Nenhuma pendência aberta para este SKU.</p>
+                              <p className="text-[10px] text-slate-500">Apenas pendências abertas com o SKU "{editForm.sku}" podem ser vinculadas.</p>
+                            </div>
+                          ) : (
+                            availableEditPendingItems.map((item) => {
+                              const isSelected = editForm.pendingRegistrationNumber === item.registrationNumber;
+                              return (
+                                <div
+                                  key={item.id}
+                                  onClick={() => handleSelectEditPendingItem(item)}
+                                  className={`p-2 hover:bg-slate-800/80 cursor-pointer transition-colors text-xs ${
+                                    isSelected ? 'bg-sky-500/15 border-l-2 border-sky-400' : ''
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="font-mono font-bold text-sky-400 text-[10px] bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
+                                      {item.registrationNumber || 'SEM REG'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 truncate">
+                                      {item.orderNumber ? `Ped: ${item.orderNumber}` : item.platform || ''}
+                                    </span>
+                                  </div>
+                                  <div className="font-medium text-slate-200 text-[11px] truncate mt-0.5">
+                                    {item.productName || item.sku}
+                                  </div>
+                                  <div className="text-[10px] text-amber-400/90 truncate mt-0.5">
+                                    Motivo: {item.pendingReason}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+
+                      {!editPendingLinkValidation.valid && (
+                        <p className="text-[10px] text-rose-400 mt-1 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          <span>{editPendingLinkValidation.error}</span>
+                        </p>
+                      )}
                     </div>
 
                     <div className="sm:col-span-3">

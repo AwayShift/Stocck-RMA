@@ -1400,7 +1400,7 @@ export default function PendingItems({
                       }`}>
                         {item.sku || 'SEM SKU'}
                       </span>
-                      {item.transferredToStock && (
+                      {(item.linkedUnitId || item.transferredToStock) && (
                         <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/30 flex items-center gap-1" title="Vinculado a produto no estoque">
                           <LinkIcon className="w-3 h-3 text-emerald-400" />
                           <span>{item.linkedUnitTrackingCode ? `Vinculado (${item.linkedUnitTrackingCode})` : 'Vinculado ao Estoque'}</span>
@@ -1586,10 +1586,10 @@ export default function PendingItems({
                           <Hash className="w-3 h-3 text-sky-400" />
                           <span>{item.registrationNumber || '-'}</span>
                         </span>
-                        {item.transferredToStock && (
+                        {(item.linkedUnitId || item.transferredToStock) && (
                           <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
                             <LinkIcon className="w-2.5 h-2.5" />
-                            <span>{item.linkedUnitTrackingCode || 'No Estoque'}</span>
+                            <span>{item.linkedUnitTrackingCode ? `Vinculado (${item.linkedUnitTrackingCode})` : 'No Estoque'}</span>
                           </div>
                         )}
                       </td>

@@ -1227,7 +1227,7 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     updatedAt: r.updated_at || r.updatedAt,
     createdBy: r.created_by || r.createdBy,
     resolvedAt: r.resolved_at || r.resolvedAt || null,
-    transferredToStock: Boolean(r.transferred_to_stock ?? r.transferredToStock ?? linkedUnitId),
+    transferredToStock: Boolean(r.transferred_to_stock ?? r.transferredToStock),
     transferredUnitId: linkedUnitId,
     destinationSectorSuggested: r.destination_sector_suggested || r.destinationSectorSuggested || 'RMA',
     registrationNumber: regNum,

@@ -737,12 +737,11 @@ export const linkPendingItemToProduct = async (
   };
   await saveTriageUnit(updatedUnit);
 
-  // 2. Atualiza a pendência como vinculada e resolvida
+  // 2. Atualiza a pendência como vinculada ao produto, mantendo-a em aberto (sem dar baixa e sem marcar como transferido)
   const updatedPending: PendingItem = {
     ...targetPending,
-    status: 'Resolvido',
-    resolvedAt: now,
-    transferredToStock: true,
+    status: targetPending.status === 'Resolvido' ? 'Pendente' : (targetPending.status || 'Pendente'),
+    transferredToStock: false,
     transferredUnitId: unit.id,
     linkedUnitId: unit.id,
     linkedUnitTrackingCode: unit.trackingCode || '',
@@ -1724,12 +1723,12 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
       });
     }
 
-    if (matchedPending && (!matchedPending.transferredToStock || matchedPending.transferredUnitId !== savedUnit.id)) {
+    if (matchedPending && (matchedPending.linkedUnitId !== savedUnit.id || matchedPending.transferredToStock)) {
       const updatedPending: PendingItem = {
         ...matchedPending,
-        status: 'Resolvido',
-        resolvedAt: matchedPending.resolvedAt || now,
-        transferredToStock: true,
+        // Mantém em aberto, não marca como transferido ao estoque e não dá baixa
+        status: matchedPending.status === 'Resolvido' ? 'Pendente' : (matchedPending.status || 'Pendente'),
+        transferredToStock: false,
         transferredUnitId: savedUnit.id,
         linkedUnitId: savedUnit.id,
         linkedUnitTrackingCode: savedUnit.trackingCode || '',

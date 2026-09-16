@@ -565,6 +565,31 @@ export default function App() {
       }
       return [saved, ...prev];
     });
+
+    setPendingItems(prev => prev.map(p => {
+      const isMatch = (saved.pendingItemId && p.id === saved.pendingItemId) ||
+        (saved.pendingRegistrationNumber && p.registrationNumber && p.registrationNumber.toUpperCase() === saved.pendingRegistrationNumber.toUpperCase());
+      if (isMatch) {
+        return {
+          ...p,
+          status: p.status === 'Resolvido' ? 'Pendente' : (p.status || 'Pendente'),
+          transferredToStock: false,
+          transferredUnitId: saved.id,
+          linkedUnitId: saved.id,
+          linkedUnitTrackingCode: saved.trackingCode || ''
+        };
+      }
+      if (p.linkedUnitId === saved.id || p.transferredUnitId === saved.id) {
+        return {
+          ...p,
+          transferredToStock: false,
+          transferredUnitId: undefined,
+          linkedUnitId: undefined,
+          linkedUnitTrackingCode: undefined
+        };
+      }
+      return p;
+    }));
   };
 
   const handleDeleteTriage = async (id: string) => {
