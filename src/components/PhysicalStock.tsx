@@ -269,8 +269,9 @@ export default function PhysicalStock({
   const availableEditPendingItems = useMemo(() => {
     if (!pendingItems || pendingItems.length === 0 || !editForm) return [];
     
-    // Strict SKU matching: if editForm.sku is present, ONLY show pending items matching that SKU
-    const normalizedSku = (editForm.sku || '').trim().toLowerCase();
+    // Strict SKU matching: if editForm.baseProductSku is present, ONLY show pending items matching that SKU
+    const currentSku = (editForm.baseProductSku || (editForm as any).sku || '').trim();
+    const normalizedSku = currentSku.toLowerCase();
     if (!normalizedSku) return [];
 
     return pendingItems.filter((item) => {
@@ -301,7 +302,7 @@ export default function PhysicalStock({
 
       return true;
     });
-  }, [pendingItems, editForm?.sku, editForm?.id, editForm?.pendingRegistrationNumber, editForm?.pendingItemId, units]);
+  }, [pendingItems, editForm?.baseProductSku, (editForm as any)?.sku, editForm?.id, editForm?.pendingRegistrationNumber, editForm?.pendingItemId, units]);
 
   const editPendingLinkValidation = useMemo(() => {
     if (!editForm || !editForm.pendingRegistrationNumber || !editForm.pendingRegistrationNumber.trim()) {
@@ -2899,8 +2900,8 @@ export default function PhysicalStock({
                           ) : (
                             <span className="text-slate-400 truncate text-[11px]">
                               {availableEditPendingItems.length > 0
-                                ? `Puxar pendência (${availableEditPendingItems.length} disponíveis SKU ${editForm.sku})...`
-                                : `Nenhuma pendência aberta para SKU ${editForm.sku}`}
+                                ? `Puxar pendência (${availableEditPendingItems.length} disponíveis SKU ${editForm.baseProductSku || (editForm as any).sku || ''})...`
+                                : `Nenhuma pendência aberta para SKU ${editForm.baseProductSku || (editForm as any).sku || ''}`}
                             </span>
                           )}
                         </div>
@@ -2912,7 +2913,7 @@ export default function PhysicalStock({
                         <div className="absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800">
                           <div className="p-2 bg-slate-900 text-[10px] text-slate-400 flex items-center justify-between sticky top-0 backdrop-blur-sm z-10 border-b border-slate-800 font-medium">
                             <span className="font-bold text-slate-300">
-                              Pendências Abertas (SKU <span className="font-mono text-sky-400">{editForm.sku}</span>)
+                              Pendências Abertas (SKU <span className="font-mono text-sky-400">{editForm.baseProductSku || (editForm as any).sku || ''}</span>)
                             </span>
                             <span className="text-sky-400 font-mono font-bold">{availableEditPendingItems.length}</span>
                           </div>
@@ -2930,7 +2931,7 @@ export default function PhysicalStock({
                           {availableEditPendingItems.length === 0 ? (
                             <div className="p-3 text-center text-xs text-slate-400 space-y-1">
                               <p className="text-slate-300 font-medium">Nenhuma pendência aberta para este SKU.</p>
-                              <p className="text-[10px] text-slate-500">Apenas pendências abertas com o SKU "{editForm.sku}" podem ser vinculadas.</p>
+                              <p className="text-[10px] text-slate-500">Apenas pendências abertas com o SKU "{editForm.baseProductSku || (editForm as any).sku || ''}" podem ser vinculadas.</p>
                             </div>
                           ) : (
                             availableEditPendingItems.map((item) => {
