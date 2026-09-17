@@ -905,15 +905,8 @@ export default function BaseCatalog({
                 )}
               </div>
 
-              {!hasMore && !hasMoreFromDb && (
-                <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-emerald-500" />
-                  Todos os {products.length} produtos foram carregados do banco de dados
-                </span>
-              )}
-
               <span className="text-xs text-slate-400 font-medium">
-                Exibindo <strong className="text-sky-400 font-bold">{displayedProducts.length}</strong> de <strong className="text-white font-bold">{filteredProducts.length}</strong> {filteredProducts.length === 1 ? 'produto' : 'produtos'} carregados na sessão
+                Exibindo <strong className="text-sky-400 font-bold">{displayedProducts.length}</strong> de <strong className="text-white font-bold">{filteredProducts.length}</strong> {filteredProducts.length === 1 ? 'produto' : 'produtos'}
               </span>
             </div>
           </>

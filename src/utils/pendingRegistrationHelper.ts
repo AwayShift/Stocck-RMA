@@ -151,8 +151,8 @@ export function validatePendingItemLink(
     if (u.pendingItemId && u.pendingItemId === pending.id) {
       return true;
     }
-    // Também checa se a própria pendência aponta para esta unidade e não é a unidade atual
-    if (pending.transferredUnitId && pending.transferredUnitId === u.id) {
+    // Também checa se a própria pendência aponta para esta unidade ativa e não é a unidade atual
+    if (pending.transferredUnitId && pending.transferredUnitId === u.id && (u.pendingRegistrationNumber || u.pendingItemId)) {
       return true;
     }
     return false;

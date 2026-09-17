@@ -384,10 +384,47 @@ export const testSupabaseConnection = async (config?: SupabaseConfig): Promise<{
 };
 
 // SQL Schema generator for users to copy-paste into Supabase SQL Editor
+export const SUPABASE_REALTIME_ENABLE_SQL = `-- ========================================================
+-- ATIVAR SINCRONIZAÇÃO INSTANTÂNEA REALTIME NO SUPABASE
+-- Cole e execute este script no "SQL Editor" do seu Supabase
+-- para que qualquer alteração seja transmitida instantaneamente (0ms) via WebSocket!
+-- ========================================================
+
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE products;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE triage_units;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE daily_inflows;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE pending_items;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE audit_logs;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+END $$;
+
+ALTER TABLE products REPLICA IDENTITY FULL;
+ALTER TABLE triage_units REPLICA IDENTITY FULL;
+ALTER TABLE daily_inflows REPLICA IDENTITY FULL;
+ALTER TABLE pending_items REPLICA IDENTITY FULL;
+ALTER TABLE audit_logs REPLICA IDENTITY FULL;
+`;
+
 export const SUPABASE_QUICK_PATCH_SQL = `-- ========================================================
--- ATUALIZAÇÃO RÁPIDA DE COLUNAS NO SUPABASE (STOCCKRMA)
+-- ATUALIZAÇÃO RÁPIDA DE COLUNAS & REALTIME NO SUPABASE (STOCCKRMA)
 -- Execute este script no "SQL Editor" do seu painel Supabase
--- para habilitar colunas nativas sem recriar tabelas.
+-- para habilitar colunas nativas e sincronização instantânea WebSocket.
 -- ========================================================
 
 ALTER TABLE triage_units ADD COLUMN IF NOT EXISTS exclude_from_daily_count BOOLEAN DEFAULT FALSE;
@@ -402,6 +439,37 @@ ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_unit_id TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS destination_sector_suggested TEXT;
 CREATE INDEX IF NOT EXISTS idx_pending_items_reg ON pending_items(registration_number);
 CREATE INDEX IF NOT EXISTS idx_triage_units_pending_reg ON triage_units(pending_registration_number);
+
+-- Habilitar transmissão instantânea via Supabase Realtime
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE products;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE triage_units;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE daily_inflows;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE pending_items;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE audit_logs;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+END $$;
+
+ALTER TABLE products REPLICA IDENTITY FULL;
+ALTER TABLE triage_units REPLICA IDENTITY FULL;
+ALTER TABLE daily_inflows REPLICA IDENTITY FULL;
+ALTER TABLE pending_items REPLICA IDENTITY FULL;
+ALTER TABLE audit_logs REPLICA IDENTITY FULL;
 `;
 
 export const SUPABASE_SQL_SCHEMA = `-- ========================================================
@@ -763,6 +831,37 @@ CREATE POLICY "Public storage update product-images" ON storage.objects FOR UPDA
 
 DROP POLICY IF EXISTS "Public storage delete product-images" ON storage.objects;
 CREATE POLICY "Public storage delete product-images" ON storage.objects FOR DELETE USING (bucket_id = 'product-images');
+
+-- 11. Habilitação de Realtime Instantâneo (WebSocket broadcast entre abas e dispositivos)
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE products;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE triage_units;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE daily_inflows;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE pending_items;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE audit_logs;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+END $$;
+
+ALTER TABLE products REPLICA IDENTITY FULL;
+ALTER TABLE triage_units REPLICA IDENTITY FULL;
+ALTER TABLE daily_inflows REPLICA IDENTITY FULL;
+ALTER TABLE pending_items REPLICA IDENTITY FULL;
+ALTER TABLE audit_logs REPLICA IDENTITY FULL;
 `;
 
 export function isValidUUID(str: string): boolean {

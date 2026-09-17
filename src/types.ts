@@ -121,7 +121,9 @@ export function isMigrationUnit(u: {
   excludeFromDailyCount?: boolean;
 }): boolean {
   if (!u) return false;
-  if (u.excludeFromDailyCount) return true;
+  // If explicitly marked false (e.g. upon sector transfer or deliberate inclusion), always count it
+  if (u.excludeFromDailyCount === false) return false;
+  if (u.excludeFromDailyCount === true) return true;
   if (u.isMigration) return true;
   if (u.source === 'excel' || u.source === 'migration') return true;
   if (u.id && (

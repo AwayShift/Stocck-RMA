@@ -69,6 +69,122 @@ const saveMetadata = () => {
   }
 };
 
+// ============================================================================
+// CROSS-TAB INSTANT SYNCHRONIZATION BUS (BroadcastChannel)
+// Provides 0ms instantaneous updates across different browser tabs/windows
+// ============================================================================
+
+export interface CrossTabSyncMessage {
+  type: 'mutation' | 'sync_request';
+  collection: 'products' | 'triage_units' | 'daily_inflows' | 'pending_items';
+  action: 'update' | 'remove' | 'full';
+  item?: any;
+  id?: string;
+  items?: any[];
+  timestamp: number;
+}
+
+type CrossTabListener = (msg: CrossTabSyncMessage) => void;
+const crossTabListeners = new Set<CrossTabListener>();
+
+export const subscribeCrossTabSync = (listener: CrossTabListener) => {
+  crossTabListeners.add(listener);
+  return () => {
+    crossTabListeners.delete(listener);
+  };
+};
+
+const crossTabBus = typeof window !== 'undefined' && 'BroadcastChannel' in window
+  ? new BroadcastChannel('stocckrma_cross_tab_sync_bus')
+  : null;
+
+export const broadcastCrossTabMutation = (
+  collection: 'products' | 'triage_units' | 'daily_inflows' | 'pending_items',
+  action: 'update' | 'remove' | 'full',
+  payload?: { item?: any; id?: string; items?: any[] }
+) => {
+  if (crossTabBus) {
+    try {
+      crossTabBus.postMessage({
+        type: 'mutation',
+        collection,
+        action,
+        item: payload?.item,
+        id: payload?.id,
+        items: payload?.items,
+        timestamp: Date.now()
+      });
+    } catch (e) {
+      console.warn('Failed broadcasting cross tab mutation:', e);
+    }
+  }
+};
+
+// Listen for instant mutations triggered in other open tabs
+if (crossTabBus) {
+  crossTabBus.onmessage = (event) => {
+    const msg = event.data as CrossTabSyncMessage;
+    if (!msg || !msg.collection) return;
+
+    if (msg.action === 'update' && msg.item) {
+      if (msg.collection === 'products') {
+        const list = [...(memoryProducts || loadFromStorage<BaseProduct>(CACHE_KEY_PRODUCTS) || [])];
+        const idx = list.findIndex(p => p.id === msg.item.id);
+        if (idx >= 0) list[idx] = msg.item;
+        else list.unshift(msg.item);
+        memoryProducts = list;
+        persistToStorage(CACHE_KEY_PRODUCTS, list);
+      } else if (msg.collection === 'triage_units') {
+        const list = [...(memoryTriageUnits || loadFromStorage<TriageUnit>(CACHE_KEY_TRIAGE_UNITS) || [])];
+        const idx = list.findIndex(u => u.id === msg.item.id);
+        if (idx >= 0) list[idx] = msg.item;
+        else list.unshift(msg.item);
+        memoryTriageUnits = list;
+        persistToStorage(CACHE_KEY_TRIAGE_UNITS, list);
+      } else if (msg.collection === 'daily_inflows') {
+        const current = memoryDailyInflows || loadFromStorage<DailyInflowRecord>(CACHE_KEY_DAILY_INFLOWS) || [];
+        const list = current.filter(d => d.id !== msg.item.id && d.date !== msg.item.date);
+        list.push(msg.item);
+        list.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        memoryDailyInflows = list;
+        persistToStorage(CACHE_KEY_DAILY_INFLOWS, list);
+      } else if (msg.collection === 'pending_items') {
+        const list = [...(memoryPendingItems || loadFromStorage<PendingItem>(CACHE_KEY_PENDING_ITEMS) || [])];
+        const idx = list.findIndex(p => p.id === msg.item.id);
+        if (idx >= 0) list[idx] = msg.item;
+        else list.unshift(msg.item);
+        memoryPendingItems = list;
+        persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
+      }
+    } else if (msg.action === 'remove' && msg.id) {
+      if (msg.collection === 'products') {
+        const list = (memoryProducts || loadFromStorage<BaseProduct>(CACHE_KEY_PRODUCTS) || []).filter(p => p.id !== msg.id);
+        memoryProducts = list;
+        persistToStorage(CACHE_KEY_PRODUCTS, list);
+      } else if (msg.collection === 'triage_units') {
+        const list = (memoryTriageUnits || loadFromStorage<TriageUnit>(CACHE_KEY_TRIAGE_UNITS) || []).filter(u => u.id !== msg.id);
+        memoryTriageUnits = list;
+        persistToStorage(CACHE_KEY_TRIAGE_UNITS, list);
+      } else if (msg.collection === 'daily_inflows') {
+        const list = (memoryDailyInflows || loadFromStorage<DailyInflowRecord>(CACHE_KEY_DAILY_INFLOWS) || []).filter(d => d.id !== msg.id && d.date !== msg.id);
+        memoryDailyInflows = list;
+        persistToStorage(CACHE_KEY_DAILY_INFLOWS, list);
+      } else if (msg.collection === 'pending_items') {
+        const list = (memoryPendingItems || loadFromStorage<PendingItem>(CACHE_KEY_PENDING_ITEMS) || []).filter(p => p.id !== msg.id);
+        memoryPendingItems = list;
+        persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
+      }
+    }
+
+    crossTabListeners.forEach(fn => {
+      try { fn(msg); } catch (e) { console.warn('Cross-tab listener error:', e); }
+    });
+  };
+}
+
+// Safety buffer in ms to protect against clock drift and in-flight transactions
+const SYNC_SAFETY_BUFFER_MS = 60 * 1000; // 60 seconds
+
 /**
  * Load items from LocalStorage
  */
@@ -123,6 +239,7 @@ export const syncBaseProductsIncrementally = async (
 
   const currentCached = getCachedBaseProducts();
   const lastSync = syncMeta.lastSyncProducts;
+  const queryStartTime = new Date().toISOString();
 
   // If no cache or forced full sync, perform initial bulk fetch
   if (forceFull || currentCached.length === 0 || !lastSync) {
@@ -150,24 +267,30 @@ export const syncBaseProductsIncrementally = async (
       const mapped = data.map(mapSupabaseToProduct);
       memoryProducts = mapped;
       persistToStorage(CACHE_KEY_PRODUCTS, mapped);
-      syncMeta.lastSyncProducts = new Date().toISOString();
+      syncMeta.lastSyncProducts = queryStartTime;
       saveMetadata();
       return mapped;
     }
     return currentCached;
   }
 
-  // Incremental fetch: records updated after last sync + lightweight ID reconciliation for deletions
+  // Incremental fetch with safety window against clock drift and in-flight updates
   try {
+    const safeSyncTimestamp = lastSync 
+      ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
+      : null;
+
     const [updatedRes, idsRes] = await Promise.all([
       supabase
         .from('products')
         .select(PRODUCT_COLUMNS)
-        .gt('updated_at', lastSync)
-        .order('updated_at', { ascending: true }),
+        .gt('updated_at', safeSyncTimestamp || lastSync)
+        .order('updated_at', { ascending: true })
+        .limit(3000),
       supabase
         .from('products')
         .select('id')
+        .limit(20000)
     ]);
 
     if (updatedRes.error) {
@@ -175,8 +298,9 @@ export const syncBaseProductsIncrementally = async (
       const fallbackUpdated = await supabase
         .from('products')
         .select('*')
-        .gt('updated_at', lastSync)
-        .order('updated_at', { ascending: true });
+        .gt('updated_at', safeSyncTimestamp || lastSync)
+        .order('updated_at', { ascending: true })
+        .limit(3000);
       if (!fallbackUpdated.error && fallbackUpdated.data) {
         updatedRes.data = fallbackUpdated.data;
         updatedRes.error = null;
@@ -217,7 +341,7 @@ export const syncBaseProductsIncrementally = async (
 
     memoryProducts = merged;
     persistToStorage(CACHE_KEY_PRODUCTS, merged);
-    syncMeta.lastSyncProducts = new Date().toISOString();
+    syncMeta.lastSyncProducts = queryStartTime;
     saveMetadata();
     return merged;
   } catch (err) {
@@ -248,6 +372,7 @@ export const syncTriageUnitsIncrementally = async (
 
   const currentCached = getCachedTriageUnits();
   const lastSync = syncMeta.lastSyncTriageUnits;
+  const queryStartTime = new Date().toISOString();
 
   if (forceFull || currentCached.length === 0 || !lastSync) {
     let { data, error } = await supabase
@@ -286,24 +411,30 @@ export const syncTriageUnitsIncrementally = async (
       const mapped = data.map(mapSupabaseToTriageUnit);
       memoryTriageUnits = mapped;
       persistToStorage(CACHE_KEY_TRIAGE_UNITS, mapped);
-      syncMeta.lastSyncTriageUnits = new Date().toISOString();
+      syncMeta.lastSyncTriageUnits = queryStartTime;
       saveMetadata();
       return mapped;
     }
     return currentCached;
   }
 
-  // Incremental fetch: only changed triage units + deletion reconciliation
+  // Incremental fetch with safety buffer against clock drift & concurrent updates
   try {
+    const safeSyncTimestamp = lastSync
+      ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
+      : null;
+
     const [updatedRes, idsRes] = await Promise.all([
       supabase
         .from('triage_units')
         .select(getTriageColumns())
-        .gt('updated_at', lastSync)
-        .order('updated_at', { ascending: true }),
+        .gt('updated_at', safeSyncTimestamp || lastSync)
+        .order('updated_at', { ascending: true })
+        .limit(5000),
       supabase
         .from('triage_units')
         .select('id')
+        .limit(20000)
     ]);
 
     if (updatedRes.error) {
@@ -314,8 +445,9 @@ export const syncTriageUnitsIncrementally = async (
       const safeFallback = await supabase
         .from('triage_units')
         .select(getTriageColumns())
-        .gt('updated_at', lastSync)
-        .order('updated_at', { ascending: true });
+        .gt('updated_at', safeSyncTimestamp || lastSync)
+        .order('updated_at', { ascending: true })
+        .limit(5000);
       if (!safeFallback.error && safeFallback.data) {
         updatedRes.data = safeFallback.data;
         updatedRes.error = null;
@@ -323,8 +455,9 @@ export const syncTriageUnitsIncrementally = async (
         const starFallback = await supabase
           .from('triage_units')
           .select('*')
-          .gt('updated_at', lastSync)
-          .order('updated_at', { ascending: true });
+          .gt('updated_at', safeSyncTimestamp || lastSync)
+          .order('updated_at', { ascending: true })
+          .limit(5000);
         if (!starFallback.error && starFallback.data) {
           updatedRes.data = starFallback.data;
           updatedRes.error = null;
@@ -363,7 +496,7 @@ export const syncTriageUnitsIncrementally = async (
 
     memoryTriageUnits = merged;
     persistToStorage(CACHE_KEY_TRIAGE_UNITS, merged);
-    syncMeta.lastSyncTriageUnits = new Date().toISOString();
+    syncMeta.lastSyncTriageUnits = queryStartTime;
     saveMetadata();
     return merged;
   } catch (err) {
@@ -394,6 +527,7 @@ export const syncDailyInflowsIncrementally = async (
 
   const currentCached = getCachedDailyInflows();
   const lastSync = syncMeta.lastSyncDailyInflows;
+  const queryStartTime = new Date().toISOString();
 
   if (forceFull || currentCached.length === 0 || !lastSync) {
     let { data, error } = await supabase
@@ -420,7 +554,7 @@ export const syncDailyInflowsIncrementally = async (
       const mapped = data.map(mapSupabaseToDailyInflow);
       memoryDailyInflows = mapped;
       persistToStorage(CACHE_KEY_DAILY_INFLOWS, mapped);
-      syncMeta.lastSyncDailyInflows = new Date().toISOString();
+      syncMeta.lastSyncDailyInflows = queryStartTime;
       saveMetadata();
       return mapped;
     }
@@ -428,22 +562,27 @@ export const syncDailyInflowsIncrementally = async (
   }
 
   try {
+    const safeSyncTimestamp = lastSync
+      ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
+      : null;
+
     let [updatedRes, idsRes] = await Promise.all([
       supabase
         .from('daily_inflows')
         .select(INFLOW_COLUMNS)
-        .gt('updated_at', lastSync)
+        .gt('updated_at', safeSyncTimestamp || lastSync)
         .order('updated_at', { ascending: true }),
       supabase
         .from('daily_inflows')
         .select('id, date')
+        .limit(10000)
     ]);
 
     if (updatedRes.error) {
       const fallback = await supabase
         .from('daily_inflows')
         .select('*')
-        .gt('updated_at', lastSync)
+        .gt('updated_at', safeSyncTimestamp || lastSync)
         .order('updated_at', { ascending: true });
       if (!fallback.error && fallback.data) {
         updatedRes.data = fallback.data;
@@ -481,7 +620,7 @@ export const syncDailyInflowsIncrementally = async (
     const merged = Array.from(inflowMap.values()).sort((a, b) => a.date.localeCompare(b.date));
     memoryDailyInflows = merged;
     persistToStorage(CACHE_KEY_DAILY_INFLOWS, merged);
-    syncMeta.lastSyncDailyInflows = new Date().toISOString();
+    syncMeta.lastSyncDailyInflows = queryStartTime;
     saveMetadata();
     return merged;
   } catch (err) {
@@ -511,6 +650,7 @@ export const syncPendingItemsIncrementally = async (
 
   const currentCached = getCachedPendingItems();
   const lastSync = syncMeta.lastSyncPendingItems;
+  const queryStartTime = new Date().toISOString();
 
   if (forceFull || currentCached.length === 0 || !lastSync) {
     let { data, error } = await supabase
@@ -547,7 +687,7 @@ export const syncPendingItemsIncrementally = async (
       const mapped = data.map(mapSupabaseToPendingItem);
       memoryPendingItems = mapped;
       persistToStorage(CACHE_KEY_PENDING_ITEMS, mapped);
-      syncMeta.lastSyncPendingItems = new Date().toISOString();
+      syncMeta.lastSyncPendingItems = queryStartTime;
       saveMetadata();
       return mapped;
     }
@@ -555,15 +695,21 @@ export const syncPendingItemsIncrementally = async (
   }
 
   try {
+    const safeSyncTimestamp = lastSync
+      ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
+      : null;
+
     const [updatedRes, idsRes] = await Promise.all([
       supabase
         .from('pending_items')
         .select(getPendingColumns())
-        .gt('updated_at', lastSync)
-        .order('updated_at', { ascending: true }),
+        .gt('updated_at', safeSyncTimestamp || lastSync)
+        .order('updated_at', { ascending: true })
+        .limit(3000),
       supabase
         .from('pending_items')
         .select('id')
+        .limit(20000)
     ]);
 
     if (updatedRes.error) {
@@ -571,8 +717,9 @@ export const syncPendingItemsIncrementally = async (
       const safeFallback = await supabase
         .from('pending_items')
         .select(getPendingColumns())
-        .gt('updated_at', lastSync)
-        .order('updated_at', { ascending: true });
+        .gt('updated_at', safeSyncTimestamp || lastSync)
+        .order('updated_at', { ascending: true })
+        .limit(3000);
       if (!safeFallback.error && safeFallback.data) {
         updatedRes.data = safeFallback.data;
         updatedRes.error = null;
@@ -580,8 +727,9 @@ export const syncPendingItemsIncrementally = async (
         const starFallback = await supabase
           .from('pending_items')
           .select('*')
-          .gt('updated_at', lastSync)
-          .order('updated_at', { ascending: true });
+          .gt('updated_at', safeSyncTimestamp || lastSync)
+          .order('updated_at', { ascending: true })
+          .limit(3000);
         if (!starFallback.error && starFallback.data) {
           updatedRes.data = starFallback.data;
           updatedRes.error = null;
@@ -618,7 +766,7 @@ export const syncPendingItemsIncrementally = async (
 
     memoryPendingItems = merged;
     persistToStorage(CACHE_KEY_PENDING_ITEMS, merged);
-    syncMeta.lastSyncPendingItems = new Date().toISOString();
+    syncMeta.lastSyncPendingItems = queryStartTime;
     saveMetadata();
     return merged;
   } catch (err) {
@@ -791,6 +939,9 @@ export const updateLocalCacheItem = <T extends { id?: string }>(
     memoryPendingItems = list;
     persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
   }
+
+  // Instantly broadcast to all other open tabs in the browser
+  broadcastCrossTabMutation(collectionName, 'update', { item });
 };
 
 /**
@@ -821,6 +972,9 @@ export const removeLocalCacheItem = (
     memoryPendingItems = list;
     persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
   }
+
+  // Instantly broadcast removal to all other open tabs
+  broadcastCrossTabMutation(collectionName, 'remove', { id: cleanId });
 };
 
 /**
@@ -851,6 +1005,8 @@ export const updateWholeCollectionCache = <T>(
     syncMeta.lastSyncPendingItems = new Date().toISOString();
     saveMetadata();
   }
+
+  broadcastCrossTabMutation(collectionName, 'full', { items });
 };
 
 /**

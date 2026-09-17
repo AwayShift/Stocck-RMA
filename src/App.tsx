@@ -61,7 +61,8 @@ import {
   syncBaseProductsIncrementally,
   syncTriageUnitsIncrementally,
   syncDailyInflowsIncrementally,
-  syncPendingItemsIncrementally
+  syncPendingItemsIncrementally,
+  subscribeCrossTabSync
 } from './lib/syncCacheService';
 
 import Dashboard from './components/Dashboard';
@@ -310,7 +311,7 @@ export default function App() {
     }
   }, [user]);
 
-  // 1. Live Realtime Subscriptions for Products, Triage Units, Daily Inflows, and Pending Items
+  // 1. Live Realtime Subscriptions for Products, Triage Units, Daily Inflows, and Pending Items + Cross-Tab Bus
   useEffect(() => {
     if (!user) return;
 
@@ -330,11 +331,37 @@ export default function App() {
       if (Array.isArray(updatedList)) setPendingItems(updatedList);
     });
 
+    // Zero-latency cross-tab synchronization bus (instant updates across multiple open tabs/windows)
+    const unsubCrossTab = subscribeCrossTabSync((event) => {
+      if (event.collection === 'products') {
+        setProducts(getCachedBaseProducts());
+      } else if (event.collection === 'triage_units') {
+        setTriageUnits(getCachedTriageUnits());
+      } else if (event.collection === 'daily_inflows') {
+        setDailyInflows(getCachedDailyInflows());
+      } else if (event.collection === 'pending_items') {
+        setPendingItems(getCachedPendingItems());
+      }
+    });
+
+    // Cross-tab storage event listener fallback for browsers backgrounding BroadcastChannel
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key?.startsWith('stocckrma_cached_')) {
+        if (e.key.includes('products')) setProducts(getCachedBaseProducts());
+        if (e.key.includes('triage_units')) setTriageUnits(getCachedTriageUnits());
+        if (e.key.includes('daily_inflows')) setDailyInflows(getCachedDailyInflows());
+        if (e.key.includes('pending_items')) setPendingItems(getCachedPendingItems());
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
     return () => {
       unsubProducts();
       unsubTriage();
       unsubInflows();
       unsubPending();
+      unsubCrossTab();
+      window.removeEventListener('storage', handleStorage);
     };
   }, [user?.id]);
 
@@ -357,12 +384,12 @@ export default function App() {
     window.addEventListener('focus', handleVisibilityOrFocus);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
-    // Periodic gentle delta sync every 20s as fallback if mobile browser paused WebSockets
+    // Periodic gentle delta sync every 6s as fast fallback if mobile browser paused WebSockets
     const syncInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         refreshIncrementalData();
       }
-    }, 20000);
+    }, 6000);
 
     return () => {
       window.removeEventListener('focus', handleVisibilityOrFocus);

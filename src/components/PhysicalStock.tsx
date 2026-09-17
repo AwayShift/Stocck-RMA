@@ -266,43 +266,54 @@ export default function PhysicalStock({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const cleanSku = (val?: string) => {
+    if (!val) return '';
+    let s = val.trim().toUpperCase();
+    const m = s.match(/^\[(.*?)\]/);
+    if (m && m[1]) s = m[1].trim().toUpperCase();
+    return s;
+  };
+
   const availableEditPendingItems = useMemo(() => {
     if (!pendingItems || pendingItems.length === 0 || !editForm) return [];
     
-    // Strict SKU matching: if editForm.baseProductSku is present, ONLY show pending items matching that SKU
-    const currentSku = (editForm.baseProductSku || (editForm as any).sku || '').trim();
-    const normalizedSku = currentSku.toLowerCase();
+    // Resolve active SKU exactly like RmaEntry does (with fallback to catalog product)
+    let currentSku = (editForm.baseProductSku || (editForm as any).sku || '').trim();
+    if (!currentSku && editForm.baseProductId) {
+      const prod = products.find(p => p.id === editForm.baseProductId);
+      if (prod?.sku) currentSku = prod.sku;
+    }
+    const normalizedSku = cleanSku(currentSku);
     if (!normalizedSku) return [];
 
     return pendingItems.filter((item) => {
-      // Is it already linked to this unit?
-      const isAlreadyLinkedToThisUnit = 
-        (editForm.pendingRegistrationNumber && item.registrationNumber && editForm.pendingRegistrationNumber.toUpperCase() === item.registrationNumber.toUpperCase()) ||
-        (editForm.pendingItemId && item.id === editForm.pendingItemId) ||
-        (item.linkedUnitId && item.linkedUnitId === editForm.id);
+      // Must not be cancelled
+      if (item.status === 'Cancelado') return false;
 
-      // Must be open / pending (or already linked to this unit)
-      const isPending = !item.status || (item.status !== 'Resolvido' && item.status !== 'Cancelado') || isAlreadyLinkedToThisUnit;
-      if (!isPending) return false;
-
-      // Strict SKU comparison
-      const itemSku = (item.sku || '').trim().toLowerCase();
+      // Strict SKU comparison (normalized, case-insensitive, strip brackets)
+      const itemSku = cleanSku(item.sku);
       if (!itemSku || itemSku !== normalizedSku) return false;
 
-      // Must not be linked to ANOTHER unit
+      // Is it already linked to THIS unit being edited?
+      const isAlreadyLinkedToThisUnit = 
+        Boolean(editForm.id && item.linkedUnitId && item.linkedUnitId === editForm.id) ||
+        Boolean(editForm.pendingItemId && item.id === editForm.pendingItemId) ||
+        Boolean(editForm.pendingRegistrationNumber && item.registrationNumber && cleanSku(editForm.pendingRegistrationNumber) === cleanSku(item.registrationNumber));
+
+      if (isAlreadyLinkedToThisUnit) return true;
+
+      // Must not be linked to ANOTHER unit in stock (same rule as RmaEntry)
       const isLinkedToAnotherUnit = units.some((u) => {
         if (u.id === editForm.id) return false;
+        if (editForm.trackingCode && u.trackingCode && u.trackingCode === editForm.trackingCode) return false;
         return (
-          (u.pendingRegistrationNumber && item.registrationNumber && u.pendingRegistrationNumber.toLowerCase() === item.registrationNumber.toLowerCase()) ||
-          (u.pendingItemId && item.id && u.pendingItemId === item.id) ||
-          (item.linkedUnitId && item.linkedUnitId === u.id)
+          (u.pendingRegistrationNumber && item.registrationNumber && cleanSku(u.pendingRegistrationNumber) === cleanSku(item.registrationNumber)) ||
+          (u.pendingItemId && item.id && u.pendingItemId === item.id)
         );
       });
-      if (isLinkedToAnotherUnit) return false;
-
-      return true;
+      return !isLinkedToAnotherUnit;
     });
-  }, [pendingItems, editForm?.baseProductSku, (editForm as any)?.sku, editForm?.id, editForm?.pendingRegistrationNumber, editForm?.pendingItemId, units]);
+  }, [pendingItems, editForm?.baseProductSku, (editForm as any)?.sku, editForm?.baseProductId, editForm?.id, editForm?.trackingCode, editForm?.pendingRegistrationNumber, editForm?.pendingItemId, units, products]);
 
   const editPendingLinkValidation = useMemo(() => {
     if (!editForm || !editForm.pendingRegistrationNumber || !editForm.pendingRegistrationNumber.trim()) {
@@ -375,8 +386,11 @@ export default function PhysicalStock({
 
   const handleStartEdit = (unit: TriageUnit) => {
     setSelectedUnitId(unit.id);
+    const catalogProduct = products.find(p => (unit.baseProductId && p.id === unit.baseProductId) || (unit.baseProductSku && p.sku === unit.baseProductSku));
+    const resolvedSku = unit.baseProductSku || (unit as any).sku || catalogProduct?.sku || '';
     setEditForm({ 
       ...unit,
+      baseProductSku: resolvedSku,
       platform: (unit.platform || '') as any,
     });
     setOriginalUnitPhotos({
@@ -2577,7 +2591,7 @@ export default function PhysicalStock({
 
         {/* Pagination / Mostrar Mais button */}
         <div className="p-5 bg-slate-950/80 border-t border-slate-800/80 flex flex-col items-center justify-center gap-2.5 text-center" id="stock-pagination-footer">
-          {hasMore ? (
+          {hasMore && (
             <button
               type="button"
               onClick={() => setVisibleCount(prev => prev + 20)}
@@ -2587,10 +2601,6 @@ export default function PhysicalStock({
               <span>Mostrar Mais</span>
               <ChevronDown className="w-4 h-4 text-sky-400 group-hover:translate-y-0.5 transition-transform" />
             </button>
-          ) : (
-            <span className="text-xs text-slate-500 font-medium">
-              Todas as {filteredUnits.length} unidades foram carregadas
-            </span>
           )}
 
           <span className="text-xs text-slate-400 font-medium">
