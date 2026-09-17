@@ -1272,7 +1272,15 @@ export function exportStockInventoryToExcel(
     }
 
     // 6. OBSERVAÇÃO (clean notes, removing internal markers)
-    let rawNotes = (unit.notes || '').replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '').trim();
+    let rawNotes = (unit.notes || '')
+      .replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '')
+      .replace(/\[CREATED_BY:\{.*?\}\]\s*/g, '')
+      .replace(/\[PENDING_REG:.*?\]\s*/g, '')
+      .replace(/\[PENDING_ID:.*?\]\s*/g, '')
+      .replace(/\[ORIGIN_SECTOR:.*?\]\s*/g, '')
+      .replace(/\[INITIAL_ENTRY_DATE:.*?\]\s*/g, '')
+      .replace(/\[TRANSFERRED_AT:.*?\]\s*/g, '')
+      .trim();
     let obs = rawNotes;
     if (!obs && unit.customerReason && unit.customerReason !== 'Inventário OpenBox' && unit.customerReason !== 'Entrada de Estoque') {
       obs = unit.customerReason.trim();
@@ -1287,6 +1295,26 @@ export function exportStockInventoryToExcel(
     // 8. Nº DO PEDIDO
     const pedido = (unit.orderNumber || '').trim();
 
+    // 9. ESTOQUE DE ORIGEM E DATAS
+    const estoqueOrigem = (unit.originSector || '').trim();
+    let dataEntradaInicial = '';
+    if (unit.initialEntryDate) {
+      try {
+        dataEntradaInicial = new Date(unit.initialEntryDate).toLocaleString('pt-BR');
+      } catch {
+        dataEntradaInicial = unit.initialEntryDate;
+      }
+    }
+
+    let dataEntradaAtual = '';
+    if (unit.createdAt) {
+      try {
+        dataEntradaAtual = new Date(unit.createdAt).toLocaleString('pt-BR');
+      } catch {
+        dataEntradaAtual = unit.createdAt;
+      }
+    }
+
     return {
       'STI': sti,
       'SKU': sku,
@@ -1295,6 +1323,9 @@ export function exportStockInventoryToExcel(
       'SITUAÇÃO': situacao,
       'OBSERVAÇÃO': obs,
       'CATEGORIA': categoria,
+      'ESTOQUE ORIGEM': estoqueOrigem,
+      'DATA ENTRADA INICIAL': dataEntradaInicial,
+      'DATA ENTRADA ATUAL': dataEntradaAtual,
       'Nº DO PEDIDO': pedido
     };
   });
@@ -1309,7 +1340,10 @@ export function exportStockInventoryToExcel(
     { wch: 18 }, // E: SITUAÇÃO
     { wch: 35 }, // F: OBSERVAÇÃO
     { wch: 20 }, // G: CATEGORIA
-    { wch: 20 }  // H: Nº DO PEDIDO
+    { wch: 18 }, // H: ESTOQUE ORIGEM
+    { wch: 22 }, // I: DATA ENTRADA INICIAL
+    { wch: 22 }, // J: DATA ENTRADA ATUAL
+    { wch: 20 }  // K: Nº DO PEDIDO
   ];
 
   const wb = XLSX.utils.book_new();

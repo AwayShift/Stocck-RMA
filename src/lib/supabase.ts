@@ -1030,6 +1030,26 @@ export const setHasTriagePendingCols = (supported: boolean): void => {
   } catch {}
 };
 
+const STORAGE_FEAT_TRIAGE_TRANSFER_COLS = 'stocckrma_feat_triage_transfer_cols';
+let memoryHasTriageTransferCols: boolean | null = null;
+
+export const getHasTriageTransferCols = (): boolean | null => {
+  if (memoryHasTriageTransferCols !== null) return memoryHasTriageTransferCols;
+  try {
+    const val = localStorage.getItem(STORAGE_FEAT_TRIAGE_TRANSFER_COLS);
+    if (val === 'true') memoryHasTriageTransferCols = true;
+    else if (val === 'false') memoryHasTriageTransferCols = false;
+  } catch {}
+  return memoryHasTriageTransferCols;
+};
+
+export const setHasTriageTransferCols = (supported: boolean): void => {
+  memoryHasTriageTransferCols = supported;
+  try {
+    localStorage.setItem(STORAGE_FEAT_TRIAGE_TRANSFER_COLS, supported ? 'true' : 'false');
+  } catch {}
+};
+
 export const getTriageColumns = (): string => {
   let cols = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration';
   if (getHasExcludeDailyCol() !== false) {
@@ -1098,6 +1118,30 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     rawNotes = rawNotes.replace(/\[PENDING_ID:.*?\]\s*/g, '').trim();
   }
 
+  if (u.originSector) {
+    const originMeta = `[ORIGIN_SECTOR:${u.originSector}]`;
+    rawNotes = rawNotes.replace(/\[ORIGIN_SECTOR:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${originMeta}` : originMeta;
+  } else {
+    rawNotes = rawNotes.replace(/\[ORIGIN_SECTOR:.*?\]\s*/g, '').trim();
+  }
+
+  if (u.initialEntryDate) {
+    const initDateMeta = `[INITIAL_ENTRY_DATE:${u.initialEntryDate}]`;
+    rawNotes = rawNotes.replace(/\[INITIAL_ENTRY_DATE:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${initDateMeta}` : initDateMeta;
+  } else {
+    rawNotes = rawNotes.replace(/\[INITIAL_ENTRY_DATE:.*?\]\s*/g, '').trim();
+  }
+
+  if (u.transferredAt) {
+    const transMeta = `[TRANSFERRED_AT:${u.transferredAt}]`;
+    rawNotes = rawNotes.replace(/\[TRANSFERRED_AT:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${transMeta}` : transMeta;
+  } else {
+    rawNotes = rawNotes.replace(/\[TRANSFERRED_AT:.*?\]\s*/g, '').trim();
+  }
+
   const payload: any = {
     id: cleanId,
     tracking_code: u.trackingCode ?? '',
@@ -1124,6 +1168,16 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     is_migration: Boolean(u.isMigration),
     updated_at: now
   };
+
+  if (u.originSector && getHasTriageTransferCols() !== false) {
+    payload.origin_sector = u.originSector;
+  }
+  if (u.initialEntryDate && getHasTriageTransferCols() !== false) {
+    payload.initial_entry_date = u.initialEntryDate;
+  }
+  if (u.transferredAt && getHasTriageTransferCols() !== false) {
+    payload.transferred_at = u.transferredAt;
+  }
 
   if (u.pendingRegistrationNumber && getHasTriagePendingCols() !== false) {
     payload.pending_registration_number = u.pendingRegistrationNumber;
@@ -1187,11 +1241,50 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
     }
   }
 
+  let originSector: string | undefined = undefined;
+  if (r.origin_sector) {
+    originSector = r.origin_sector;
+  } else if (r.originSector) {
+    originSector = r.originSector;
+  } else if (decompressedNotes.includes('[ORIGIN_SECTOR:')) {
+    const originMatch = decompressedNotes.match(/\[ORIGIN_SECTOR:(.*?)\]/);
+    if (originMatch && originMatch[1]) {
+      originSector = originMatch[1].trim();
+    }
+  }
+
+  let initialEntryDate: string | undefined = undefined;
+  if (r.initial_entry_date) {
+    initialEntryDate = r.initial_entry_date;
+  } else if (r.initialEntryDate) {
+    initialEntryDate = r.initialEntryDate;
+  } else if (decompressedNotes.includes('[INITIAL_ENTRY_DATE:')) {
+    const initMatch = decompressedNotes.match(/\[INITIAL_ENTRY_DATE:(.*?)\]/);
+    if (initMatch && initMatch[1]) {
+      initialEntryDate = initMatch[1].trim();
+    }
+  }
+
+  let transferredAt: string | undefined = undefined;
+  if (r.transferred_at) {
+    transferredAt = r.transferred_at;
+  } else if (r.transferredAt) {
+    transferredAt = r.transferredAt;
+  } else if (decompressedNotes.includes('[TRANSFERRED_AT:')) {
+    const transMatch = decompressedNotes.match(/\[TRANSFERRED_AT:(.*?)\]/);
+    if (transMatch && transMatch[1]) {
+      transferredAt = transMatch[1].trim();
+    }
+  }
+
   const cleanNotes = decompressedNotes
     .replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '')
     .replace(/\[CREATED_BY:\{.*?\}\]\s*/g, '')
     .replace(/\[PENDING_REG:.*?\]\s*/g, '')
     .replace(/\[PENDING_ID:.*?\]\s*/g, '')
+    .replace(/\[ORIGIN_SECTOR:.*?\]\s*/g, '')
+    .replace(/\[INITIAL_ENTRY_DATE:.*?\]\s*/g, '')
+    .replace(/\[TRANSFERRED_AT:.*?\]\s*/g, '')
     .trim();
 
   return {
@@ -1209,6 +1302,9 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
     packageStatus: r.package_status || r.packageStatus || '',
     accessoriesInclusion: decompressText(r.accessories_inclusion || r.accessoriesInclusion || ''),
     destinationSector: r.destination_sector || r.destinationSector || 'RMA',
+    originSector: originSector as any,
+    initialEntryDate: initialEntryDate,
+    transferredAt: transferredAt,
     notes: cleanNotes,
     photosProduct: Array.isArray(r.photos_product || r.photosProduct) ? (r.photos_product || r.photosProduct) : [],
     photosBox: Array.isArray(r.photos_box || r.photosBox) ? (r.photos_box || r.photosBox) : [],

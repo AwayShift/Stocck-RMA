@@ -38,7 +38,9 @@ import {
   getHasPendingRegistrationCol,
   setHasPendingRegistrationCol,
   getHasTriagePendingCols,
-  setHasTriagePendingCols
+  setHasTriagePendingCols,
+  getHasTriageTransferCols,
+  setHasTriageTransferCols
 } from './supabase';
 import {
   getCachedBaseProducts,
@@ -663,6 +665,9 @@ export const transferPendingItemToStock = async (
     packageStatus: (triageDetails?.packageStatus as any) || 'Danificada',
     accessoriesInclusion: triageDetails?.accessoriesInclusion || 'Item liberado após resolução de pendência.',
     destinationSector: destinationSector,
+    originSector: 'Pendências',
+    initialEntryDate: pendingItem.createdAt || new Date().toISOString(),
+    transferredAt: new Date().toISOString(),
     notes: triageDetails?.notes || `<p><strong>Item Liberado da Aba de Pendências:</strong></p><p>Motivo original: ${pendingItem.pendingReason}</p><p>${pendingItem.detailedNotes || ''}</p>`,
     photosProduct: triageDetails?.photosProduct && triageDetails.photosProduct.length > 0 ? triageDetails.photosProduct : (pendingItem.photos || []),
     photosBox: triageDetails?.photosBox || [],
@@ -1625,12 +1630,15 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
     const row = mapTriageUnitToSupabase(savedUnit);
     let { error } = await supabase.from('triage_units').upsert(row);
 
-    // If upsert failed due to missing column (e.g. exclude_from_daily_count, created_by, or pending columns), mark feature disabled and retry immediately
+    // If upsert failed due to missing column (e.g. exclude_from_daily_count, created_by, pending, or transfer columns), mark feature disabled and retry immediately
     if (error && (
       error.message?.includes('exclude_from_daily_count') || 
       error.message?.includes('created_by') ||
       error.message?.includes('pending_registration_number') ||
       error.message?.includes('pending_item_id') ||
+      error.message?.includes('origin_sector') ||
+      error.message?.includes('initial_entry_date') ||
+      error.message?.includes('transferred_at') ||
       error.code === 'PGRST204' || 
       error.code === '42703'
     )) {
@@ -1643,12 +1651,20 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
       if (error.message?.includes('pending_registration_number') || error.message?.includes('pending_item_id')) {
         setHasTriagePendingCols(false);
       }
+      if (error.message?.includes('origin_sector') || error.message?.includes('initial_entry_date') || error.message?.includes('transferred_at')) {
+        setHasTriageTransferCols(false);
+      }
       const retryRow = { ...row };
       if (getHasExcludeDailyCol() === false) delete retryRow.exclude_from_daily_count;
       if (getHasTriageCreatedByCol() === false) delete retryRow.created_by;
       if (getHasTriagePendingCols() === false) {
         delete (retryRow as any).pending_registration_number;
         delete (retryRow as any).pending_item_id;
+      }
+      if (getHasTriageTransferCols() === false) {
+        delete (retryRow as any).origin_sector;
+        delete (retryRow as any).initial_entry_date;
+        delete (retryRow as any).transferred_at;
       }
       const retryRes = await supabase.from('triage_units').upsert(retryRow);
       error = retryRes.error;

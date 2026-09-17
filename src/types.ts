@@ -87,6 +87,9 @@ export interface TriageUnit {
   packageStatus: PackageStatusType;
   accessoriesInclusion: string;
   destinationSector: DestinationSectorType;
+  originSector?: DestinationSectorType | string; // Estoque de origem de onde foi transferido
+  initialEntryDate?: string; // Data de entrada inicial antes de ser transferido de setor (ISO String)
+  transferredAt?: string; // Data/hora da transferência de setor mais recente (ISO String)
   notes: string; // HTML rich-text de Quill
   photosProduct: string[]; // Base64 compressed strings
   photosBox: string[]; // Base64 compressed strings
