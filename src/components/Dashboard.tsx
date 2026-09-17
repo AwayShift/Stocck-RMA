@@ -261,7 +261,7 @@ export default function Dashboard({
           className={`border rounded-2xl p-6 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
             selectedSectorFilter === 'Principal'
               ? 'kpi-card-selected border-emerald-500 ring-2 ring-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/30 shadow-emerald-500/10'
-              : 'bg-slate-900 border-emerald-500/20 hover:border-emerald-500/40'
+              : 'bg-slate-900 border-emerald-500/20 hover:border-emerald-500/50 hover:shadow-emerald-500/10'
           }`} 
           id="kpi-principal"
           title="Clique para filtrar por Estoque Principal"
@@ -309,7 +309,7 @@ export default function Dashboard({
           className={`border rounded-2xl p-6 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
             selectedSectorFilter === 'Openbox'
               ? 'kpi-card-selected border-amber-500 ring-2 ring-amber-500/60 bg-amber-50 dark:bg-amber-950/30 shadow-amber-500/10'
-              : 'bg-slate-900 border-amber-500/20 hover:border-amber-500/40'
+              : 'bg-slate-900 border-amber-500/25 hover:border-amber-500/50 hover:shadow-amber-500/10'
           }`} 
           id="kpi-openbox"
           title="Clique para filtrar por Setor Openbox"
@@ -357,7 +357,7 @@ export default function Dashboard({
           className={`border rounded-2xl p-6 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
             selectedSectorFilter === 'RMA'
               ? 'kpi-card-selected border-rose-500 ring-2 ring-rose-500/60 bg-rose-50 dark:bg-rose-950/30 shadow-rose-500/10'
-              : 'bg-slate-900 border-rose-500/20 hover:border-rose-500/40'
+              : 'bg-slate-900 border-rose-500/20 hover:border-rose-500/50 hover:shadow-rose-500/10'
           }`} 
           id="kpi-conserto"
           title="Clique para filtrar por Setor RMA"

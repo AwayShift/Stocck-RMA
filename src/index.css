@@ -512,9 +512,8 @@ html.light .bg-amber-500\/25 {
 
 html.light .border-amber-500\/20,
 html.light .border-amber-500\/25,
-html.light .border-amber-500\/30,
-html.light .border-amber-500\/40 {
-  border-color: #fde68a !important;
+html.light .border-amber-500\/30 {
+  border-color: rgba(245, 158, 11, 0.35) !important;
 }
 
 /* Dashboard Sector KPI Cards: Normal vs Selected state */
@@ -525,6 +524,52 @@ html.light #kpi-principal:not(.kpi-card-selected),
 html.light #kpi-openbox:not(.kpi-card-selected),
 html.light #kpi-conserto:not(.kpi-card-selected) {
   background-color: #ffffff !important;
+}
+
+/* Base borders in Light Mode when not selected */
+html.light #kpi-principal:not(.kpi-card-selected) {
+  border-color: rgba(16, 185, 129, 0.28) !important;
+}
+html.light #kpi-openbox:not(.kpi-card-selected) {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+html.light #kpi-conserto:not(.kpi-card-selected) {
+  border-color: rgba(244, 63, 94, 0.28) !important;
+}
+
+/* Dashboard Sector KPI Cards: Hover Glowing Border (Light Mode) */
+html.light #kpi-principal:not(.kpi-card-selected):hover {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.28), 0 4px 14px rgba(16, 185, 129, 0.12) !important;
+}
+
+html.light #kpi-openbox:not(.kpi-card-selected):hover {
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.32), 0 4px 14px rgba(245, 158, 11, 0.14) !important;
+}
+
+html.light #kpi-conserto:not(.kpi-card-selected):hover {
+  border-color: #f43f5e !important;
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.28), 0 4px 14px rgba(244, 63, 94, 0.12) !important;
+}
+
+/* Dashboard Sector KPI Cards: Hover Glowing Border (Dark Mode) */
+html.dark #kpi-principal:not(.kpi-card-selected):hover,
+html:not(.light) #kpi-principal:not(.kpi-card-selected):hover {
+  border-color: rgba(16, 185, 129, 0.75) !important;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.35) !important;
+}
+
+html.dark #kpi-openbox:not(.kpi-card-selected):hover,
+html:not(.light) #kpi-openbox:not(.kpi-card-selected):hover {
+  border-color: rgba(245, 158, 11, 0.75) !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.35) !important;
+}
+
+html.dark #kpi-conserto:not(.kpi-card-selected):hover,
+html:not(.light) #kpi-conserto:not(.kpi-card-selected):hover {
+  border-color: rgba(244, 63, 94, 0.75) !important;
+  box-shadow: 0 0 20px rgba(244, 63, 94, 0.35) !important;
 }
 
 /* Dashboard Sector KPI Cards: ONLY when selected (filtro aplicado) */
