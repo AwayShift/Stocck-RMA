@@ -295,6 +295,16 @@ export const setActiveDbProvider = (provider: DatabaseProvider): void => {
   }
 };
 
+export const resetSupabaseConfigToDefault = (): void => {
+  try {
+    localStorage.removeItem(STORAGE_SUPABASE_CONFIG_KEY);
+    supabaseClientInstance = null;
+    window.dispatchEvent(new CustomEvent('supabase-config-changed', { detail: DEFAULT_SUPABASE_CONFIG }));
+  } catch (err) {
+    console.error('Error resetting Supabase config:', err);
+  }
+};
+
 let supabaseClientInstance: SupabaseClient | null = null;
 
 export const getSupabaseClient = (): SupabaseClient | null => {
@@ -317,27 +327,59 @@ export const getSupabaseClient = (): SupabaseClient | null => {
   }
 };
 
-export const testSupabaseConnection = async (config?: SupabaseConfig): Promise<{ success: boolean; message: string }> => {
+export const testSupabaseConnection = async (config?: SupabaseConfig): Promise<{ 
+  success: boolean; 
+  connected: boolean; 
+  tablesCreated: boolean; 
+  message: string 
+}> => {
   const targetConfig = config || getSupabaseConfig();
   if (!targetConfig.url || !targetConfig.anonKey) {
-    return { success: false, message: 'URL ou Chave Anônima (anonKey) do Supabase não configurada.' };
+    return { 
+      success: false, 
+      connected: false, 
+      tablesCreated: false, 
+      message: 'URL ou Chave Anônima (anonKey) do Supabase não configurada.' 
+    };
   }
   try {
     const testClient = createClient(targetConfig.url, targetConfig.anonKey);
     // Ping products or health test
     const { error } = await testClient.from('products').select('id').limit(1);
     if (error) {
-      if (error.code === 'PGRST116' || error.message.includes('relation "products" does not exist') || error.message.includes('does not exist')) {
+      const isMissingTable = error.code === 'PGRST116' || 
+        error.code === '42P01' || 
+        error.message?.includes('relation "products" does not exist') || 
+        error.message?.includes('does not exist');
+
+      if (isMissingTable) {
         return { 
-          success: false, 
-          message: 'Conectado ao Supabase, mas as tabelas ainda não foram criadas! Execute o Script SQL fornecido no SQL Editor do Supabase.' 
+          success: true, 
+          connected: true,
+          tablesCreated: false, 
+          message: 'Conectado ao Supabase com sucesso! Porém as tabelas ainda não foram criadas. Execute o Script SQL fornecido no SQL Editor.' 
         };
       }
-      return { success: false, message: `Erro ao conectar: ${error.message}` };
+      return { 
+        success: false, 
+        connected: false, 
+        tablesCreated: false, 
+        message: `Erro ao conectar ao Supabase: ${error.message}` 
+      };
     }
-    return { success: true, message: 'Conexão com o Supabase estabelecida com sucesso!' };
+    return { 
+      success: true, 
+      connected: true, 
+      tablesCreated: true, 
+      message: 'Conexão e tabelas validadas com sucesso no Supabase!' 
+    };
   } catch (err: any) {
-    return { success: false, message: `Falha na conexão: ${err?.message || String(err)}` };
+    return { 
+      success: false, 
+      connected: false, 
+      tablesCreated: false, 
+      message: `Falha na conexão: ${err?.message || String(err)}` 
+    };
   }
 };
 

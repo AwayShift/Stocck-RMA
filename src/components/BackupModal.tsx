@@ -226,6 +226,11 @@ export default function BackupModal({
 
       setSelectedSnapshotForRestore(null);
       if (onRestoreSuccess) onRestoreSuccess(selectedSnapshotForRestore);
+      
+      // FORÇAR ATUALIZAÇÃO DA PÁGINA APÓS 3 SEGUNDOS PARA CARREGAR OS DADOS
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
     } catch (err: any) {
       console.error('Error restoring from cloud snapshot:', err);
       setErrorMessage(err.message || 'Erro durante a restauração do snapshot da nuvem.');
@@ -374,6 +379,11 @@ export default function BackupModal({
       setValidationResult(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (onRestoreSuccess) onRestoreSuccess(restoredData);
+      
+      // FORÇAR ATUALIZAÇÃO DA PÁGINA APÓS 3 SEGUNDOS PARA CARREGAR OS DADOS
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
     } catch (err: any) {
       console.error('Error during restoration:', err);
       setErrorMessage(err.message || 'Erro durante a restauração do banco de dados.');

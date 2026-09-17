@@ -34,6 +34,7 @@ import BackupStorageManagerModal from './BackupStorageManagerModal';
 import {
   getSupabaseClient,
   getSupabaseConfig,
+  saveSupabaseConfig,
   getSupabaseManagementToken,
   saveSupabaseManagementToken,
   extractSupabaseProjectRef,
@@ -97,13 +98,19 @@ export default function DatabaseSwitcherModal({
   isOpen,
   onClose
 }: DatabaseSwitcherModalProps) {
-  const [supaConfig] = useState<SupabaseConfig>(() => getSupabaseConfig());
+  const [supaConfig, setSupaConfig] = useState<SupabaseConfig>(() => getSupabaseConfig());
   const [isLoadingMetrics, setIsLoadingMetrics] = useState<boolean>(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
   const [activeViewMode, setActiveViewMode] = useState<'official' | 'tables'>('official');
   const [showStorageManager, setShowStorageManager] = useState<boolean>(false);
   
+  // Database connection management state
+  const [isEditingDatabase, setIsEditingDatabase] = useState<boolean>(false);
+  const [newDbUrl, setNewDbUrl] = useState<string>(supaConfig.url);
+  const [newDbAnonKey, setNewDbAnonKey] = useState<string>(supaConfig.anonKey);
+  const [dbSaveSuccess, setDbSaveSuccess] = useState<boolean>(false);
+
   // PAT Token management state
   const [managementToken, setManagementToken] = useState<string>(() => getSupabaseManagementToken());
   const [isEditingToken, setIsEditingToken] = useState<boolean>(false);
@@ -388,6 +395,38 @@ export default function DatabaseSwitcherModal({
     }
   }, [isOpen]);
 
+  const handleSaveDatabaseConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanUrl = newDbUrl.trim();
+    const cleanAnonKey = newDbAnonKey.trim();
+    
+    if (!cleanUrl || !cleanAnonKey) return;
+    
+    const newConfig = { url: cleanUrl, anonKey: cleanAnonKey };
+    saveSupabaseConfig(newConfig);
+    setSupaConfig(newConfig);
+    setDbSaveSuccess(true);
+    setTimeout(() => setDbSaveSuccess(false), 4000);
+    setIsEditingDatabase(false);
+    
+    // Refresh metrics on new database connection
+    await fetchSupabaseUsage();
+
+    // CLEAR ALL LOCAL CACHE AND FORCE RELOAD TO PREVENT GHOST DATA AND JWT ERRORS
+    // The previous database's auth token and cached items will conflict with the new database
+    localStorage.removeItem('supabase.auth.token');
+    localStorage.removeItem('sb-api-auth-token');
+    localStorage.removeItem('stocckrma_cache_products');
+    localStorage.removeItem('stocckrma_cache_triage');
+    localStorage.removeItem('stocckrma_cache_inflows');
+    localStorage.removeItem('stocckrma_cache_pending');
+    localStorage.removeItem('stocckrma_cache_cases');
+    localStorage.removeItem('stocckrma_sync_meta');
+    
+    // Force a page reload so the app re-initializes cleanly with the new database
+    window.location.reload();
+  };
+
   const handleSaveToken = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanToken = tokenInput.trim();
@@ -526,7 +565,17 @@ export default function DatabaseSwitcherModal({
               </p>
             </div>
 
-            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 flex-wrap justify-end">
+              <button
+                type="button"
+                onClick={() => setIsEditingDatabase(!isEditingDatabase)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 bg-[#1f2937] text-slate-300 border-[#374151] hover:bg-[#374151]"
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>Vincular Novo Banco</span>
+                {isEditingDatabase ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsEditingToken(!isEditingToken)}
@@ -542,6 +591,80 @@ export default function DatabaseSwitcherModal({
               </button>
             </div>
           </div>
+
+          {/* Database Configuration Drawer */}
+          {isEditingDatabase && (
+            <form onSubmit={handleSaveDatabaseConfig} className="p-4 bg-[#181818] border border-[#333333] rounded-xl space-y-3 animate-in fade-in">
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-[#3ecf8e]" />
+                  Vincular Novo Banco de Dados
+                </h4>
+                <p className="text-[11px] text-[#888888] mt-0.5">
+                  Insira a URL e a Anon Key do novo projeto Supabase para migrar a conexão do sistema.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Project URL</label>
+                  <input
+                    type="url"
+                    value={newDbUrl}
+                    onChange={(e) => setNewDbUrl(e.target.value)}
+                    placeholder="https://xxxxxxxxxxxxxxxxxxxx.supabase.co"
+                    className="w-full bg-[#111111] border border-[#333333] focus:border-[#3ecf8e] rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-600 outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Anon Key</label>
+                  <div className="relative">
+                    <input
+                      type={showTokenSecret ? 'text' : 'password'}
+                      value={newDbAnonKey}
+                      onChange={(e) => setNewDbAnonKey(e.target.value)}
+                      placeholder="eyJhb..."
+                      className="w-full bg-[#111111] border border-[#333333] focus:border-[#3ecf8e] rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-600 outline-none pr-10"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowTokenSecret(!showTokenSecret)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1"
+                    >
+                      {showTokenSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {dbSaveSuccess && (
+                <div className="p-2 bg-[#1b3326] border border-[#2e5d42] rounded-lg text-xs text-[#3ecf8e] flex items-center gap-2">
+                  <Check className="w-3.5 h-3.5 text-[#3ecf8e] shrink-0" />
+                  <span>Conexão salva com sucesso! O banco de dados foi atualizado.</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingDatabase(false)}
+                  className="px-3 py-1.5 bg-[#252525] hover:bg-[#2e2e2e] text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newDbUrl.trim() || !newDbAnonKey.trim()}
+                  className="px-4 py-1.5 bg-[#3ecf8e] hover:bg-[#34b67c] disabled:opacity-50 text-black text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-3 h-3" />
+                  <span>Salvar Conexão</span>
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* Access Token Configuration Drawer */}
           {isEditingToken && (
