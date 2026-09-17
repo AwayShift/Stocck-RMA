@@ -1529,7 +1529,7 @@ export default function BackupModal({
                 </div>
 
                 {/* File Validation Preview */}
-                {validationResult?.isValid && validationResult.stats && (
+                {validationResult?.isValid && validationResult.summary && (
                   <div className={`p-4 rounded-xl border space-y-3 ${
                     isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-900 border-slate-800'
                   }`}>
@@ -1544,15 +1544,15 @@ export default function BackupModal({
                     <div className="grid grid-cols-3 gap-2 text-center text-xs">
                       <div className={`p-2 rounded border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
                         <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Catálogo</span>
-                        <strong className={`font-mono ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'}`}>{validationResult.stats.productsCount} itens</strong>
+                        <strong className={`font-mono ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'}`}>{validationResult.summary.counts.products} itens</strong>
                       </div>
                       <div className={`p-2 rounded border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
                         <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Estoque</span>
-                        <strong className={`font-mono ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'}`}>{validationResult.stats.triageUnitsCount} itens</strong>
+                        <strong className={`font-mono ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'}`}>{validationResult.summary.counts.triageUnits} itens</strong>
                       </div>
                       <div className={`p-2 rounded border ${isLight ? 'bg-white border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
                         <span className={`text-[10px] block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Fluxo</span>
-                        <strong className={`font-mono ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'}`}>{validationResult.stats.dailyInflowsCount} itens</strong>
+                        <strong className={`font-mono ${isLight ? 'text-emerald-700 font-bold' : 'text-emerald-400'}`}>{validationResult.summary.counts.dailyInflows} itens</strong>
                       </div>
                     </div>
 
