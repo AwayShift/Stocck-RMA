@@ -462,10 +462,24 @@ export default function PhysicalStock({
         updatedForm.trackingCode = '';
       }
 
+      // Check if product was transferred to another stock sector
+      const originalSector = (units.find(u => u.id === updatedForm.id) || currentUnit)?.destinationSector;
+      const isSectorTransferred = Boolean(originalSector && originalSector !== updatedForm.destinationSector);
+      if (isSectorTransferred) {
+        const transferMoment = new Date().toISOString();
+        updatedForm.createdAt = transferMoment; // Contabiliza novamente no registro no momento da transferência
+        updatedForm.updatedAt = transferMoment;
+        updatedForm.excludeFromDailyCount = false; // Garante que será contabilizado no registro diário
+      }
+
       await onUpdateUnit(updatedForm);
       setIsSavingEdit(false);
       setIsEditingUnit(false);
-      setActionSuccess('Ficha do produto e fotos atualizados com sucesso!');
+      setActionSuccess(
+        isSectorTransferred
+          ? `Ficha atualizada e produto transferido para ${updatedForm.destinationSector}! Recontabilizado no registro de hoje.`
+          : 'Ficha do produto e fotos atualizados com sucesso!'
+      );
       setTimeout(() => setActionSuccess(null), 4000);
     } catch (err: any) {
       console.error('Error updating unit:', err);
@@ -1118,18 +1132,22 @@ export default function PhysicalStock({
           finalPhotosProduct = baseImgs.productPhotos;
         }
 
+        const transferMoment = new Date().toISOString();
         const updated: TriageUnit = {
           ...unit,
           destinationSector: newSector,
           photosProduct: finalPhotosProduct,
           photosBox: finalPhotosBox,
-          photosAccessories: finalPhotosAccessories
+          photosAccessories: finalPhotosAccessories,
+          createdAt: transferMoment, // Recontabiliza no registro no exato momento da transferência
+          updatedAt: transferMoment,
+          excludeFromDailyCount: false // Garante que será contabilizado no registro diário
         };
         try {
           await onUpdateUnit(updated);
           setEditingSector('');
-          setActionSuccess(`Setor atualizado para ${newSector} com sucesso!`);
-          setTimeout(() => setActionSuccess(null), 3000);
+          setActionSuccess(`Setor atualizado para ${newSector} com sucesso e recontabilizado no registro de hoje!`);
+          setTimeout(() => setActionSuccess(null), 3500);
         } catch (err) {
           console.error(err);
           setActionError('Erro ao mover setor.');
@@ -1175,12 +1193,16 @@ export default function PhysicalStock({
     }
     // If 'keep_saved', keeps the existing photosProduct, photosBox, photosAccessories as they were
 
+    const transferMoment = new Date().toISOString();
     const updated: TriageUnit = {
       ...unit,
       destinationSector: targetSector,
       photosProduct: newPhotosProduct,
       photosBox: newPhotosBox,
-      photosAccessories: newPhotosAccessories
+      photosAccessories: newPhotosAccessories,
+      createdAt: transferMoment, // Recontabiliza no registro no exato momento da transferência
+      updatedAt: transferMoment,
+      excludeFromDailyCount: false // Garante que será contabilizado no registro diário
     };
 
     try {
@@ -1188,7 +1210,7 @@ export default function PhysicalStock({
       setTransferModalData(null);
       setEditingSector('');
       const strategyName = choice === 'keep_saved' ? 'Fotos salvas mantidas' : choice === 'use_base' ? 'Imagens da base aplicadas' : 'Fotos combinadas';
-      setActionSuccess(`Transferido para ${targetSector} com sucesso! (${strategyName})`);
+      setActionSuccess(`Transferido para ${targetSector} com sucesso e recontabilizado no registro de hoje! (${strategyName})`);
       setTimeout(() => setActionSuccess(null), 3500);
     } catch (err: any) {
       console.error('Error updating sector:', err);
