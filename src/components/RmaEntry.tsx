@@ -1515,16 +1515,26 @@ export default function RmaEntry({
               </div>
 
               {/* Vincular a uma Pendência (Embaixo da opção de Fotos & Mídia) */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3" id="rma-step-pending-link">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+              <div className={`border rounded-xl p-4 shadow-md space-y-3 transition-colors ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+              }`} id="rma-step-pending-link">
+                <div className={`flex items-center justify-between gap-2 border-b pb-2.5 ${
+                  isLight ? 'border-slate-200' : 'border-slate-800/80'
+                }`}>
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 bg-sky-500/15 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md border border-sky-500/30">
+                    <span className={`w-5 h-5 text-[11px] font-bold flex items-center justify-center rounded-md border ${
+                      isLight ? 'bg-sky-100 text-sky-700 border-sky-300' : 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                    }`}>
                       <Hash className="w-3 h-3" />
                     </span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                    <span className={`text-xs font-bold uppercase tracking-wider ${
+                      isLight ? 'text-slate-800' : 'text-slate-200'
+                    }`}>
                       Vincular a uma Pendência (Nº de Registro)
                     </span>
-                    <span className="text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
+                    <span className={`text-[10px] px-2 py-0.5 rounded border font-medium ${
+                      isLight ? 'text-slate-600 bg-slate-100 border-slate-300' : 'text-slate-400 bg-slate-800/80 border-slate-700/50'
+                    }`}>
                       Opcional
                     </span>
                   </div>
@@ -1532,7 +1542,9 @@ export default function RmaEntry({
                     <button
                       type="button"
                       onClick={handleClearPendingLink}
-                      className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                      className={`text-[11px] flex items-center gap-1 cursor-pointer transition-colors font-semibold ${
+                        isLight ? 'text-rose-600 hover:text-rose-700' : 'text-rose-400 hover:text-rose-300'
+                      }`}
                       id="btn-unlink-pending"
                     >
                       <X className="w-3 h-3" />
@@ -1542,26 +1554,37 @@ export default function RmaEntry({
                 </div>
 
                 {/* Apenas a Caixa de Seleção de Pendências Abertas (filtradas estritamente pelo SKU do produto) */}
-                <div className="space-y-1 relative" ref={pendingSelectorRef}>
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <div className="space-y-1.5 relative" ref={pendingSelectorRef}>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                      isLight ? 'text-slate-700' : 'text-slate-400'
+                    }`}>
                       <span>Pendências Abertas</span>
                       {activeSku ? (
-                        <span className="text-[10px] font-mono text-sky-400 font-bold bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
+                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                          isLight ? 'text-sky-800 bg-sky-100 border-sky-300' : 'text-sky-400 bg-sky-500/10 border-sky-500/20'
+                        }`}>
                           SKU: {activeSku}
                         </span>
                       ) : null}
                     </label>
                     <div>
                       {activeSku ? (
-                        <span className={`text-[10px] font-bold ${
-                          availablePendingItems.length > 0 ? 'text-sky-400' : 'text-slate-500'
+                        <span className={`text-[10.5px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                          availablePendingItems.length > 0 
+                            ? (isLight ? 'bg-sky-100 text-sky-850 border-sky-300' : 'bg-sky-500/10 text-sky-400 border-sky-500/20')
+                            : (isLight ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-slate-800 text-slate-400 border-slate-700')
                         }`}>
                           {availablePendingItems.length} {availablePendingItems.length === 1 ? 'disponível' : 'disponíveis'}
                         </span>
                       ) : (
-                        <span className="text-[10px] text-amber-400/90 font-medium">
-                          Aguardando SKU no Passo 1
+                        <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md border flex items-center gap-1.5 shadow-xs transition-colors ${
+                          isLight 
+                            ? 'bg-amber-100 text-amber-950 border-amber-300' 
+                            : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLight ? 'bg-amber-600' : 'bg-amber-400 animate-pulse'}`}></span>
+                          <span>Aguardando SKU no Passo 1</span>
                         </span>
                       )}
                     </div>
@@ -1574,51 +1597,71 @@ export default function RmaEntry({
                       setIsPendingSelectorOpen(!isPendingSelectorOpen);
                     }}
                     disabled={!activeSku}
-                    className={`w-full px-3.5 h-[40px] bg-slate-950 border rounded-lg text-xs text-left flex items-center justify-between transition-colors ${
+                    className={`w-full px-3.5 h-[42px] border rounded-lg text-xs text-left flex items-center justify-between transition-colors ${
                       !activeSku
-                        ? 'border-slate-800/80 text-slate-500 cursor-not-allowed bg-slate-950/50'
+                        ? (isLight 
+                            ? 'border-slate-300 text-slate-600 cursor-not-allowed bg-slate-100/90' 
+                            : 'border-slate-800/80 text-slate-400 cursor-not-allowed bg-slate-950/50')
                         : selectedPendingItem
-                        ? 'border-sky-500 bg-sky-950/20 text-sky-200 cursor-pointer shadow-sm'
-                        : 'border-slate-800 text-slate-300 hover:border-slate-700 cursor-pointer'
+                        ? (isLight 
+                            ? 'border-sky-500 bg-sky-50 text-sky-900 cursor-pointer shadow-xs ring-1 ring-sky-500/30' 
+                            : 'border-sky-500 bg-sky-950/20 text-sky-200 cursor-pointer shadow-sm')
+                        : (isLight 
+                            ? 'border-slate-300 text-slate-800 bg-white hover:border-slate-400 cursor-pointer shadow-xs' 
+                            : 'border-slate-800 text-slate-300 hover:border-slate-700 cursor-pointer bg-slate-950')
                     }`}
                     id="btn-select-open-pending"
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
                       {selectedPendingItem ? (
                         <>
-                          <span className="font-mono font-bold text-sky-400 bg-sky-500/20 px-2 py-0.5 rounded border border-sky-500/30 shrink-0 text-[11px]">
+                          <span className={`font-mono font-bold px-2 py-0.5 rounded border shrink-0 text-[11px] ${
+                            isLight ? 'text-sky-800 bg-sky-100 border-sky-300' : 'text-sky-400 bg-sky-500/20 border-sky-500/30'
+                          }`}>
                             {selectedPendingItem.registrationNumber || 'REG'}
                           </span>
-                          <span className="truncate font-medium text-white">
+                          <span className={`truncate font-semibold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                             {selectedPendingItem.productName || selectedPendingItem.sku}
                             {selectedPendingItem.orderNumber && ` (Ped: ${selectedPendingItem.orderNumber})`}
                           </span>
                         </>
                       ) : !activeSku ? (
-                        <span className="text-slate-500 italic">
+                        <span className={`italic font-medium ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                           Informe ou selecione o SKU no Passo 1 para carregar as pendências...
                         </span>
                       ) : availablePendingItems.length === 0 ? (
-                        <span className="text-slate-400">
+                        <span className={`font-medium ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                           Nenhuma pendência aberta encontrada para o SKU "{activeSku}"
                         </span>
                       ) : (
-                        <span className="text-slate-300">
+                        <span className={`font-medium ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                           Selecionar da lista de pendências abertas ({availablePendingItems.length} disponíveis para SKU {activeSku})...
                         </span>
                       )}
                     </div>
-                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${isPendingSelectorOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
+                      isLight ? 'text-slate-600' : 'text-slate-400'
+                    } ${isPendingSelectorOpen ? 'rotate-180' : ''}`} />
                   </button>
 
                   {/* Dropdown de pendências abertas filtradas estritamente por SKU */}
                   {isPendingSelectorOpen && activeSku && (
-                    <div className="absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700/90 rounded-xl shadow-2xl z-30 max-h-60 overflow-y-auto divide-y divide-slate-800">
-                      <div className="p-2 bg-slate-900/95 text-[10px] text-slate-400 flex items-center justify-between border-b border-slate-800 sticky top-0 backdrop-blur-sm z-10 font-medium">
-                        <span className="font-bold text-slate-300">
-                          Pendências para o SKU <span className="font-mono text-sky-400 font-bold">{activeSku}</span>
+                    <div className={`absolute left-0 right-0 top-full mt-1 border rounded-xl shadow-2xl z-30 max-h-60 overflow-y-auto divide-y ${
+                      isLight 
+                        ? 'bg-white border-slate-300 divide-slate-200 text-slate-800 shadow-slate-300/60' 
+                        : 'bg-slate-950 border-slate-700/90 divide-slate-800 text-slate-200'
+                    }`}>
+                      <div className={`p-2.5 text-[11px] flex items-center justify-between border-b sticky top-0 backdrop-blur-sm z-10 font-medium ${
+                        isLight ? 'bg-slate-100/95 border-slate-200 text-slate-700' : 'bg-slate-900/95 border-slate-800 text-slate-300'
+                      }`}>
+                        <span className="font-bold">
+                          Pendências para o SKU <span className={`font-mono font-bold ${isLight ? 'text-sky-700' : 'text-sky-400'}`}>{activeSku}</span>
                         </span>
-                        <span className="text-slate-500">{availablePendingItems.length} encontradas</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                          isLight ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {availablePendingItems.length} {availablePendingItems.length === 1 ? 'encontrada' : 'encontradas'}
+                        </span>
                       </div>
 
                       {selectedPendingItem && (
@@ -1627,17 +1670,21 @@ export default function RmaEntry({
                             handleClearPendingLink();
                             setIsPendingSelectorOpen(false);
                           }}
-                          className="p-2.5 hover:bg-slate-800/80 cursor-pointer text-xs text-slate-400 italic flex items-center gap-1.5 border-b border-slate-800/60"
+                          className={`p-2.5 cursor-pointer text-xs italic flex items-center gap-1.5 border-b transition-colors ${
+                            isLight 
+                              ? 'hover:bg-rose-50 text-rose-700 border-slate-200 font-medium' 
+                              : 'hover:bg-slate-800/80 text-slate-400 border-slate-800/60'
+                          }`}
                         >
-                          <X className="w-3.5 h-3.5 text-rose-400" />
+                          <X className={`w-3.5 h-3.5 ${isLight ? 'text-rose-600' : 'text-rose-400'}`} />
                           <span>Não vincular a nenhuma pendência (Desvincular)</span>
                         </div>
                       )}
 
                       {availablePendingItems.length === 0 ? (
-                        <div className="p-4 text-center text-xs text-slate-400 space-y-1">
-                          <p className="font-semibold text-slate-300">Nenhuma pendência em aberto para este SKU.</p>
-                          <p className="text-[11px] text-slate-500">Apenas pendências correspondentes ao SKU "{activeSku}" aparecem aqui.</p>
+                        <div className="p-4 text-center text-xs space-y-1">
+                          <p className={`font-semibold ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Nenhuma pendência em aberto para este SKU.</p>
+                          <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Apenas pendências correspondentes ao SKU "{activeSku}" aparecem aqui.</p>
                         </div>
                       ) : (
                         availablePendingItems.map((item) => {
@@ -1646,30 +1693,40 @@ export default function RmaEntry({
                             <div
                               key={item.id}
                               onClick={() => handleApplyPendingItem(item)}
-                              className={`p-2.5 hover:bg-slate-800/80 cursor-pointer transition-colors text-xs ${
-                                isSelected ? 'bg-sky-500/15 border-l-2 border-sky-400' : ''
+                              className={`p-2.5 cursor-pointer transition-colors text-xs ${
+                                isSelected 
+                                  ? (isLight ? 'bg-sky-50 border-l-4 border-sky-600' : 'bg-sky-500/15 border-l-4 border-sky-400')
+                                  : (isLight ? 'hover:bg-slate-50' : 'hover:bg-slate-800/80')
                               }`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="font-mono font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20 text-[11px]">
+                                  <span className={`font-mono font-bold px-1.5 py-0.5 rounded border text-[11px] ${
+                                    isLight ? 'text-sky-800 bg-sky-100 border-sky-300' : 'text-sky-400 bg-sky-500/10 border-sky-500/20'
+                                  }`}>
                                     {item.registrationNumber || 'SEM REG'}
                                   </span>
-                                  <span className="font-mono text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
+                                  <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded ${
+                                    isLight ? 'text-slate-700 bg-slate-100 border border-slate-200 font-semibold' : 'text-slate-400 bg-slate-900'
+                                  }`}>
                                     SKU: {item.sku}
                                   </span>
                                 </div>
-                                <span className="text-[10px] text-slate-400 font-medium">
+                                <span className={`text-[10px] font-medium ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                                   {item.orderNumber ? `Ped: ${item.orderNumber}` : item.platform || ''}
                                 </span>
                               </div>
-                              <div className="font-medium text-slate-200 mt-1 truncate">
+                              <div className={`font-medium mt-1 truncate ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>
                                 {item.productName || item.sku}
                               </div>
-                              <div className="flex items-center justify-between gap-2 text-[10px] text-amber-400/90 truncate mt-0.5">
+                              <div className={`flex items-center justify-between gap-2 text-[10.5px] truncate mt-1 ${
+                                isLight ? 'text-amber-900 font-semibold' : 'text-amber-400 font-medium'
+                              }`}>
                                 <span className="truncate">Motivo: {item.pendingReason}</span>
                                 {item.trackingCode && (
-                                  <span className="text-slate-400 font-mono shrink-0">
+                                  <span className={`font-mono shrink-0 text-[10px] px-1.5 py-0.5 rounded ${
+                                    isLight ? 'text-slate-700 bg-slate-100 border border-slate-200' : 'text-slate-400 bg-slate-900'
+                                  }`}>
                                     {item.trackingCode}
                                   </span>
                                 )}
@@ -1684,34 +1741,44 @@ export default function RmaEntry({
 
                 {/* Feedback de Validação e Vínculo */}
                 {!pendingLinkValidation.valid && (
-                  <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 border ${
+                    isLight ? 'bg-rose-50 border-rose-300 text-rose-900 font-medium' : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                  }`}>
+                    <AlertCircle className={`w-4 h-4 shrink-0 ${isLight ? 'text-rose-600' : 'text-rose-400'}`} />
                     <span>{pendingLinkValidation.error}</span>
                   </div>
                 )}
 
                 {pendingRegistrationNumber && pendingLinkValidation.valid && (
-                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs space-y-1">
-                    <div className="flex items-center justify-between text-emerald-300 font-bold">
+                  <div className={`p-2.5 rounded-lg text-xs space-y-1 border ${
+                    isLight ? 'bg-emerald-50 border-emerald-300' : 'bg-emerald-500/10 border-emerald-500/30'
+                  }`}>
+                    <div className={`flex items-center justify-between font-bold ${
+                      isLight ? 'text-emerald-950' : 'text-emerald-300'
+                    }`}>
                       <div className="flex items-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <CheckCircle className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />
                         <span>Vínculo 1:1 Válido ({pendingRegistrationNumber})</span>
                       </div>
                       {selectedPendingItem && (
                         <button
                           type="button"
                           onClick={() => handleApplyPendingItem(selectedPendingItem)}
-                          className="text-[11px] text-sky-300 hover:text-sky-200 underline font-normal cursor-pointer"
+                          className={`text-[11px] underline font-medium cursor-pointer ${
+                            isLight ? 'text-sky-700 hover:text-sky-800' : 'text-sky-300 hover:text-sky-200'
+                          }`}
                         >
                           Reaplicar dados da pendência
                         </button>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-300">
+                    <p className={`text-[11px] ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                       Ao concluir a triagem, esta pendência será vinculada ao produto no estoque físico e permanecerá em aberto para acompanhamento.
                     </p>
                     {serials.filter(s => s && s.trim()).length > 1 && (
-                      <div className="p-2 bg-amber-500/15 border border-amber-500/40 rounded text-amber-300 text-[11px] font-semibold mt-1 flex items-center gap-1.5">
+                      <div className={`p-2 rounded text-[11px] font-semibold mt-1 flex items-center gap-1.5 border ${
+                        isLight ? 'bg-amber-100 border-amber-300 text-amber-950' : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                      }`}>
                         <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                         <span>Atenção: Você adicionou múltiplos seriais. Uma pendência só pode ser vinculada a 1 único produto físico.</span>
                       </div>

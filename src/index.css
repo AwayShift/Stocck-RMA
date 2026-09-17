@@ -371,8 +371,12 @@ html.light .text-amber-100,
 html.light .text-amber-200,
 html.light .text-amber-300,
 html.light .text-amber-400,
+html.light .text-amber-400\/90,
+html.light .text-amber-400\/80,
+html.light .text-amber-400\/70,
 html.light .text-amber-500,
-html.light .text-amber-600 {
+html.light .text-amber-600,
+html.light [class*="text-amber-"] {
   color: #92400e !important;
 }
 
