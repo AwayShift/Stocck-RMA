@@ -973,7 +973,7 @@ export default function RmaEntry({
                     {/* Autocomplete Dropdown */}
                     {isProductDropdownOpen && (
                       <div className="product-search-dropdown absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/60">
-                        <div className="product-search-header p-2 bg-slate-900/95 text-[10px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10 backdrop-blur-sm">
+                        <div className="product-search-header p-2 bg-slate-900 text-[10px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10">
                           <span className="font-bold text-slate-300">
                             {filteredProducts.length} {filteredProducts.length === 1 ? 'produto' : 'produtos'}
                           </span>
@@ -1677,8 +1677,8 @@ export default function RmaEntry({
                         ? 'bg-white border-slate-300 divide-slate-200 text-slate-800 shadow-slate-300/60' 
                         : 'bg-slate-950 border-slate-700/90 divide-slate-800 text-slate-200'
                     }`}>
-                      <div className={`p-2.5 text-[11px] flex items-center justify-between border-b sticky top-0 backdrop-blur-sm z-10 font-medium ${
-                        isLight ? 'bg-slate-100/95 border-slate-200 text-slate-700' : 'bg-slate-900/95 border-slate-800 text-slate-300'
+                      <div className={`p-2.5 text-[11px] flex items-center justify-between border-b sticky top-0 z-10 font-medium ${
+                        isLight ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300'
                       }`}>
                         <span className="font-bold">
                           Pendências para o SKU <span className={`font-mono font-bold ${isLight ? 'text-sky-700' : 'text-sky-400'}`}>{activeSku}</span>
@@ -1866,7 +1866,7 @@ export default function RmaEntry({
       {/* Modal de Resumo do Pedido com Contagem Regressiva */}
       {summaryModalData && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fadeIn"
           id="rma-summary-modal-overlay"
           onClick={(e) => {
             if (e.target === e.currentTarget) {

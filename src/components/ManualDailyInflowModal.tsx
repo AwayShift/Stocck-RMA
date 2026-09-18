@@ -267,7 +267,7 @@ export default function ManualDailyInflowModal({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn" 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 animate-fadeIn" 
       id="manual-inflow-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isSaving && !isDeleting) onClose();

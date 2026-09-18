@@ -143,14 +143,14 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
 
   return (
     <div 
-      className="image-zoom-overlay fixed inset-0 z-[120] bg-black/92 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-200"
+      className="image-zoom-overlay fixed inset-0 z-[120] bg-black/95 flex flex-col justify-between select-none animate-in fade-in duration-150"
       id="modal-image-zoom-viewer"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={() => setIsDragging(false)}
     >
       {/* Top Header Bar */}
-      <div className="image-zoom-header w-full flex items-center justify-between px-6 py-3 bg-slate-950/80 border-b border-slate-800/80 backdrop-blur-md z-30">
+      <div className="image-zoom-header w-full flex items-center justify-between px-6 py-3 bg-slate-950 border-b border-slate-800 z-30">
         <div className="flex items-center gap-3 min-w-0">
           <div className="min-w-0">
             <h3 className="image-zoom-title text-sm font-bold text-white truncate">
@@ -220,7 +220,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
                 e.stopPropagation();
                 onNavigate((currentIndex - 1 + imagesList.length) % imagesList.length);
               }}
-              className="image-zoom-nav-btn absolute left-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-850 text-white border border-slate-700/60 shadow-2xl backdrop-blur-sm transition-all hover:scale-105 cursor-pointer"
+              className="image-zoom-nav-btn absolute left-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-850 text-white border border-slate-700/60 shadow-2xl transition-all hover:scale-105 cursor-pointer"
               title="Foto Anterior (Seta Esquerda)"
             >
               <ChevronLeft className="w-6 h-6" />
@@ -231,7 +231,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
                 e.stopPropagation();
                 onNavigate((currentIndex + 1) % imagesList.length);
               }}
-              className="image-zoom-nav-btn absolute right-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-850 text-white border border-slate-700/60 shadow-2xl backdrop-blur-sm transition-all hover:scale-105 cursor-pointer"
+              className="image-zoom-nav-btn absolute right-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-850 text-white border border-slate-700/60 shadow-2xl transition-all hover:scale-105 cursor-pointer"
               title="Próxima Foto (Seta Direita)"
             >
               <ChevronRight className="w-6 h-6" />
@@ -259,7 +259,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
 
       {/* Bottom Floating Controls Bar */}
       <div className="w-full pb-4 px-4 flex justify-center items-center z-30">
-        <div className="image-zoom-bottom-bar bg-slate-950/90 border border-slate-800 rounded-2xl p-2 px-3 shadow-2xl backdrop-blur-lg flex items-center gap-2 flex-wrap">
+        <div className="image-zoom-bottom-bar bg-slate-950 border border-slate-800 rounded-2xl p-2 px-3 shadow-2xl flex items-center gap-2 flex-wrap">
           
           {/* Zoom Out */}
           <button 

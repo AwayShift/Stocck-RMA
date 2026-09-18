@@ -2195,7 +2195,7 @@ export default function PhysicalStock({
                         </div>
                       )}
                       {unit.status === 'Baixado' && (
-                        <div className="absolute inset-0 bg-slate-950/75 dark:bg-black/80 backdrop-blur-[1px] flex flex-col items-center justify-center gap-1.5 p-2 transition-all">
+                        <div className="absolute inset-0 bg-slate-950/85 dark:bg-black/85 flex flex-col items-center justify-center gap-1.5 p-2 transition-opacity">
                           <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white font-black text-[11px] uppercase tracking-wider shadow-lg flex items-center gap-1.5 border border-rose-300/40">
                             <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
                             <span>Saída Efetuada</span>
@@ -2680,7 +2680,7 @@ export default function PhysicalStock({
       {/* Complete unit details / Edit Modal Sheet */}
       {currentUnit && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto" 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 overflow-y-auto" 
           id="stock-details-modal"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
@@ -3009,7 +3009,7 @@ export default function PhysicalStock({
                       {/* Dropdown list of pending items filtered strictly by SKU */}
                       {isEditPendingSelectorOpen && (
                         <div className="absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800">
-                          <div className="p-2 bg-slate-900 text-[10px] text-slate-400 flex items-center justify-between sticky top-0 backdrop-blur-sm z-10 border-b border-slate-800 font-medium">
+                          <div className="p-2 bg-slate-900 text-[10px] text-slate-400 flex items-center justify-between sticky top-0 z-10 border-b border-slate-800 font-medium">
                             <span className="font-bold text-slate-300">
                               Pendências Abertas (SKU <span className="font-mono text-sky-400">{editForm.baseProductSku || (editForm as any).sku || ''}</span>)
                             </span>
@@ -4260,7 +4260,7 @@ export default function PhysicalStock({
       {/* Sector Transfer with Photo Choice Modal (When moving to Estoque Principal) */}
       {transferModalData && (
         <div 
-          className="fixed inset-0 z-[120] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-[120] bg-black/85 flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget) setTransferModalData(null);
           }}
@@ -4409,7 +4409,7 @@ export default function PhysicalStock({
       {/* Custom Confirmation Modal */}
       {confirmConfig && (
         <div 
-          className="fixed inset-0 z-[110] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-[110] bg-black/85 flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget) setConfirmConfig(null);
           }}

@@ -256,7 +256,7 @@ export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
       {/* Dropdown Options Menu */}
       {isOpen && (
         <div 
-          className="absolute top-full left-0 mt-1.5 w-full min-w-[260px] bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 platform-dropdown-menu backdrop-blur-md"
+          className="absolute top-full left-0 mt-1.5 w-full min-w-[260px] bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 platform-dropdown-menu"
           role="listbox"
           id={`${id}-dropdown`}
         >

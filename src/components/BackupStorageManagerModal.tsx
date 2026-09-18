@@ -274,7 +274,7 @@ export default function BackupStorageManagerModal({
   const isCriticalStorage = percentUsed >= 85;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 animate-fadeIn">
       <div
         id="backup-storage-manager-modal"
         className={`w-full max-w-6xl max-h-[95vh] flex flex-col rounded-2xl shadow-2xl border transition-colors overflow-hidden ${
@@ -1145,7 +1145,7 @@ export default function BackupStorageManagerModal({
 
       {/* Confirmation Modal for Quick Cleanup Rules */}
       {cleanupModalPolicy && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/85 animate-fadeIn">
           <div
             className={`w-full max-w-md p-6 rounded-2xl shadow-2xl border space-y-4 ${
               isLight
@@ -1219,7 +1219,7 @@ export default function BackupStorageManagerModal({
 
       {/* Confirmation Modal for Single Item Delete */}
       {itemToDelete && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/85 animate-fadeIn">
           <div
             className={`w-full max-w-md p-6 rounded-2xl shadow-2xl border space-y-4 ${
               isLight
@@ -1277,7 +1277,7 @@ export default function BackupStorageManagerModal({
 
       {/* Loading Overlay */}
       {isProcessing && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/85 animate-fadeIn">
           <div
             className={`w-full max-w-sm p-6 rounded-2xl shadow-2xl border text-center space-y-4 ${
               isLight

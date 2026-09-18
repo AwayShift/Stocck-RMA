@@ -172,7 +172,7 @@ export default function ResetDatabaseModal({
 
   return (
     <div 
-      className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" 
+      className="fixed inset-0 z-[150] bg-black/85 flex items-center justify-center p-4 animate-in fade-in duration-150" 
       id="reset-database-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isLoading) {

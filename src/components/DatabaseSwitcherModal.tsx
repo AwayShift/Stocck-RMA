@@ -474,7 +474,7 @@ export default function DatabaseSwitcherModal({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 overflow-y-auto animate-in fade-in duration-150"
       id="db-switcher-modal-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isLoadingMetrics) onClose();

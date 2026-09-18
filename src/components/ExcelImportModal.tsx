@@ -497,7 +497,7 @@ export default function ExcelImportModal({
 
   return (
     <div 
-      className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-[90] overflow-y-auto" 
+      className="fixed inset-0 bg-slate-950/85 flex items-center justify-center p-4 z-[90] overflow-y-auto" 
       id="modal-excel-import"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isProcessing) onClose();

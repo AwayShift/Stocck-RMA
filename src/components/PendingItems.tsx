@@ -1835,7 +1835,7 @@ export default function PendingItems({
       {/* DELETE CONFIRMATION MODAL */}
       {deleteConfirmItem && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isDeleting) {
               setDeleteConfirmItem(null);
@@ -1927,7 +1927,7 @@ export default function PendingItems({
       {/* CREATE / EDIT PENDING ITEM MODAL */}
       {isFormModalOpen && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isSaving) setIsFormModalOpen(false);
           }}
@@ -2546,7 +2546,7 @@ export default function PendingItems({
       {/* TRANSFER TO STOCK MODAL - COMPLETE RMA TRIAGE FORM */}
       {isTransferModalOpen && itemToTransfer && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isTransferring) setIsTransferModalOpen(false);
           }}
@@ -3225,7 +3225,7 @@ export default function PendingItems({
       {/* TRANSFER SUCCESS CONFIRMATION MODAL */}
       {transferSuccessData && (
         <div 
-          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-150"
           onClick={() => setTransferSuccessData(null)}
         >
           <div 

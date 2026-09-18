@@ -916,7 +916,7 @@ export default function BaseCatalog({
        {/* Add / Edit Product Modal */}
       {isFormOpen && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto py-10" 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 overflow-y-auto py-10" 
           id="catalog-form-modal"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsFormOpen(false);
@@ -1461,7 +1461,7 @@ export default function BaseCatalog({
       {/* Custom Confirmation Modal */}
       {confirmConfig && (
         <div 
-          className="fixed inset-0 z-[110] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-[110] bg-black/85 flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget) setConfirmConfig(null);
           }}
@@ -1506,7 +1506,7 @@ export default function BaseCatalog({
       {/* Product Details Viewer Modal */}
       {viewingProduct && (
         <div 
-          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200" 
+          className="fixed inset-0 z-[100] bg-black/85 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150" 
           id="product-details-modal"
           onClick={(e) => {
             if (e.target === e.currentTarget) setViewingProduct(null);
@@ -1560,7 +1560,7 @@ export default function BaseCatalog({
                   >
                     {/* Category Badge */}
                     {(viewingProduct.imageUrl || (viewingProduct.images && viewingProduct.images.length > 0)) && (
-                      <span className="absolute top-3 left-3 px-2 py-1 bg-slate-900/90 text-[10px] font-bold text-sky-400 border border-slate-800 rounded-lg backdrop-blur-sm z-10">
+                      <span className="absolute top-3 left-3 px-2 py-1 bg-slate-900/95 text-[10px] font-bold text-sky-400 border border-slate-800 rounded-lg z-10">
                         {(() => {
                           const imgUrl = (viewingProduct.images && viewingProduct.images.length > 0)
                             ? (viewingProduct.images[activeViewImageIndex] || viewingProduct.imageUrl)
@@ -1601,7 +1601,7 @@ export default function BaseCatalog({
                         <div className="p-3 bg-slate-900/95 rounded-full border border-slate-700 shadow-xl text-sky-400">
                           <ZoomIn className="w-6 h-6" />
                         </div>
-                        <span className="bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-700 backdrop-blur-sm text-[11px]">Clique para dar zoom</span>
+                        <span className="bg-slate-900/95 px-2.5 py-1 rounded-lg border border-slate-700 text-[11px]">Clique para dar zoom</span>
                       </div>
                     )}
                   </div>

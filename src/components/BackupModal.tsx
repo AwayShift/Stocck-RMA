@@ -447,8 +447,8 @@ export default function BackupModal({
 
   return (
     <div 
-      className={`fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200 ${
-        isLight ? 'bg-slate-900/40' : 'bg-slate-950/80'
+      className={`fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-150 ${
+        isLight ? 'bg-slate-900/60' : 'bg-slate-950/85'
       }`}
       id="backup-modal-backdrop"
       onClick={(e) => {
@@ -1624,7 +1624,7 @@ export default function BackupModal({
       {/* Delete Cloud Snapshot Confirmation Dialog */}
       {snapshotToDelete && (
         <div 
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150"
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-150"
           id="delete-snapshot-dialog"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isDeletingSnapshot) setSnapshotToDelete(null);
