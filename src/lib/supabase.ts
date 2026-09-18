@@ -1380,6 +1380,21 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
     rawNotes = rawNotes.replace(/\[LINKED_STI:.*?\]\s*/g, '').trim();
     rawNotes = rawNotes ? `${rawNotes}\n${stiMeta}` : stiMeta;
   }
+  if (p.customerReason) {
+    const crMeta = `[CUSTOMER_REASON:${p.customerReason}]`;
+    rawNotes = rawNotes.replace(/\[CUSTOMER_REASON:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${crMeta}` : crMeta;
+  }
+  if (p.deviceStatus) {
+    const dsMeta = `[DEVICE_STATUS:${p.deviceStatus}]`;
+    rawNotes = rawNotes.replace(/\[DEVICE_STATUS:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${dsMeta}` : dsMeta;
+  }
+  if (p.packageStatus) {
+    const psMeta = `[PACKAGE_STATUS:${p.packageStatus}]`;
+    rawNotes = rawNotes.replace(/\[PACKAGE_STATUS:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${psMeta}` : psMeta;
+  }
 
   const payload: any = {
     id: cleanId,
@@ -1440,10 +1455,31 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     if (match && match[1]) linkedUnitTrackingCode = match[1].trim();
   }
 
+  let customerReason: string | undefined = r.customer_reason || r.customerReason;
+  if (!customerReason && decompressedNotes.includes('[CUSTOMER_REASON:')) {
+    const match = decompressedNotes.match(/\[CUSTOMER_REASON:(.*?)\]/);
+    if (match && match[1]) customerReason = match[1].trim();
+  }
+
+  let deviceStatus: string | undefined = r.device_status || r.deviceStatus;
+  if (!deviceStatus && decompressedNotes.includes('[DEVICE_STATUS:')) {
+    const match = decompressedNotes.match(/\[DEVICE_STATUS:(.*?)\]/);
+    if (match && match[1]) deviceStatus = match[1].trim();
+  }
+
+  let packageStatus: string | undefined = r.package_status || r.packageStatus;
+  if (!packageStatus && decompressedNotes.includes('[PACKAGE_STATUS:')) {
+    const match = decompressedNotes.match(/\[PACKAGE_STATUS:(.*?)\]/);
+    if (match && match[1]) packageStatus = match[1].trim();
+  }
+
   const cleanNotes = decompressedNotes
     .replace(/\[REG_NUM:.*?\]\s*/g, '')
     .replace(/\[LINKED_UNIT:.*?\]\s*/g, '')
     .replace(/\[LINKED_STI:.*?\]\s*/g, '')
+    .replace(/\[CUSTOMER_REASON:.*?\]\s*/g, '')
+    .replace(/\[DEVICE_STATUS:.*?\]\s*/g, '')
+    .replace(/\[PACKAGE_STATUS:.*?\]\s*/g, '')
     .trim();
 
   return {
@@ -1456,6 +1492,9 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     orderNumber: r.order_number || r.orderNumber || '',
     platform: r.platform || 'Mercado Livre',
     pendingReason: decompressText(r.pending_reason || r.pendingReason || ''),
+    customerReason: customerReason || '',
+    deviceStatus: deviceStatus || undefined,
+    packageStatus: packageStatus || undefined,
     detailedNotes: cleanNotes,
     status: r.status || 'Pendente',
     priority: (r.priority as any) || 'Média',

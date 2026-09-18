@@ -215,6 +215,11 @@ export default function PendingItems({
   const [formPriority, setFormPriority] = useState<PendingPriorityType>('Média');
   const [formReason, setFormReason] = useState(PRESET_REASONS[0]);
   const [formCustomReason, setFormCustomReason] = useState('');
+  const [formCustomerReason, setFormCustomerReason] = useState('');
+  const [formDeviceStatus, setFormDeviceStatus] = useState<string>('Usado');
+  const [formCustomDeviceStatus, setFormCustomDeviceStatus] = useState('');
+  const [formPackageStatus, setFormPackageStatus] = useState<string>('Danificada');
+  const [formCustomPackageStatus, setFormCustomPackageStatus] = useState('');
   const [formDetailedNotes, setFormDetailedNotes] = useState('');
   const [formStatus, setFormStatus] = useState<PendingStatusType>('Pendente');
   const [formPhotos, setFormPhotos] = useState<string[]>([]);
@@ -501,6 +506,11 @@ export default function PendingItems({
     setFormPriority('Média');
     setFormReason(PRESET_REASONS[0]);
     setFormCustomReason('');
+    setFormCustomerReason('');
+    setFormDeviceStatus('Usado');
+    setFormCustomDeviceStatus('');
+    setFormPackageStatus('Danificada');
+    setFormCustomPackageStatus('');
     setFormDetailedNotes('');
     setFormStatus('Pendente');
     setFormPhotos([]);
@@ -530,6 +540,18 @@ export default function PendingItems({
       setFormReason('Outro Motivo');
       setFormCustomReason(item.pendingReason);
     }
+
+    setFormCustomerReason(item.customerReason || '');
+
+    const devStat = item.deviceStatus || 'Usado';
+    const isStdDev = ['Novo', 'Usado', 'Danificado'].includes(devStat);
+    setFormDeviceStatus(isStdDev ? devStat : 'Descrever');
+    setFormCustomDeviceStatus(isStdDev ? '' : devStat);
+
+    const pkgStat = item.packageStatus || 'Danificada';
+    const isStdPkg = ['Perfeita', 'Danificada', 'Sem Embalagem', 'Sem Caixa', 'Usada'].includes(pkgStat);
+    setFormPackageStatus(isStdPkg ? pkgStat : 'Descrever');
+    setFormCustomPackageStatus(isStdPkg ? '' : pkgStat);
 
     setFormDetailedNotes(item.detailedNotes || '');
     setFormStatus(item.status || 'Pendente');
@@ -710,6 +732,14 @@ export default function PendingItems({
 
     setIsSaving(true);
     try {
+      const finalDeviceStatus = formDeviceStatus === 'Descrever'
+        ? (formCustomDeviceStatus.trim() || 'Descrever')
+        : formDeviceStatus;
+
+      const finalPackageStatus = formPackageStatus === 'Descrever'
+        ? (formCustomPackageStatus.trim() || 'Descrever')
+        : formPackageStatus;
+
       const itemToSave: PendingItem = {
         id: editingItem ? editingItem.id : `pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         registrationNumber: formRegistrationNumber || generatePendingRegistrationNumber(items),
@@ -722,6 +752,9 @@ export default function PendingItems({
         platform: formPlatform,
         priority: formPriority,
         pendingReason: finalReason,
+        customerReason: formCustomerReason.trim(),
+        deviceStatus: finalDeviceStatus,
+        packageStatus: finalPackageStatus,
         detailedNotes: formDetailedNotes.trim(),
         status: formStatus,
         photos: formPhotos,
@@ -758,11 +791,20 @@ export default function PendingItems({
     setTransferSti(item.trackingCode || '');
     setTransferOrderNumber(item.orderNumber || '');
     setTransferDestination(item.destinationSectorSuggested || 'Openbox');
-    setTransferDeviceStatus('Usado');
-    setTransferCustomDeviceStatus('');
-    setTransferPackageStatus('Danificada');
-    setTransferCustomPackageStatus('');
-    setTransferCustomerReason('');
+
+    // Automatically pull customer reason and device/package status from the initial pending registration
+    setTransferCustomerReason(item.customerReason || '');
+
+    const initialDevStatus = item.deviceStatus || 'Usado';
+    const isStandardDev = ['Novo', 'Usado', 'Danificado'].includes(initialDevStatus);
+    setTransferDeviceStatus(isStandardDev ? initialDevStatus : 'Descrever');
+    setTransferCustomDeviceStatus(isStandardDev ? '' : initialDevStatus);
+
+    const initialPkgStatus = item.packageStatus || 'Danificada';
+    const isStandardPkg = ['Perfeita', 'Danificada', 'Sem Embalagem', 'Sem Caixa', 'Usada'].includes(initialPkgStatus);
+    setTransferPackageStatus(isStandardPkg ? initialPkgStatus : 'Descrever');
+    setTransferCustomPackageStatus(isStandardPkg ? '' : initialPkgStatus);
+
     setTransferAccessories('');
     setTransferNotes(`<p><strong>Liberado da Aba de Pendências:</strong></p><p>Motivo original: ${item.pendingReason}</p><p>${item.detailedNotes || ''}</p>`);
     setTransferPhotosProduct(item.photos ? [...item.photos] : []);
@@ -880,14 +922,20 @@ export default function PendingItems({
 
     const dataToExport = filteredItems.map(item => ({
       'ID': item.id,
+      'Nº Registro': item.registrationNumber || '-',
       'Data de Registro': new Date(item.createdAt).toLocaleString('pt-BR'),
       'SKU': item.sku,
       'Nome do Produto': item.productName,
       'Voltagem': item.voltage || 'Bivolt',
       'Serial (S/N)': item.serialNumber || '-',
+      'Nº Pedido': item.orderNumber || '-',
       'Código STI / Rastreio': item.trackingCode || '-',
       'Plataforma': item.platform || '-',
       'Status': item.status,
+      'Prioridade': item.priority || 'Média',
+      'Motivo da Devolução': item.customerReason || '-',
+      'Estado do Produto': item.deviceStatus || '-',
+      'Estado da Embalagem': item.packageStatus || '-',
       'Motivo da Pendência': item.pendingReason,
       'Observações': item.detailedNotes || '-',
       'Qtd Fotos': item.photos?.length || 0,
@@ -1465,6 +1513,35 @@ export default function PendingItems({
                     </div>
                   )}
 
+                  {/* Customer Reason / Reclamação */}
+                  {item.customerReason && (
+                    <div className="bg-sky-500/10 border border-sky-500/20 p-2 rounded-xl mb-3 text-[11px] text-sky-200">
+                      <div className="text-[10px] font-bold uppercase text-sky-400 flex items-center gap-1 mb-0.5">
+                        <FileText className="w-3 h-3 text-sky-400" />
+                        <span>Motivo Devolução (Cliente)</span>
+                      </div>
+                      <p className="leading-snug">{item.customerReason}</p>
+                    </div>
+                  )}
+
+                  {/* Estado do Produto & Embalagem badges */}
+                  {(item.deviceStatus || item.packageStatus) && (
+                    <div className="flex flex-wrap items-center gap-1.5 mb-3 text-[10.5px]">
+                      {item.deviceStatus && (
+                        <span className="px-2 py-0.5 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 font-medium inline-flex items-center gap-1">
+                          <Box className="w-3 h-3 text-amber-400" />
+                          <span>Prod: <strong className="text-white font-semibold">{item.deviceStatus}</strong></span>
+                        </span>
+                      )}
+                      {item.packageStatus && (
+                        <span className="px-2 py-0.5 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 font-medium inline-flex items-center gap-1">
+                          <Package className="w-3 h-3 text-amber-400" />
+                          <span>Emb: <strong className="text-white font-semibold">{item.packageStatus}</strong></span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Detailed Notes if any */}
                   {item.detailedNotes && (
                     <div className="pending-notes-box bg-slate-950/50 p-2 rounded-xl border border-slate-800/60 mb-3 text-[11px] text-slate-400 line-clamp-3">
@@ -1651,8 +1728,8 @@ export default function PendingItems({
                         </span>
                       </td>
 
-                      {/* Pending Reason */}
-                      <td className="py-3.5 px-4 max-w-[260px]">
+                      {/* Pending Reason & Return Info */}
+                      <td className="py-3.5 px-4 max-w-[280px]">
                         <div 
                           className={`text-xs truncate font-bold pendencias-reason-title ${
                             isResolved 
@@ -1663,6 +1740,26 @@ export default function PendingItems({
                         >
                           {item.pendingReason}
                         </div>
+                        {item.customerReason && (
+                          <div 
+                            className="text-[10.5px] text-sky-400 font-semibold truncate mt-0.5 flex items-center gap-1"
+                            title={`Motivo Devolução: ${item.customerReason}`}
+                          >
+                            <FileText className="w-2.5 h-2.5 shrink-0" />
+                            <span className="truncate">Devolução: {item.customerReason}</span>
+                          </div>
+                        )}
+                        {(item.deviceStatus || item.packageStatus) && (
+                          <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1">
+                            {item.deviceStatus && (
+                              <span className="truncate">Prod: <strong className="text-slate-200">{item.deviceStatus}</strong></span>
+                            )}
+                            {item.deviceStatus && item.packageStatus && <span>•</span>}
+                            {item.packageStatus && (
+                              <span className="truncate">Emb: <strong className="text-slate-200">{item.packageStatus}</strong></span>
+                            )}
+                          </div>
+                        )}
                         {item.detailedNotes && (
                           <div 
                             className="text-[11px] text-slate-600 dark:text-slate-400 font-medium truncate mt-0.5 pendencias-reason-notes" 
@@ -2033,6 +2130,185 @@ export default function PendingItems({
                     placeholder="Ex: SN-88392014"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
                   />
+                </div>
+              </div>
+
+              {/* Row: Motivo da Devolução / Reclamação do Cliente */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Motivo da Devolução / Reclamação do Cliente</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Informado pelo cliente ou plataforma
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={formCustomerReason}
+                  onChange={(e) => setFormCustomerReason(e.target.value)}
+                  placeholder="Ex: Arrependimento, cliente alegou defeito no motor, peça faltante, não ligou..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                  id="input-form-customer-reason"
+                />
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[
+                    'Arrependimento de compra',
+                    'Aparelho não liga / Não funciona',
+                    'Defeito intermitente',
+                    'Produto danificado no transporte',
+                    'Peça / Acessório faltante',
+                    'Embalagem violada'
+                  ].map((preset) => (
+                    <button
+                      type="button"
+                      key={preset}
+                      onClick={() => setFormCustomerReason(prev => prev ? `${prev}, ${preset}` : preset)}
+                      className="text-[10px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-colors cursor-pointer"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Row: Estado do Produto & Estado da Embalagem */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                {/* Estado do Produto */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Box className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Estado do Produto</span>
+                    </label>
+                    {formDeviceStatus !== 'Descrever' ? (
+                      <button
+                        type="button"
+                        onClick={() => setFormDeviceStatus('Descrever')}
+                        className="text-[10px] text-sky-400 hover:text-sky-300 font-medium transition-colors cursor-pointer"
+                      >
+                        + Descrever
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormDeviceStatus('Usado');
+                          setFormCustomDeviceStatus('');
+                        }}
+                        className="text-[10px] text-slate-400 hover:text-slate-200 font-medium transition-colors cursor-pointer"
+                      >
+                        Opções padrão
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    value={formDeviceStatus}
+                    onChange={(e) => setFormDeviceStatus(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                    id="select-form-device-status"
+                  >
+                    <option value="Novo">Novo (Sem marcas de uso)</option>
+                    <option value="Usado">Usado (Leves marcas / Marcas normais)</option>
+                    <option value="Danificado">Danificado / Avariado</option>
+                    <option value="Descrever">Descrever (Personalizado)...</option>
+                  </select>
+
+                  {formDeviceStatus === 'Descrever' && (
+                    <div className="mt-2 space-y-1.5">
+                      <input
+                        type="text"
+                        value={formCustomDeviceStatus}
+                        onChange={(e) => setFormCustomDeviceStatus(e.target.value)}
+                        placeholder="Descreva o estado físico do produto..."
+                        autoFocus
+                        className="w-full bg-slate-950 border border-sky-500/70 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition-colors"
+                        id="input-form-custom-device-status"
+                      />
+                      <div className="flex flex-wrap gap-1">
+                        {['Leves marcas de uso', 'Riscos na carcaça', 'Aparência de novo', 'Sem marcas estéticas'].map((tag) => (
+                          <button
+                            type="button"
+                            key={tag}
+                            onClick={() => setFormCustomDeviceStatus(prev => prev ? `${prev}, ${tag}` : tag)}
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-colors cursor-pointer"
+                          >
+                            + {tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Estado da Embalagem */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Estado da Embalagem</span>
+                    </label>
+                    {formPackageStatus !== 'Descrever' ? (
+                      <button
+                        type="button"
+                        onClick={() => setFormPackageStatus('Descrever')}
+                        className="text-[10px] text-sky-400 hover:text-sky-300 font-medium transition-colors cursor-pointer"
+                      >
+                        + Descrever
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormPackageStatus('Danificada');
+                          setFormCustomPackageStatus('');
+                        }}
+                        className="text-[10px] text-slate-400 hover:text-slate-200 font-medium transition-colors cursor-pointer"
+                      >
+                        Opções padrão
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    value={formPackageStatus}
+                    onChange={(e) => setFormPackageStatus(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                    id="select-form-package-status"
+                  >
+                    <option value="Perfeita">Perfeita (Original intacta)</option>
+                    <option value="Danificada">Danificada (Amassada / Rasgada)</option>
+                    <option value="Sem Embalagem">Sem Embalagem (Caixa parda / genérica)</option>
+                    <option value="Sem Caixa">Sem Caixa (Apenas o item)</option>
+                    <option value="Usada">Usada (Marcas de fita / manuseio)</option>
+                    <option value="Descrever">Descrever (Personalizado)...</option>
+                  </select>
+
+                  {formPackageStatus === 'Descrever' && (
+                    <div className="mt-2 space-y-1.5">
+                      <input
+                        type="text"
+                        value={formCustomPackageStatus}
+                        onChange={(e) => setFormCustomPackageStatus(e.target.value)}
+                        placeholder="Descreva o estado da embalagem..."
+                        autoFocus
+                        className="w-full bg-slate-950 border border-sky-500/70 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition-colors"
+                        id="input-form-custom-package-status"
+                      />
+                      <div className="flex flex-wrap gap-1">
+                        {['Caixa original amassada', 'Caixa rasgada', 'Sem berço interno', 'Embalagem plástica / parda'].map((tag) => (
+                          <button
+                            type="button"
+                            key={tag}
+                            onClick={() => setFormCustomPackageStatus(prev => prev ? `${prev}, ${tag}` : tag)}
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-colors cursor-pointer"
+                          >
+                            + {tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

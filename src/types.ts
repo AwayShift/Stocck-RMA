@@ -52,6 +52,9 @@ export interface PendingItem {
   orderNumber?: string; // Número do pedido na plataforma (opcional)
   platform?: PlatformType | 'Outro' | string; // Plataforma Origem
   pendingReason: string; // Motivo da pendência (ex: "Sem nota fiscal", "Sem identificação", "Aguardando peças", etc.)
+  customerReason?: string; // Motivo da devolução informado pelo cliente / reclamação
+  deviceStatus?: DeviceStatusType | string; // Estado físico do produto (ex: Novo, Usado, Danificado...)
+  packageStatus?: PackageStatusType | string; // Estado da embalagem/caixa (ex: Perfeita, Usada, Danificada...)
   detailedNotes?: string; // Observações / Laudo preliminar / Detalhes
   status: PendingStatusType;
   priority?: PendingPriorityType; // Nível de prioridade: 'Baixa' | 'Média' | 'Alta' | 'Urgente'

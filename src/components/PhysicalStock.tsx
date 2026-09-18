@@ -342,6 +342,15 @@ export default function PhysicalStock({
     if (item.trackingCode && (!updated.trackingCode || updated.trackingCode.trim() === '')) {
       updated.trackingCode = item.trackingCode;
     }
+    if (!updated.customerReason && item.customerReason) {
+      updated.customerReason = item.customerReason;
+    }
+    if (item.deviceStatus && (!updated.deviceStatus || updated.deviceStatus === 'Usado')) {
+      updated.deviceStatus = item.deviceStatus as any;
+    }
+    if (item.packageStatus && (!updated.packageStatus || updated.packageStatus === 'Danificada')) {
+      updated.packageStatus = item.packageStatus as any;
+    }
 
     setEditForm(updated);
     setIsEditPendingSelectorOpen(false);

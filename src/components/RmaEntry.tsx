@@ -184,7 +184,33 @@ export default function RmaEntry({
     if (item.serialNumber) {
       setSerials([item.serialNumber]);
     }
-    // Não insere informações no laudo técnico e nem no motivo / reclamação a pedido do operador
+    if (item.customerReason) {
+      setCustomerReason(item.customerReason);
+    }
+    if (item.deviceStatus) {
+      const isStd = ['Novo', 'Usado', 'Danificado'].includes(item.deviceStatus);
+      if (isStd) {
+        setDeviceStatus(item.deviceStatus as DeviceStatusType);
+        setIsCustomDeviceStatus(false);
+        setCustomDeviceStatusText('');
+      } else {
+        setDeviceStatus('Descrever');
+        setIsCustomDeviceStatus(true);
+        setCustomDeviceStatusText(item.deviceStatus);
+      }
+    }
+    if (item.packageStatus) {
+      const isStd = ['Perfeita', 'Usada', 'Sem Caixa', 'Danificada'].includes(item.packageStatus);
+      if (isStd) {
+        setPackageStatus(item.packageStatus as PackageStatusType);
+        setIsCustomPackageStatus(false);
+        setCustomPackageStatusText('');
+      } else {
+        setPackageStatus('Descrever');
+        setIsCustomPackageStatus(true);
+        setCustomPackageStatusText(item.packageStatus);
+      }
+    }
     if (item.photos && item.photos.length > 0) {
       setPhotosProduct(prev => Array.from(new Set([...prev, ...item.photos!])));
     }
