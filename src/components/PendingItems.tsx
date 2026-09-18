@@ -1529,7 +1529,7 @@ export default function PendingItems({
                     <div className="flex flex-wrap items-center gap-1.5 mb-3 text-[10.5px]">
                       {item.deviceStatus && (
                         <span className="px-2 py-0.5 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 font-medium inline-flex items-center gap-1">
-                          <Box className="w-3 h-3 text-amber-400" />
+                          <Tag className="w-3 h-3 text-amber-400" />
                           <span>Prod: <strong className="text-white font-semibold">{item.deviceStatus}</strong></span>
                         </span>
                       )}

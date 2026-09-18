@@ -45,7 +45,8 @@ import {
   Hash,
   Link2,
   ArrowRightLeft,
-  Box
+  Box,
+  Tag
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType, PendingItem } from '../types';
 import ExcelImportModal from './ExcelImportModal';
@@ -4000,7 +4001,7 @@ export default function PhysicalStock({
                               : 'bg-slate-950/80 border-slate-800 text-slate-300'
                           }`}
                         >
-                          <Box className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <Tag className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                           <span>Prod: <strong className={`font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{currentUnit.deviceStatus}</strong></span>
                         </div>
                       )}
