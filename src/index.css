@@ -375,9 +375,30 @@ html.light .text-amber-400\/90,
 html.light .text-amber-400\/80,
 html.light .text-amber-400\/70,
 html.light .text-amber-500,
-html.light .text-amber-600,
-html.light [class*="text-amber-"] {
+html.light .text-amber-600 {
   color: #92400e !important;
+}
+
+/* Tab and element hover text colors in Light Mode */
+html.light .hover\:text-amber-400:hover,
+html.light .hover\:text-amber-500:hover,
+html.light #stock-tab-openbox:not(.bg-amber-600):hover {
+  color: #92400e !important;
+}
+
+html.light .hover\:text-emerald-400:hover,
+html.light #stock-tab-principal:not(.bg-emerald-600):hover {
+  color: #047857 !important;
+}
+
+html.light .hover\:text-rose-400:hover,
+html.light #stock-tab-rma:not(.bg-rose-600):hover {
+  color: #be123c !important;
+}
+
+html.light .hover\:text-purple-400:hover,
+html.light #tab-btn-baixados:not(.bg-purple-600):hover {
+  color: #7e22ce !important;
 }
 
 html.light .text-rose-100,

@@ -1407,6 +1407,7 @@ export default function PhysicalStock({
           </button>
           <button 
             onClick={() => setActiveTab('Principal')}
+            id="stock-tab-principal"
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'Principal' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-slate-455 hover:text-emerald-400 hover:bg-slate-850'}`}
           >
             <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
@@ -1414,6 +1415,7 @@ export default function PhysicalStock({
           </button>
           <button 
             onClick={() => setActiveTab('Openbox')}
+            id="stock-tab-openbox"
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'Openbox' ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/15' : 'text-slate-455 hover:text-amber-400 hover:bg-slate-850'}`}
           >
             <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
@@ -1421,6 +1423,7 @@ export default function PhysicalStock({
           </button>
           <button 
             onClick={() => setActiveTab('RMA')}
+            id="stock-tab-rma"
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'RMA' ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/15' : 'text-slate-455 hover:text-rose-400 hover:bg-slate-850'}`}
           >
             <span className="w-2 h-2 bg-rose-400 rounded-full"></span>
