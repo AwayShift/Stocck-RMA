@@ -44,7 +44,8 @@ import {
   User,
   Hash,
   Link2,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Box
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType, PendingItem } from '../types';
 import ExcelImportModal from './ExcelImportModal';
@@ -3988,11 +3989,35 @@ export default function PhysicalStock({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 text-slate-400 text-[11px]">
-                    <span>Aparelho: <strong className="text-slate-200 font-bold">{currentUnit.deviceStatus}</strong></span>
-                    <span className="text-slate-600">•</span>
-                    <span>Embalagem: <strong className="text-slate-200 font-bold">{currentUnit.packageStatus}</strong></span>
-                  </div>
+                  {/* Estado do Produto & Embalagem - Badges estilizados conforme Imagem 1 */}
+                  {(currentUnit.deviceStatus || currentUnit.packageStatus) && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {currentUnit.deviceStatus && (
+                        <div 
+                          className={`px-2.5 py-1 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 border shadow-sm ${
+                            isLight 
+                              ? 'bg-slate-100/90 border-slate-200/90 text-slate-600' 
+                              : 'bg-slate-950/80 border-slate-800 text-slate-300'
+                          }`}
+                        >
+                          <Box className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span>Prod: <strong className={`font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{currentUnit.deviceStatus}</strong></span>
+                        </div>
+                      )}
+                      {currentUnit.packageStatus && (
+                        <div 
+                          className={`px-2.5 py-1 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 border shadow-sm ${
+                            isLight 
+                              ? 'bg-slate-100/90 border-slate-200/90 text-slate-600' 
+                              : 'bg-slate-950/80 border-slate-800 text-slate-300'
+                          }`}
+                        >
+                          <Box className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span>Emb: <strong className={`font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{currentUnit.packageStatus}</strong></span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Claims and Accessories details */}
