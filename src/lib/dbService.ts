@@ -646,7 +646,28 @@ export const transferPendingItemToStock = async (
   const newTriageId = `tr-pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   
   const finalSku = triageDetails?.baseProductSku || pendingItem.sku || 'SEM-SKU';
-  const finalName = triageDetails?.baseProductName || pendingItem.productName || 'Produto Transferido de Pendências';
+  
+  let catalogName: string | undefined;
+  try {
+    const prods = await getBaseProducts();
+    const matched = prods.find(p => 
+      (finalSku && finalSku !== 'SEM-SKU' && p.sku && p.sku.toLowerCase() === finalSku.toLowerCase()) ||
+      (triageDetails?.baseProductId && p.id === triageDetails.baseProductId)
+    );
+    if (matched?.name) {
+      catalogName = matched.name;
+    }
+  } catch (e) {
+    console.warn('Silent catalog lookup in transferPendingItemToTriage:', e);
+  }
+
+  const rawName = triageDetails?.baseProductName || pendingItem.productName;
+  const isGeneric = !rawName || 
+    rawName === 'Produto em Análise' || 
+    rawName === 'Produto em analise' || 
+    rawName === 'Produto Transferido de Pendências';
+
+  const finalName = catalogName ? (isGeneric ? catalogName : (catalogName || rawName)) : (rawName || 'Produto Transferido de Pendências');
   const finalVoltage = triageDetails?.baseProductVoltage || pendingItem.voltage || 'Bivolt';
   const finalTracking = triageDetails?.trackingCode || pendingItem.trackingCode || '';
   const finalSerial = triageDetails?.serialNumber || pendingItem.serialNumber || '';
@@ -1618,9 +1639,31 @@ export const saveTriageUnit = async (unit: TriageUnit): Promise<TriageUnit> => {
     }
   }
 
+  let resolvedBaseProductName = unit.baseProductName;
+  const isGeneric = !resolvedBaseProductName || 
+    resolvedBaseProductName === 'Produto em Análise' || 
+    resolvedBaseProductName === 'Produto em analise' || 
+    resolvedBaseProductName === 'Produto Transferido de Pendências';
+
+  if (isGeneric) {
+    try {
+      const prods = await getBaseProducts();
+      const matched = prods.find(p => 
+        (unit.baseProductId && p.id === unit.baseProductId) ||
+        (unit.baseProductSku && p.sku && p.sku.toLowerCase() === unit.baseProductSku.trim().toLowerCase())
+      );
+      if (matched?.name) {
+        resolvedBaseProductName = matched.name;
+      }
+    } catch (e) {
+      console.warn('Silent catalog resolution in saveTriageUnit:', e);
+    }
+  }
+
   const savedUnit: TriageUnit = {
     ...unit,
     id: (unit.id && unit.id.trim()) ? unit.id.trim() : generateUUID(),
+    baseProductName: resolvedBaseProductName || unit.baseProductName,
     createdAt: unit.createdAt || now,
     updatedAt: now,
     createdBy: creator || unit.createdBy

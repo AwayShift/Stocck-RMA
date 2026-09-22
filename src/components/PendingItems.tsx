@@ -36,7 +36,13 @@ import {
   FileText,
   CheckSquare,
   Link as LinkIcon,
-  Hash
+  Hash,
+  PackageCheck,
+  PackagePlus,
+  Layers,
+  Barcode,
+  Link2,
+  Calendar
 } from 'lucide-react';
 import { 
   PendingItem, 
@@ -49,17 +55,19 @@ import {
 } from '../types';
 import { ImageZoomModal } from './ImageZoomModal';
 import { PlatformSelector } from './PlatformSelector';
-import { uploadFileToStorage } from '../lib/dbService';
+import { uploadFileToStorage, saveTriageUnit } from '../lib/dbService';
 import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
 import { 
   generatePendingRegistrationNumber, 
   validateUniqueOrderNumber, 
   ensurePendingRegistrationNumber 
 } from '../utils/pendingRegistrationHelper';
+import { findBaseProduct, getResolvedUnitProductName } from '../utils/productImages';
 
 interface PendingItemsProps {
   items: PendingItem[];
   products: BaseProduct[];
+  units?: TriageUnit[];
   onSavePending: (item: PendingItem) => Promise<void>;
   onDeletePending: (id: string) => Promise<void>;
   onUpdateStatus: (id: string, status: PendingStatusType) => Promise<void>;
@@ -88,8 +96,10 @@ interface PendingItemsProps {
       pendingItemId?: string;
     }
   ) => Promise<TriageUnit>;
+  onSaveTriage?: (unit: TriageUnit) => Promise<void>;
+  onNavigateToRmaWithPending?: (item: PendingItem) => void;
   userRole?: string | null;
-  onNavigateToStock?: () => void;
+  onNavigateToStock?: (unitId?: string) => void;
   enableSpreadsheetExport?: boolean;
 }
 
@@ -124,10 +134,13 @@ const PRIORITY_ORDER: Record<string, number> = {
 export default function PendingItems({
   items,
   products,
+  units = [],
   onSavePending,
   onDeletePending,
   onUpdateStatus,
   onTransferToStock,
+  onSaveTriage,
+  onNavigateToRmaWithPending,
   userRole,
   onNavigateToStock,
   enableSpreadsheetExport = true
@@ -226,6 +239,12 @@ export default function PendingItems({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Stock Entry integration when creating/saving Pending Item
+  const [formAlsoCreateStockEntry, setFormAlsoCreateStockEntry] = useState(false);
+  const [formStockDestination, setFormStockDestination] = useState<DestinationSectorType>('RMA');
+  const [formStockAccessories, setFormStockAccessories] = useState('');
+  const [formStockExcludeDailyCount, setFormStockExcludeDailyCount] = useState(false);
 
   // Rule 1: "um pedido só pode ter um registro de pendencia"
   const orderDuplicateWarning = useMemo(() => {
@@ -514,6 +533,10 @@ export default function PendingItems({
     setFormDetailedNotes('');
     setFormStatus('Pendente');
     setFormPhotos([]);
+    setFormAlsoCreateStockEntry(false);
+    setFormStockDestination('RMA');
+    setFormStockAccessories('');
+    setFormStockExcludeDailyCount(false);
     setFormError(null);
     setShowSkuDropdown(false);
     setIsFormModalOpen(true);
@@ -556,6 +579,10 @@ export default function PendingItems({
     setFormDetailedNotes(item.detailedNotes || '');
     setFormStatus(item.status || 'Pendente');
     setFormPhotos(item.photos || []);
+    setFormAlsoCreateStockEntry(false);
+    setFormStockDestination('RMA');
+    setFormStockAccessories('');
+    setFormStockExcludeDailyCount(false);
     setFormError(null);
     setShowSkuDropdown(false);
     setIsFormModalOpen(true);
@@ -571,10 +598,19 @@ export default function PendingItems({
     }
     const cleanVal = val.trim().toLowerCase();
     const matches = products.filter(
-      p => p.sku.toLowerCase().includes(cleanVal) || p.name.toLowerCase().includes(cleanVal)
+      p => (p.sku && p.sku.toLowerCase().includes(cleanVal)) || (p.name && p.name.toLowerCase().includes(cleanVal))
     ).slice(0, 8);
     setSkuSuggestions(matches);
     setShowSkuDropdown(matches.length > 0);
+
+    // Se houver correspondência exata de SKU com produto cadastrado, preenche automaticamente o nome e voltagem
+    const exactMatch = products.find(p => p.sku && p.sku.trim().toLowerCase() === cleanVal);
+    if (exactMatch) {
+      setFormProductName(exactMatch.name);
+      if (exactMatch.voltage && exactMatch.voltage !== 'N/A') {
+        setFormVoltage(exactMatch.voltage as any);
+      }
+    }
   };
 
   const handleSelectProductSuggestion = (prod: BaseProduct) => {
@@ -594,10 +630,18 @@ export default function PendingItems({
     }
     const cleanVal = val.trim().toLowerCase();
     const matches = products.filter(
-      p => p.sku.toLowerCase().includes(cleanVal) || p.name.toLowerCase().includes(cleanVal)
+      p => (p.sku && p.sku.toLowerCase().includes(cleanVal)) || (p.name && p.name.toLowerCase().includes(cleanVal))
     ).slice(0, 8);
     setTransferSkuSuggestions(matches);
     setShowTransferSkuDropdown(matches.length > 0);
+
+    const exactMatch = products.find(p => p.sku && p.sku.trim().toLowerCase() === cleanVal);
+    if (exactMatch) {
+      setTransferProductName(exactMatch.name);
+      if (exactMatch.voltage && exactMatch.voltage !== 'N/A') {
+        setTransferVoltage(exactMatch.voltage as any);
+      }
+    }
   };
 
   const handleSelectTransferProductSuggestion = (prod: BaseProduct) => {
@@ -705,9 +749,9 @@ export default function PendingItems({
     }
   };
 
-  // Save Pending Item
-  const handleSaveForm = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Save Pending Item (optionally creating and linking Stock RMA entry immediately)
+  const handleSaveForm = async (e?: React.FormEvent, forceStockEntry?: boolean) => {
+    if (e) e.preventDefault();
     setFormError(null);
     if (!formSku.trim() && !formProductName.trim()) {
       setFormError('Por favor, informe ao menos o SKU ou o Nome do Produto.');
@@ -730,6 +774,8 @@ export default function PendingItems({
       return;
     }
 
+    const shouldCreateStock = forceStockEntry !== undefined ? forceStockEntry : formAlsoCreateStockEntry;
+
     setIsSaving(true);
     try {
       const finalDeviceStatus = formDeviceStatus === 'Descrever'
@@ -740,12 +786,73 @@ export default function PendingItems({
         ? (formCustomPackageStatus.trim() || 'Descrever')
         : formPackageStatus;
 
+      const regNumber = formRegistrationNumber || generatePendingRegistrationNumber(items);
+      const pendingId = editingItem ? editingItem.id : `pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      
+      const cleanSku = formSku.trim();
+      const cleanName = formProductName.trim();
+      const matchedProd = products.find(p => 
+        (cleanSku && p.sku && p.sku.trim().toLowerCase() === cleanSku.toLowerCase()) ||
+        (cleanName && p.name && p.name.trim().toLowerCase() === cleanName.toLowerCase())
+      );
+
+      // Prioriza o nome cadastrado no catálogo do sistema em vez de placeholders genéricos
+      const systemRegisteredName = matchedProd?.name?.trim();
+      const isGenericName = !cleanName || 
+        cleanName.toLowerCase() === 'produto em análise' || 
+        cleanName.toLowerCase() === 'produto em analise' ||
+        cleanName.toLowerCase() === 'produto transferido de pendências';
+
+      const finalProductName = systemRegisteredName
+        ? (isGenericName ? systemRegisteredName : (systemRegisteredName || cleanName))
+        : (cleanName || 'Produto Cadastrado');
+
+      const finalSku = matchedProd?.sku || cleanSku.toUpperCase() || 'PENDENCIA';
+      const finalVoltage = (matchedProd?.voltage && matchedProd.voltage !== 'N/A') ? matchedProd.voltage : formVoltage;
+
+      let createdUnit: TriageUnit | null = null;
+
+      if (shouldCreateStock) {
+        const newTriageId = `tr-pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        // Entrada exclusiva no setor RMA. Se o rastreio estiver vazio, utiliza o número de registro da pendência
+        const finalTracking = cleanTracking || formTrackingCode.trim() || regNumber;
+
+        createdUnit = {
+          id: newTriageId,
+          trackingCode: finalTracking,
+          serialNumber: formSerial.trim(),
+          orderNumber: formOrderNumber.trim(),
+          baseProductId: matchedProd?.id || `bp-custom-${(cleanSku || 'pendencia').toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          baseProductName: finalProductName,
+          baseProductSku: finalSku,
+          baseProductVoltage: finalVoltage,
+          platform: formPlatform as PlatformType,
+          customerReason: formCustomerReason.trim() || `Liberado de Pendências: ${finalReason}`,
+          deviceStatus: finalDeviceStatus as any,
+          packageStatus: finalPackageStatus as any,
+          accessoriesInclusion: formStockAccessories.trim() || 'Item cadastrado com entrada via Pendências',
+          destinationSector: 'RMA',
+          originSector: 'Pendências',
+          initialEntryDate: new Date().toISOString(),
+          transferredAt: new Date().toISOString(),
+          notes: `<p><strong>Entrada direta vinculada à Pendência:</strong></p><p>Registro: ${regNumber}</p><p>Motivo: ${finalReason}</p><p>${formDetailedNotes.trim()}</p>`,
+          photosProduct: formPhotos && formPhotos.length > 0 ? formPhotos : [],
+          photosBox: [],
+          photosAccessories: [],
+          createdAt: new Date().toISOString(),
+          status: 'Estoque',
+          excludeFromDailyCount: formStockExcludeDailyCount,
+          pendingRegistrationNumber: regNumber,
+          pendingItemId: pendingId
+        };
+      }
+
       const itemToSave: PendingItem = {
-        id: editingItem ? editingItem.id : `pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        registrationNumber: formRegistrationNumber || generatePendingRegistrationNumber(items),
-        sku: formSku.trim().toUpperCase() || 'PENDENCIA',
-        productName: formProductName.trim() || 'Produto em Análise',
-        voltage: formVoltage,
+        id: pendingId,
+        registrationNumber: regNumber,
+        sku: finalSku,
+        productName: finalProductName,
+        voltage: finalVoltage,
         serialNumber: formSerial.trim(),
         trackingCode: cleanTracking,
         orderNumber: formOrderNumber.trim(),
@@ -758,19 +865,40 @@ export default function PendingItems({
         detailedNotes: formDetailedNotes.trim(),
         status: formStatus,
         photos: formPhotos,
-        linkedUnitId: editingItem?.linkedUnitId,
-        linkedUnitTrackingCode: editingItem?.linkedUnitTrackingCode,
-        transferredToStock: editingItem?.transferredToStock,
-        transferredUnitId: editingItem?.transferredUnitId,
-        destinationSectorSuggested: editingItem?.destinationSectorSuggested,
+        linkedUnitId: createdUnit ? createdUnit.id : editingItem?.linkedUnitId,
+        linkedUnitTrackingCode: createdUnit ? createdUnit.trackingCode : editingItem?.linkedUnitTrackingCode,
+        transferredToStock: false,
+        transferredUnitId: createdUnit ? createdUnit.id : editingItem?.transferredUnitId,
+        destinationSectorSuggested: 'RMA',
         createdAt: editingItem ? editingItem.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
+      // 1. Salva a pendência
       await onSavePending(itemToSave);
+
+      // 2. Se solicitou entrada no estoque, salva a unidade de triagem vinculada
+      if (createdUnit) {
+        if (onSaveTriage) {
+          await onSaveTriage(createdUnit);
+        } else {
+          await saveTriageUnit(createdUnit);
+        }
+
+        setTransferSuccessData({
+          productName: itemToSave.productName,
+          sku: itemToSave.sku,
+          destination: 'RMA',
+          trackingCode: createdUnit.trackingCode,
+          voltage: itemToSave.voltage || 'Bivolt'
+        });
+        setActionSuccess(`Pendência [${itemToSave.registrationNumber}] criada e produto "${itemToSave.productName}" inserido no Estoque RMA com vínculo ativo!`);
+      } else {
+        setActionSuccess(editingItem ? 'Registro de pendência atualizado com sucesso!' : 'Novo item de pendência cadastrado com sucesso!');
+      }
+
       setIsFormModalOpen(false);
-      setActionSuccess(editingItem ? 'Registro de pendência atualizado com sucesso!' : 'Novo item de pendência cadastrado com sucesso!');
-      setTimeout(() => setActionSuccess(null), 4000);
+      setTimeout(() => setActionSuccess(null), 5000);
     } catch (err: any) {
       console.error('Erro ao salvar pendência:', err);
       const msg = err?.message ? `Erro ao salvar no banco: ${err.message}` : 'Ocorreu um erro ao salvar o registro no banco de dados.';
@@ -847,19 +975,37 @@ export default function PendingItems({
     setIsTransferring(true);
     try {
       const regNum = itemToTransfer.registrationNumber || ensurePendingRegistrationNumber(itemToTransfer, items);
+      const cleanTransferSku = transferSku.trim();
+      const cleanTransferName = transferProductName.trim();
+      const matchedProd = products.find(p => 
+        (cleanTransferSku && p.sku && p.sku.trim().toLowerCase() === cleanTransferSku.toLowerCase()) ||
+        (cleanTransferName && p.name && p.name.trim().toLowerCase() === cleanTransferName.toLowerCase())
+      );
+
+      const systemRegisteredName = matchedProd?.name?.trim();
+      const isGenericTransferName = !cleanTransferName || 
+        cleanTransferName.toLowerCase() === 'produto em análise' || 
+        cleanTransferName.toLowerCase() === 'produto em analise' ||
+        cleanTransferName.toLowerCase() === 'produto transferido de pendências';
+
+      const finalTransferProductName = systemRegisteredName
+        ? (isGenericTransferName ? systemRegisteredName : (systemRegisteredName || cleanTransferName))
+        : (cleanTransferName || 'Produto Cadastrado');
+
+      const finalTransferSku = matchedProd?.sku || cleanTransferSku.toUpperCase() || 'SEM-SKU';
+      const finalTransferVoltage = (matchedProd?.voltage && matchedProd.voltage !== 'N/A') ? matchedProd.voltage : transferVoltage;
+
       const updatedItem = {
         ...itemToTransfer,
         registrationNumber: regNum,
-        sku: transferSku.trim().toUpperCase(),
-        productName: transferProductName.trim(),
-        voltage: transferVoltage,
+        sku: finalTransferSku,
+        productName: finalTransferProductName,
+        voltage: finalTransferVoltage,
         trackingCode: transferDestination === 'Openbox' ? normalizeStiCode(transferSti) : (transferSti.trim() ? normalizeStiCode(transferSti) : itemToTransfer.trackingCode || ''),
         serialNumber: transferSerialNumber.trim() || itemToTransfer.serialNumber || '',
         orderNumber: transferOrderNumber.trim() || itemToTransfer.orderNumber || '',
         platform: transferPlatform
       };
-
-      const matchedProd = products.find(p => p.sku.toLowerCase() === transferSku.trim().toLowerCase());
 
       const finalDeviceStatus = transferDeviceStatus === 'Descrever'
         ? (transferCustomDeviceStatus.trim() || 'Descrever')
@@ -871,9 +1017,9 @@ export default function PendingItems({
 
       await onTransferToStock(updatedItem, transferDestination, {
         baseProductId: matchedProd?.id,
-        baseProductName: transferProductName.trim(),
-        baseProductSku: transferSku.trim().toUpperCase(),
-        baseProductVoltage: transferVoltage,
+        baseProductName: finalTransferProductName,
+        baseProductSku: finalTransferSku,
+        baseProductVoltage: finalTransferVoltage,
         platform: transferPlatform,
         serialNumber: transferSerialNumber.trim(),
         trackingCode: transferDestination === 'Openbox' ? normalizeStiCode(transferSti) : '',
@@ -2008,6 +2154,19 @@ export default function PendingItems({
                     type="text"
                     value={formSku}
                     onChange={(e) => handleSkuChange(e.target.value)}
+                    onBlur={() => {
+                      const cleanVal = formSku.trim().toLowerCase();
+                      if (cleanVal) {
+                        const match = products.find(p => p.sku && p.sku.trim().toLowerCase() === cleanVal);
+                        if (match) {
+                          setFormProductName(match.name);
+                          if (match.voltage && match.voltage !== 'N/A') {
+                            setFormVoltage(match.voltage as any);
+                          }
+                        }
+                      }
+                      setTimeout(() => setShowSkuDropdown(false), 200);
+                    }}
                     placeholder="Ex: SKU-1049 ou digite para buscar"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white uppercase font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
                     required
@@ -2510,33 +2669,283 @@ export default function PendingItems({
                 )}
               </div>
 
+              {/* SECTION: ENTRADA IMEDIATA NO ESTOQUE RMA (Com Vínculo 1:1) */}
+              {!editingItem && (
+                <div className={`p-4 rounded-xl border transition-all ${
+                  formAlsoCreateStockEntry 
+                    ? 'bg-emerald-950/25 border-emerald-500/40 ring-1 ring-emerald-500/20' 
+                    : 'bg-slate-950/40 border-slate-700/80 hover:border-slate-600'
+                }`} id="section-stock-entry-toggle">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg border transition-colors ${
+                        formAlsoCreateStockEntry 
+                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
+                          : 'bg-slate-800 text-slate-300 border-slate-600'
+                      }`}>
+                        <PackageCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white flex items-center gap-2">
+                          <span>Dar entrada no produto ao Estoque RMA</span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                            Exclusivo RMA 1:1
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Cria a pendência e imediatamente insere a unidade no Estoque Físico com as informações já preenchidas.
+                        </p>
+                      </div>
+                    </div>
+
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 p-0.5" id="label-toggle-also-create-stock">
+                      <input 
+                        type="checkbox" 
+                        checked={formAlsoCreateStockEntry} 
+                        onChange={(e) => {
+                          setFormAlsoCreateStockEntry(e.target.checked);
+                          setFormStockDestination('RMA');
+                        }}
+                        className="sr-only stocck-toggle-input"
+                        id="toggle-also-create-stock"
+                      />
+                      <div className="stocck-toggle-track" aria-hidden="true"></div>
+                    </label>
+                  </div>
+
+                  {/* Stock Entry Detail Fields */}
+                  {formAlsoCreateStockEntry && (
+                    <div className="mt-4 pt-4 border-t border-emerald-500/20 space-y-3.5 animate-in fade-in duration-150" id="stock-entry-details-panel">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {/* Setor de Destino - Exclusivo RMA */}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5 text-rose-400" />
+                              <span>Setor de Destino no Estoque</span>
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                              Fixo RMA
+                            </span>
+                          </label>
+                          <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-900 border border-rose-500/40 rounded-xl text-xs" id="box-stock-entry-destination-rma">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
+                              <span className="font-extrabold text-rose-400 text-sm">RMA</span>
+                              <span className="text-slate-400 text-[11px] font-medium">(Garantia & Análise Técnica)</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Vínculo 1:1</span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-400 mt-1">
+                            Aparelhos com pendência vinculada são encaminhados exclusivamente ao setor de <strong>RMA</strong>.
+                          </p>
+                        </div>
+
+                        {/* Código STI / Rastreio / Caso */}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Barcode className="w-3.5 h-3.5 text-rose-400" />
+                              <span>Código STI / Rastreio / Caso</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400">(Opcional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={formTrackingCode}
+                            onChange={(e) => setFormTrackingCode(e.target.value)}
+                            placeholder="Ex: STI134920 ou código de rastreio..."
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
+                            id="input-stock-entry-tracking"
+                          />
+                          <span className="text-[10.5px] text-slate-400 block mt-1">
+                            Identificador da unidade. Se vazio, herdará o registro <strong className="text-rose-400 font-mono">{formRegistrationNumber || 'REG-XXXXX'}</strong>.
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Acessórios Inclusos */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                          <span>Acessórios Inclusos na Entrada Física</span>
+                          <span className="text-[10px] text-slate-400">O que acompanha o aparelho</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={formStockAccessories}
+                          onChange={(e) => setFormStockAccessories(e.target.value)}
+                          placeholder="Ex: Completo com cabo e manual, ou sem acessórios..."
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                        />
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {['Aparelho Completo', 'Sem Acessórios', 'Apenas Aparelho', 'Com Fonte/Cabo', 'Manual + Caixa'].map(chip => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => setFormStockAccessories(prev => prev ? `${prev}, ${chip}` : chip)}
+                              className="text-[10px] px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-700/80 text-slate-300 hover:text-white hover:border-slate-600 transition-colors cursor-pointer"
+                            >
+                              + {chip}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Contagem Diária */}
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                        <div className="flex items-center gap-2 text-xs text-slate-300">
+                          <Calendar className="w-3.5 h-3.5 text-sky-400" />
+                          <span>Contabilizar na meta diária de entradas?</span>
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400 select-none">
+                          <input 
+                            type="checkbox"
+                            checked={formStockExcludeDailyCount}
+                            onChange={(e) => setFormStockExcludeDailyCount(e.target.checked)}
+                            className="rounded border-slate-700 text-emerald-500 focus:ring-0 bg-slate-950 cursor-pointer"
+                          />
+                          <span>Não contabilizar hoje</span>
+                        </label>
+                      </div>
+
+                      {/* Banner de Confirmação de Vínculo */}
+                      <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2.5">
+                        <Link2 className="w-4 h-4 text-rose-400 shrink-0" />
+                        <div className="leading-snug">
+                          A unidade entrará no Estoque RMA (<strong className="text-white font-semibold">Setor RMA</strong>) com o registro <strong className="font-mono text-white">{formRegistrationNumber || 'REG-XXXXX'}</strong> e ficará vinculada 1:1 a esta pendência.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Se for edição de item já com vínculo ao estoque, exibe banner informativo */}
+              {editingItem && (editingItem.linkedUnitId || editingItem.linkedUnitTrackingCode) && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>
+                      Esta pendência já está vinculada à unidade <strong className="font-mono text-white">{editingItem.linkedUnitTrackingCode || 'no Estoque'}</strong> no Estoque RMA.
+                    </span>
+                  </div>
+                  {onNavigateToStock && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFormModalOpen(false);
+                        onNavigateToStock(editingItem.linkedUnitId);
+                      }}
+                      className="px-2.5 py-1 bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold rounded-lg text-[11px] transition-colors cursor-pointer shrink-0"
+                    >
+                      Ver no Estoque
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Modal Footer Buttons */}
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3 sticky bottom-0 bg-slate-900 z-10">
+              <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-end gap-2.5 sticky bottom-0 bg-slate-900 z-10">
                 <button
                   type="button"
                   onClick={() => setIsFormModalOpen(false)}
-                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-sky-500/20 disabled:opacity-50 flex items-center gap-2"
-                  id="btn-submit-pendencia"
-                >
-                  {isSaving ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                      <span>Salvando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4 stroke-[3]" />
-                      <span>{editingItem ? 'Salvar Alterações' : 'Criar Pendência'}</span>
-                    </>
-                  )}
-                </button>
+
+                {/* Se não for edição e o switch não estiver marcado, oferece botão direto para salvar e dar entrada */}
+                {!editingItem && !formAlsoCreateStockEntry && (
+                  <>
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-md shadow-sky-900/20 disabled:opacity-50 flex items-center gap-1.5"
+                      id="btn-submit-only-pendencia"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Criar Somente Pendência</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={(e) => handleSaveForm(e, true)}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-emerald-900/30 disabled:opacity-50 flex items-center gap-2 hover:scale-[1.02]"
+                      id="btn-submit-pendencia-and-stock"
+                      title="Salva a pendência e já insere a unidade no Estoque RMA vinculada"
+                    >
+                      {isSaving ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Processando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <PackageCheck className="w-4 h-4" />
+                          <span>Criar e Dar Entrada no RMA</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                {/* Se o switch estiver marcado */}
+                {!editingItem && formAlsoCreateStockEntry && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={(e) => handleSaveForm(e, false)}
+                      className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
+                      title="Salvar apenas a pendência sem gerar unidade no estoque"
+                    >
+                      Criar Apenas Pendência
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={(e) => handleSaveForm(e, true)}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-emerald-900/30 disabled:opacity-50 flex items-center gap-2 hover:scale-[1.02]"
+                      id="btn-submit-pendencia-with-stock"
+                    >
+                      {isSaving ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Salvando e Vinculando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <PackageCheck className="w-4 h-4" />
+                          <span>Criar Pendência e Dar Entrada no RMA</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                {/* Caso seja Edição */}
+                {editingItem && (
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-5 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-sky-500/20 disabled:opacity-50 flex items-center gap-2"
+                    id="btn-submit-edit-pendencia"
+                  >
+                    {isSaving ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                        <span>Salvando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 stroke-[3]" />
+                        <span>Salvar Alterações</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -2645,6 +3054,19 @@ export default function PendingItems({
                       onChange={(e) => handleTransferSkuChange(e.target.value)}
                       onFocus={() => {
                         if (transferSku.trim()) setShowTransferSkuDropdown(true);
+                      }}
+                      onBlur={() => {
+                        const cleanVal = transferSku.trim().toLowerCase();
+                        if (cleanVal) {
+                          const match = products.find(p => p.sku && p.sku.trim().toLowerCase() === cleanVal);
+                          if (match) {
+                            setTransferProductName(match.name);
+                            if (match.voltage && match.voltage !== 'N/A') {
+                              setTransferVoltage(match.voltage as any);
+                            }
+                          }
+                        }
+                        setTimeout(() => setShowTransferSkuDropdown(false), 200);
                       }}
                       placeholder="Informe ou pesquise o SKU..."
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"

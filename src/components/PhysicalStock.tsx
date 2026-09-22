@@ -52,7 +52,7 @@ import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceSta
 import ExcelImportModal from './ExcelImportModal';
 import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
 import { ImageZoomModal } from './ImageZoomModal';
-import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct } from '../utils/productImages';
+import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct, getResolvedUnitProductName } from '../utils/productImages';
 import { exportStockInventoryToExcel } from '../utils/excelHelpers';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
@@ -400,8 +400,10 @@ export default function PhysicalStock({
     setSelectedUnitId(unit.id);
     const catalogProduct = products.find(p => (unit.baseProductId && p.id === unit.baseProductId) || (unit.baseProductSku && p.sku === unit.baseProductSku));
     const resolvedSku = unit.baseProductSku || (unit as any).sku || catalogProduct?.sku || '';
+    const resolvedName = getResolvedUnitProductName(unit, products);
     setEditForm({ 
       ...unit,
+      baseProductName: resolvedName,
       baseProductSku: resolvedSku,
       platform: (unit.platform || '') as any,
     });
@@ -501,6 +503,16 @@ export default function PhysicalStock({
         updatedForm.createdAt = transferMoment; // Contabiliza novamente no registro no momento da transferência
         updatedForm.updatedAt = transferMoment;
         updatedForm.excludeFromDailyCount = false; // Garante que será contabilizado no registro diário
+      }
+
+      // Ensure product name uses the registered system name if generic or blank
+      const currentName = updatedForm.baseProductName?.trim();
+      const isGeneric = !currentName || 
+        currentName.toLowerCase() === 'produto em análise' || 
+        currentName.toLowerCase() === 'produto em analise' ||
+        currentName.toLowerCase() === 'produto transferido de pendências';
+      if (isGeneric) {
+        updatedForm.baseProductName = getResolvedUnitProductName(updatedForm, products);
       }
 
       await onUpdateUnit(updatedForm);
@@ -2189,7 +2201,7 @@ export default function PhysicalStock({
                       }}
                     >
                       {mainPhoto ? (
-                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-contain group-hover/thumb:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
+                        <img src={mainPhoto} alt={getResolvedUnitProductName(unit, products)} className="w-full h-full object-contain group-hover/thumb:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
                       ) : (
                         <div className="flex flex-col items-center justify-center gap-1.5 text-slate-400 group-hover/thumb:text-sky-500 transition-colors">
                           <Package className="w-9 h-9" />
@@ -2214,7 +2226,7 @@ export default function PhysicalStock({
                     {/* Metadata details */}
                     <div className="space-y-1.5 pt-0.5">
                       <h4 className="font-bold text-white text-sm line-clamp-1 group-hover:text-sky-400 transition-colors">
-                        {unit.baseProductName}
+                        {getResolvedUnitProductName(unit, products)}
                       </h4>
                       <p className="text-xs text-slate-400 line-clamp-1">
                         <span className="font-medium text-slate-400">Motivo:</span> {unit.customerReason}
@@ -2407,7 +2419,7 @@ export default function PhysicalStock({
                       }}
                     >
                       {mainPhoto ? (
-                        <img src={mainPhoto} alt={unit.baseProductName} className="w-full h-full object-contain group-hover/listthumb:scale-110 transition-transform" />
+                        <img src={mainPhoto} alt={getResolvedUnitProductName(unit, products)} className="w-full h-full object-contain group-hover/listthumb:scale-110 transition-transform" />
                       ) : (
                         <Package className="w-5 h-5 text-slate-400 group-hover/listthumb:text-sky-500 transition-colors" />
                       )}
@@ -2537,7 +2549,7 @@ export default function PhysicalStock({
                       </div>
 
                       <h4 className="font-bold text-white text-sm line-clamp-1 group-hover:text-sky-400 transition-colors">
-                        {unit.baseProductName}
+                        {getResolvedUnitProductName(unit, products)}
                       </h4>
 
                       <div className="flex items-center gap-2 flex-wrap">
@@ -2756,7 +2768,9 @@ export default function PhysicalStock({
                 <h3 className={`text-lg sm:text-xl font-black tracking-tight pt-0.5 ${
                   isLight ? 'text-slate-900' : 'text-white'
                 }`}>
-                  {isEditingUnit && editForm ? editForm.baseProductName : currentUnit.baseProductName}
+                  {isEditingUnit && editForm 
+                    ? (editForm.baseProductName || getResolvedUnitProductName(currentUnit, products)) 
+                    : getResolvedUnitProductName(currentUnit, products)}
                 </h3>
               </div>
 
@@ -4304,7 +4318,7 @@ export default function PhysicalStock({
                 <div>
                   <h3 className="text-base font-bold text-white">Transferência para Estoque Principal</h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {transferModalData.unit.baseProductName} ({transferModalData.unit.sti || transferModalData.unit.trackingCode})
+                    {getResolvedUnitProductName(transferModalData.unit, products)} ({transferModalData.unit.sti || transferModalData.unit.trackingCode})
                   </p>
                 </div>
               </div>

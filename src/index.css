@@ -33,11 +33,90 @@
   background: #334155;
 }
 
+/* ==========================================================================
+   GPU & COMPOSITOR PERFORMANCE OPTIMIZATIONS
+   Prevents 100% GPU spikes during modal transitions, backdrops, and heavy grids
+   ========================================================================== */
+
+/* Isolate modal overlays to dedicated GPU compositing layers without triggering full page repaints */
+.fixed.inset-0 {
+  isolation: isolate;
+  contain: layout paint;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Modal content container hardware acceleration */
+.fixed.inset-0 > div {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+/* Optimize image rendering and avoid excessive rasterizer thrashing */
+img {
+  image-rendering: auto;
+}
+
 /* Base style resets */
 html {
   scrollbar-gutter: stable;
   overflow-y: scroll;
 }
+
+/* ==========================================================================
+   HIGH-CONTRAST ACCESSIBLE TOGGLE SWITCH (DARK & LIGHT THEMES)
+   Guarantees crisp borders, distinct track contrast, and prominent knob visibility
+   ========================================================================== */
+.stocck-toggle-track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 46px;
+  height: 24px;
+  border-radius: 9999px;
+  background-color: #334155 !important; /* Slate-700 in dark mode */
+  border: 1.5px solid #64748b !important; /* Slate-500 border */
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+html.light .stocck-toggle-track {
+  background-color: #94a3b8 !important; /* Slate-400 in light mode: deep, unambiguous track contrast */
+  border: 1.5px solid #64748b !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.stocck-toggle-input:checked + .stocck-toggle-track,
+html.light .stocck-toggle-input:checked + .stocck-toggle-track {
+  background-color: #059669 !important; /* Vivid emerald green */
+  border-color: #047857 !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.35), inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.stocck-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 1.5px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background-color: #ffffff !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stocck-toggle-input:checked + .stocck-toggle-track::after,
+html.light .stocck-toggle-input:checked + .stocck-toggle-track::after {
+  transform: translateX(22px);
+  background-color: #ffffff !important;
+}
+
 
 body {
   font-family: var(--font-sans);

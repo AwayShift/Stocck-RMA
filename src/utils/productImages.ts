@@ -26,6 +26,30 @@ export function findBaseProduct(unit: { baseProductId?: string; baseProductSku?:
 }
 
 /**
+ * Resolves the display product name for a triage unit or pending item,
+ * prioritizing the catalog name registered in the system over generic placeholders.
+ */
+export function getResolvedUnitProductName(
+  unit: { baseProductName?: string; baseProductId?: string; baseProductSku?: string },
+  products: BaseProduct[] = []
+): string {
+  const baseProd = findBaseProduct(unit, products);
+  const currentName = unit.baseProductName?.trim();
+  const isGeneric = !currentName || 
+    currentName.toLowerCase() === 'produto em análise' || 
+    currentName.toLowerCase() === 'produto transferido de pendências' ||
+    currentName.toLowerCase() === 'produto em analise';
+
+  if (baseProd?.name) {
+    if (isGeneric || !currentName) {
+      return baseProd.name;
+    }
+  }
+
+  return currentName || baseProd?.name || 'Produto Cadastrado';
+}
+
+/**
  * Extracts image URLs registered on a BaseProduct without generating new files or duplicating storage.
  */
 export function getBaseProductImages(product?: BaseProduct): {

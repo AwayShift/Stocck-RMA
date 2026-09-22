@@ -63,6 +63,8 @@ interface RmaEntryProps {
   products: BaseProduct[];
   units?: TriageUnit[];
   pendingItems?: PendingItem[];
+  initialPendingItem?: PendingItem | null;
+  onClearInitialPendingItem?: () => void;
   onSaveTriage: (unit: TriageUnit) => Promise<void>;
   onNavigateToStock: () => void;
   isLight?: boolean;
@@ -77,6 +79,8 @@ export default function RmaEntry({
   products, 
   units = [], 
   pendingItems = [],
+  initialPendingItem = null,
+  onClearInitialPendingItem,
   onSaveTriage, 
   onNavigateToStock, 
   isLight = false,
@@ -229,6 +233,16 @@ export default function RmaEntry({
     setSelectedPendingItem(null);
     setPendingRegistrationNumber('');
   };
+
+  // Automatically apply initialPendingItem if forwarded from PendingItems
+  useEffect(() => {
+    if (initialPendingItem) {
+      handleApplyPendingItem(initialPendingItem);
+      if (onClearInitialPendingItem) {
+        onClearInitialPendingItem();
+      }
+    }
+  }, [initialPendingItem]);
 
   // Close pending selector on click outside
   useEffect(() => {

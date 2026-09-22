@@ -116,6 +116,7 @@ export default function App() {
 
   // Cross-component communication & modals
   const [selectedTriageUnit, setSelectedTriageUnit] = useState<TriageUnit | null>(null);
+  const [pendingItemForRma, setPendingItemForRma] = useState<PendingItem | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDbSwitcherModalOpen, setIsDbSwitcherModalOpen] = useState<boolean>(false);
@@ -942,6 +943,8 @@ export default function App() {
                 products={products}
                 units={triageUnits}
                 pendingItems={pendingItems}
+                initialPendingItem={pendingItemForRma}
+                onClearInitialPendingItem={() => setPendingItemForRma(null)}
                 onSaveTriage={handleSaveTriage}
                 onNavigateToStock={() => setActiveTab('stock')}
                 isLight={isLight}
@@ -973,12 +976,26 @@ export default function App() {
               <PendingItems
                 items={pendingItems}
                 products={products}
+                units={triageUnits}
                 onSavePending={handleSavePendingItem}
                 onDeletePending={handleDeletePendingItem}
                 onUpdateStatus={handleUpdatePendingStatus}
                 onTransferToStock={handleTransferPendingToStock}
+                onSaveTriage={handleSaveTriage}
+                onNavigateToRmaWithPending={(item) => {
+                  setPendingItemForRma(item);
+                  setActiveTab('rma');
+                }}
                 userRole={userRole}
-                onNavigateToStock={() => setActiveTab('stock')}
+                onNavigateToStock={(unitId?: string) => {
+                  if (unitId) {
+                    const match = triageUnits.find(u => u.id === unitId || u.trackingCode === unitId);
+                    if (match) {
+                      setSelectedTriageUnit(match);
+                    }
+                  }
+                  setActiveTab('stock');
+                }}
                 enableSpreadsheetExport={enableSpreadsheetExport}
               />
             )}
