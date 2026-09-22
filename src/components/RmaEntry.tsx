@@ -26,7 +26,8 @@ import {
   Clock,
   User,
   Hash,
-  FileText
+  FileText,
+  Sparkles
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType, PendingItem } from '../types';
 import { PlatformSelector } from './PlatformSelector';
@@ -37,6 +38,7 @@ import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { getCurrentActiveAuthUser } from '../lib/supabaseAuth';
 import { formatStiInput, isValidStiCode, normalizeStiCode } from '../utils/stiFormatter';
 import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
+import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform } from '../utils/orderPlatformHelper';
 
 export interface TriageSummaryData {
   product: BaseProduct;
@@ -156,6 +158,30 @@ export default function RmaEntry({
   const [platform, setPlatform] = useState<PlatformType>('Mercado Livre');
   const [customerReason, setCustomerReason] = useState('');
   const [excludeFromDailyCount, setExcludeFromDailyCount] = useState(false);
+
+  // Auto-detection of platform based on order number format
+  const detectedOrderInfo = useMemo(() => {
+    return inspectOrderNumber(orderNumber, platform);
+  }, [orderNumber, platform]);
+
+  const handleOrderNumberChange = (raw: string) => {
+    setOrderNumber(raw);
+    const detection = inspectOrderNumber(raw, platform);
+    if (detection) {
+      setPlatform(detection.platform);
+    }
+  };
+
+  const handleOrderNumberBlur = () => {
+    const normalized = normalizeOrderNumberForPlatform(orderNumber, platform);
+    if (normalized !== orderNumber) {
+      setOrderNumber(normalized);
+    }
+    const detected = detectPlatformFromOrderNumber(normalized, platform);
+    if (detected && detected !== platform) {
+      setPlatform(detected);
+    }
+  };
 
   // Pending Items linking state
   const [pendingRegistrationNumber, setPendingRegistrationNumber] = useState('');
@@ -1216,12 +1242,40 @@ export default function RmaEntry({
 
                   {/* Order Number */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center min-h-[20px]">Nº Pedido (Opcional)</label>
+                    <div className="flex items-center justify-between min-h-[20px]">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Nº Pedido (Opcional)</label>
+                      {detectedOrderInfo && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (detectedOrderInfo.isAmazonVariant) {
+                              const next = platform === 'Amazon Ta Novo' ? 'Amazon' : 'Amazon Ta Novo';
+                              setPlatform(next);
+                            }
+                          }}
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-all ${
+                            detectedOrderInfo.isAmazonVariant
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer'
+                              : 'bg-sky-500/20 text-sky-300 border border-sky-500/40 cursor-default'
+                          }`}
+                          title={detectedOrderInfo.isAmazonVariant ? 'Clique para alternar entre Amazon e Amazon Ta Novo' : detectedOrderInfo.hint}
+                        >
+                          <Sparkles className="w-2.5 h-2.5 text-sky-400" />
+                          <span>{platform}</span>
+                          {detectedOrderInfo.isAmazonVariant && (
+                            <span className="text-[9px] text-amber-400 underline ml-0.5">
+                              {platform === 'Amazon Ta Novo' ? '(p/ Amazon)' : '(p/ Ta Novo)'}
+                            </span>
+                          )}
+                        </button>
+                      )}
+                    </div>
                     <input 
                       type="text"
-                      placeholder="Ex: 2000008172648"
+                      placeholder="Ex: 2000018084300220"
                       value={orderNumber}
-                      onChange={(e) => setOrderNumber(e.target.value)}
+                      onChange={(e) => handleOrderNumberChange(e.target.value)}
+                      onBlur={handleOrderNumberBlur}
                       className="w-full px-3 h-[38px] bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
                       id="input-order-number"
                     />

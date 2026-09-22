@@ -69,6 +69,7 @@ import {
   validateUniqueOrderNumber,
   validatePendingItemLink
 } from '../utils/pendingRegistrationHelper';
+import { detectPlatformFromOrderNumber } from '../utils/orderPlatformHelper';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -672,7 +673,8 @@ export const transferPendingItemToStock = async (
   const finalTracking = triageDetails?.trackingCode || pendingItem.trackingCode || '';
   const finalSerial = triageDetails?.serialNumber || pendingItem.serialNumber || '';
   const finalOrder = triageDetails?.orderNumber || pendingItem.orderNumber || '';
-  const finalPlatform = (triageDetails?.platform || pendingItem.platform || 'Mercado Livre') as PlatformType;
+  const detectedFromOrder = finalOrder ? detectPlatformFromOrderNumber(finalOrder) : null;
+  const finalPlatform = (triageDetails?.platform || pendingItem.platform || detectedFromOrder || 'Mercado Livre') as PlatformType;
 
   const newUnit: TriageUnit = {
     id: newTriageId,

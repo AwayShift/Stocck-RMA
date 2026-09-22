@@ -42,7 +42,8 @@ import {
   Layers,
   Barcode,
   Link2,
-  Calendar
+  Calendar,
+  Sparkles
 } from 'lucide-react';
 import { 
   PendingItem, 
@@ -63,6 +64,7 @@ import {
   ensurePendingRegistrationNumber 
 } from '../utils/pendingRegistrationHelper';
 import { findBaseProduct, getResolvedUnitProductName } from '../utils/productImages';
+import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform } from '../utils/orderPlatformHelper';
 
 interface PendingItemsProps {
   items: PendingItem[];
@@ -245,6 +247,54 @@ export default function PendingItems({
   const [formStockDestination, setFormStockDestination] = useState<DestinationSectorType>('RMA');
   const [formStockAccessories, setFormStockAccessories] = useState('');
   const [formStockExcludeDailyCount, setFormStockExcludeDailyCount] = useState(false);
+
+  // Auto-detect platform for Pending Form based on order number format
+  const detectedFormOrderInfo = useMemo(() => {
+    return inspectOrderNumber(formOrderNumber, formPlatform);
+  }, [formOrderNumber, formPlatform]);
+
+  const handleFormOrderNumberChange = (raw: string) => {
+    setFormOrderNumber(raw);
+    const detection = inspectOrderNumber(raw, formPlatform);
+    if (detection) {
+      setFormPlatform(detection.platform);
+    }
+  };
+
+  const handleFormOrderNumberBlur = () => {
+    const normalized = normalizeOrderNumberForPlatform(formOrderNumber, formPlatform);
+    if (normalized !== formOrderNumber) {
+      setFormOrderNumber(normalized);
+    }
+    const detected = detectPlatformFromOrderNumber(normalized, formPlatform);
+    if (detected && detected !== formPlatform) {
+      setFormPlatform(detected);
+    }
+  };
+
+  // Auto-detect platform for Transfer Modal based on order number format
+  const detectedTransferOrderInfo = useMemo(() => {
+    return inspectOrderNumber(transferOrderNumber, transferPlatform);
+  }, [transferOrderNumber, transferPlatform]);
+
+  const handleTransferOrderNumberChange = (raw: string) => {
+    setTransferOrderNumber(raw);
+    const detection = inspectOrderNumber(raw, transferPlatform);
+    if (detection) {
+      setTransferPlatform(detection.platform);
+    }
+  };
+
+  const handleTransferOrderNumberBlur = () => {
+    const normalized = normalizeOrderNumberForPlatform(transferOrderNumber, transferPlatform);
+    if (normalized !== transferOrderNumber) {
+      setTransferOrderNumber(normalized);
+    }
+    const detected = detectPlatformFromOrderNumber(normalized, transferPlatform);
+    if (detected && detected !== transferPlatform) {
+      setTransferPlatform(detected);
+    }
+  };
 
   // Rule 1: "um pedido só pode ter um registro de pendencia"
   const orderDuplicateWarning = useMemo(() => {
@@ -2256,14 +2306,42 @@ export default function PendingItems({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Número de Pedido
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5 min-h-[20px]">
+                    <label className="text-xs font-semibold text-slate-300">
+                      Número de Pedido
+                    </label>
+                    {detectedFormOrderInfo && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (detectedFormOrderInfo.isAmazonVariant) {
+                            const next = formPlatform === 'Amazon Ta Novo' ? 'Amazon' : 'Amazon Ta Novo';
+                            setFormPlatform(next);
+                          }
+                        }}
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-all ${
+                          detectedFormOrderInfo.isAmazonVariant
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer'
+                            : 'bg-sky-500/20 text-sky-300 border border-sky-500/40 cursor-default'
+                        }`}
+                        title={detectedFormOrderInfo.isAmazonVariant ? 'Clique para alternar entre Amazon e Amazon Ta Novo' : detectedFormOrderInfo.hint}
+                      >
+                        <Sparkles className="w-2.5 h-2.5 text-sky-400" />
+                        <span>{formPlatform}</span>
+                        {detectedFormOrderInfo.isAmazonVariant && (
+                          <span className="text-[9px] text-amber-400 underline ml-0.5">
+                            {formPlatform === 'Amazon Ta Novo' ? '(p/ Amazon)' : '(p/ Ta Novo)'}
+                          </span>
+                        )}
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={formOrderNumber}
-                    onChange={(e) => setFormOrderNumber(e.target.value)}
-                    placeholder="Ex: 20000081726"
+                    onChange={(e) => handleFormOrderNumberChange(e.target.value)}
+                    onBlur={handleFormOrderNumberBlur}
+                    placeholder="Ex: 2000018084300220"
                     className={`w-full bg-slate-950 border rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none transition-colors ${
                       orderDuplicateWarning 
                         ? 'border-rose-500 focus:border-rose-400 text-rose-200' 
@@ -3240,14 +3318,42 @@ export default function PendingItems({
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Número de Pedido
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5 min-h-[20px]">
+                        <label className="text-xs font-semibold text-slate-300">
+                          Número de Pedido
+                        </label>
+                        {detectedTransferOrderInfo && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (detectedTransferOrderInfo.isAmazonVariant) {
+                                const next = transferPlatform === 'Amazon Ta Novo' ? 'Amazon' : 'Amazon Ta Novo';
+                                setTransferPlatform(next);
+                              }
+                            }}
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-all ${
+                              detectedTransferOrderInfo.isAmazonVariant
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default'
+                            }`}
+                            title={detectedTransferOrderInfo.isAmazonVariant ? 'Clique para alternar entre Amazon e Amazon Ta Novo' : detectedTransferOrderInfo.hint}
+                          >
+                            <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>{transferPlatform}</span>
+                            {detectedTransferOrderInfo.isAmazonVariant && (
+                              <span className="text-[9px] text-amber-400 underline ml-0.5">
+                                {transferPlatform === 'Amazon Ta Novo' ? '(p/ Amazon)' : '(p/ Ta Novo)'}
+                              </span>
+                            )}
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         value={transferOrderNumber}
-                        onChange={(e) => setTransferOrderNumber(e.target.value)}
-                        placeholder="Ex: 20000088921"
+                        onChange={(e) => handleTransferOrderNumberChange(e.target.value)}
+                        onBlur={handleTransferOrderNumberBlur}
+                        placeholder="Ex: 2000018084300220"
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                       />
                     </div>

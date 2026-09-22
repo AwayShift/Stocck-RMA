@@ -61,6 +61,7 @@ import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils
 import { RichTextEditor } from './RichTextEditor';
 import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
 import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
+import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform } from '../utils/orderPlatformHelper';
 
 interface PhysicalStockProps {
   units: TriageUnit[];
@@ -424,6 +425,32 @@ export default function PhysicalStock({
     setCustomEditPackageStatusText(isCustomPkg ? unit.packageStatus : '');
 
     setIsEditingUnit(true);
+  };
+
+  const detectedEditOrderInfo = useMemo(() => {
+    if (!editForm?.orderNumber) return null;
+    return inspectOrderNumber(editForm.orderNumber, editForm.platform);
+  }, [editForm?.orderNumber, editForm?.platform]);
+
+  const handleEditOrderNumberChange = (raw: string) => {
+    if (!editForm) return;
+    const detection = inspectOrderNumber(raw, editForm.platform);
+    setEditForm({
+      ...editForm,
+      orderNumber: raw,
+      platform: (detection ? detection.platform : editForm.platform) as any
+    });
+  };
+
+  const handleEditOrderNumberBlur = () => {
+    if (!editForm) return;
+    const normalized = normalizeOrderNumberForPlatform(editForm.orderNumber || '', editForm.platform);
+    const detected = detectPlatformFromOrderNumber(normalized, editForm.platform);
+    setEditForm({
+      ...editForm,
+      orderNumber: normalized,
+      platform: (detected ? detected : editForm.platform) as any
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -2954,16 +2981,44 @@ export default function PhysicalStock({
                     )}
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        <span>Número de Pedido</span>
-                        <span className="text-slate-500 font-normal ml-1">(Opcional)</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-1 min-h-[18px]">
+                        <label className="text-[11px] font-bold text-slate-300">
+                          <span>Número de Pedido</span>
+                          <span className="text-slate-500 font-normal ml-1">(Opcional)</span>
+                        </label>
+                        {detectedEditOrderInfo && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (detectedEditOrderInfo.isAmazonVariant) {
+                                const next = editForm.platform === 'Amazon Ta Novo' ? 'Amazon' : 'Amazon Ta Novo';
+                                setEditForm({ ...editForm, platform: next as any });
+                              }
+                            }}
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-all ${
+                              detectedEditOrderInfo.isAmazonVariant
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer'
+                                : 'bg-sky-500/20 text-sky-300 border border-sky-500/40 cursor-default'
+                            }`}
+                            title={detectedEditOrderInfo.isAmazonVariant ? 'Clique para alternar entre Amazon e Amazon Ta Novo' : detectedEditOrderInfo.hint}
+                          >
+                            <Sparkles className="w-2.5 h-2.5 text-sky-400" />
+                            <span>{editForm.platform || detectedEditOrderInfo.platform}</span>
+                            {detectedEditOrderInfo.isAmazonVariant && (
+                              <span className="text-[9px] text-amber-400 underline ml-0.5">
+                                {editForm.platform === 'Amazon Ta Novo' ? '(p/ Amazon)' : '(p/ Ta Novo)'}
+                              </span>
+                            )}
+                          </button>
+                        )}
+                      </div>
                       <input 
                         type="text" 
                         value={editForm.orderNumber || ''} 
-                        onChange={(e) => setEditForm({ ...editForm, orderNumber: e.target.value })} 
+                        onChange={(e) => handleEditOrderNumberChange(e.target.value)} 
+                        onBlur={handleEditOrderNumberBlur}
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
-                        placeholder="Ex: 2000008172648"
+                        placeholder="Ex: 2000018084300220"
                       />
                     </div>
 

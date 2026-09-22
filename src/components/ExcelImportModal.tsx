@@ -23,6 +23,7 @@ import {
 import { BaseProduct, TriageUnit, DestinationSectorType, PlatformType, PackageStatusType } from '../types';
 import { parseStockInventoryExcelFile, downloadStockInventoryTemplate } from '../utils/excelHelpers';
 import { formatStiInput, normalizeStiCode, isValidStiCode } from '../utils/stiFormatter';
+import { detectPlatformFromOrderNumber } from '../utils/orderPlatformHelper';
 
 interface ExcelImportModalProps {
   isOpen: boolean;
@@ -412,7 +413,7 @@ export default function ExcelImportModal({
           baseProductName: row.productName,
           baseProductSku: row.sku,
           baseProductVoltage: row.matchedProduct?.voltage || 'N/A',
-          platform: selectedDefaultPlatform,
+          platform: (row.orderNumber && detectPlatformFromOrderNumber(row.orderNumber)) || selectedDefaultPlatform,
           customerReason: finalCustomerReason,
           deviceStatus: row.destinationSector === 'Principal' ? 'Novo' : 'Usado',
           packageStatus: row.packageStatus,
