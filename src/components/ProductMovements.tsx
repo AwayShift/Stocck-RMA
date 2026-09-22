@@ -461,8 +461,15 @@ export default function ProductMovements({
       totalGeral += w.totalWeek || 0;
     });
 
+    const totalBusinessDays = Math.max(monthWeeks.length * 5, 1);
+    const avgDailyBusinessDays = (totalGeral / totalBusinessDays).toFixed(1);
+
+    const daysWithEntries = weekSummaries.reduce((sum, w) => {
+      return sum + w.records.filter(r => (r.totalDia || 0) > 0).length;
+    }, 0);
+    const avgDailyActiveDays = daysWithEntries > 0 ? (totalGeral / daysWithEntries).toFixed(1) : '0';
+
     const activeDaysInWeeks = weekSummaries.reduce((sum, w) => sum + w.records.length, 0);
-    const avgDailyWeeks = activeDaysInWeeks > 0 ? (totalGeral / activeDaysInWeeks).toFixed(1) : '0';
 
     return {
       totalRma,
@@ -470,10 +477,14 @@ export default function ProductMovements({
       totalOpenbox,
       totalEs,
       totalGeral,
+      totalBusinessDays,
+      daysWithEntries,
       activeDaysCount: activeDaysInWeeks,
-      avgDaily: avgDailyWeeks
+      avgDaily: avgDailyBusinessDays,
+      avgDailyBusinessDays,
+      avgDailyActiveDays
     };
-  }, [weekSummaries]);
+  }, [weekSummaries, monthWeeks]);
 
   // Total summary for selected month (strictly days starting with selectedMonth)
   const monthTotals = useMemo(() => {
@@ -491,8 +502,20 @@ export default function ProductMovements({
       totalGeral += r.totalDia || 0;
     });
 
+    // Count business days (Segunda a Sexta) within selectedMonth
+    let civilMonthBusinessDays = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dt = new Date(selectedYear, selectedMonthIdx, day, 12, 0, 0);
+      const dow = dt.getDay();
+      if (dow >= 1 && dow <= 5) civilMonthBusinessDays++;
+    }
+
+    const daysWithEntries = monthDailyInflows.filter(r => (r.totalDia || 0) > 0).length;
     const activeDaysCount = monthDailyInflows.length;
-    const avgDaily = activeDaysCount > 0 ? (totalGeral / activeDaysCount).toFixed(1) : '0';
+    const avgDaily = civilMonthBusinessDays > 0 
+      ? (totalGeral / civilMonthBusinessDays).toFixed(1) 
+      : (activeDaysCount > 0 ? (totalGeral / activeDaysCount).toFixed(1) : '0');
+    const avgDailyActiveDays = daysWithEntries > 0 ? (totalGeral / daysWithEntries).toFixed(1) : '0';
 
     return {
       totalRma,
@@ -500,10 +523,13 @@ export default function ProductMovements({
       totalOpenbox,
       totalEs,
       totalGeral,
+      civilMonthBusinessDays,
+      daysWithEntries,
       activeDaysCount,
-      avgDaily
+      avgDaily,
+      avgDailyActiveDays
     };
-  }, [monthDailyInflows]);
+  }, [monthDailyInflows, daysInMonth, selectedYear, selectedMonthIdx]);
 
   // Compute entries per day across all days in month
   const dailyCounts = useMemo(() => {
@@ -1180,9 +1206,14 @@ export default function ProductMovements({
                 <span className={`text-2xl font-black ${
                   isLight ? 'text-sky-600' : 'text-sky-400'
                 }`}>{weeksGrandTotal.avgDaily}</span>
-                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un/dia</span>
+                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un/dia útil</span>
               </div>
-              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>No ciclo das semanas</span>
+              <div className="flex items-center justify-between text-[10px] mt-1 text-slate-500">
+                <span>{weeksGrandTotal.totalBusinessDays} dias úteis</span>
+                <span className={`font-semibold ${isLight ? 'text-sky-700' : 'text-sky-400'}`} title="Média considerando apenas dias com registros de entrada">
+                  ~{weeksGrandTotal.avgDailyActiveDays}/dia ativo
+                </span>
+              </div>
             </div>
           </div>
 
@@ -1532,8 +1563,10 @@ export default function ProductMovements({
                 <span className={`w-2 h-2 rounded-full inline-block ${isLight ? 'bg-blue-600' : 'bg-blue-500'}`}></span>
                 <span>A contagem das semanas inclui todos os dias pertencentes ao ciclo semanal (mesmo de meses adjacentes), garantindo que a soma semanal bata 100% com os registros diários.</span>
               </span>
-              <div className="flex items-center gap-3 font-mono text-[11px]">
+              <div className="flex items-center gap-3 font-mono text-[11px] flex-wrap">
                 <span className={`font-bold ${isLight ? 'text-sky-700' : 'text-sky-300'}`}>Total Ciclo Semanal: {weeksGrandTotal.totalGeral} un</span>
+                <span className={isLight ? 'text-slate-300' : 'text-slate-500'}>|</span>
+                <span className={`font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>Média Diária: {weeksGrandTotal.avgDaily} un/dia</span>
                 <span className={isLight ? 'text-slate-300' : 'text-slate-500'}>|</span>
                 <span className={isLight ? 'text-slate-600 font-semibold' : 'text-slate-400'}>Mês Civil: {monthTotals.totalGeral} un</span>
               </div>
@@ -1597,7 +1630,7 @@ export default function ProductMovements({
                       }`}
                     >
                       <div className="flex justify-between items-center text-xs">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <span className={`font-black tracking-tight ${
                             isSelected 
                               ? isLight ? 'text-indigo-700' : 'text-indigo-400' 
@@ -1605,15 +1638,27 @@ export default function ProductMovements({
                           }`}>
                             {(label.title && label.title !== 'undefined' && !label.title.includes('undefined')) ? label.title : `Semana ${idx + 1}`}
                           </span>
-                          <span className={`text-[10px] font-medium ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                          <span className={`text-[10px] font-medium shrink-0 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                             ({label.range && label.range !== 'undefined' ? label.range : ''})
                           </span>
                         </div>
-                        <span className={`font-mono font-bold px-2 py-0.5 rounded border ${
-                          isLight ? 'text-slate-800 bg-white border-slate-200' : 'text-slate-300 bg-slate-950 border-slate-800/50'
-                        }`}>
-                          {val} un
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span 
+                            className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                              isSelected
+                                ? isLight ? 'text-indigo-800 bg-indigo-100/90 border-indigo-300' : 'text-indigo-300 bg-indigo-500/25 border-indigo-500/40'
+                                : isLight ? 'text-sky-700 bg-sky-50 border-sky-200' : 'text-sky-400 bg-sky-500/10 border-sky-500/20'
+                            }`}
+                            title={`Média diária da ${label.title}: ${(val / 5).toFixed(1)} un/dia útil (Seg-Sex)`}
+                          >
+                            {(val / 5).toFixed(1)}/dia
+                          </span>
+                          <span className={`font-mono font-bold px-2 py-0.5 rounded border ${
+                            isLight ? 'text-slate-800 bg-white border-slate-200' : 'text-slate-300 bg-slate-950 border-slate-800/50'
+                          }`}>
+                            {val} un
+                          </span>
+                        </div>
                       </div>
 
                       {/* Bar Background */}
@@ -1639,34 +1684,70 @@ export default function ProductMovements({
               </div>
 
               {/* Meta breakdown summary */}
-              <div className={`grid grid-cols-2 gap-3 text-xs p-3.5 rounded-xl border shrink-0 ${
+              <div className={`grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs p-3 rounded-xl border shrink-0 ${
                 isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/40 border-slate-800/50'
               }`}>
                 <div>
-                  <span className={`block text-[10px] font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
-                    Total nas Semanas
+                  <span className={`block text-[10px] font-bold leading-tight ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                    {selectedWeek !== null ? `Total Sem. ${selectedWeek + 1}` : 'Total Semanas'}
                   </span>
-                  <span className={`font-extrabold text-base mt-0.5 block ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                    {weeksGrandTotal.totalGeral}
+                  <span className={`font-extrabold text-base mt-0.5 block leading-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                    {selectedWeek !== null ? (weeklyCounts[selectedWeek] || 0) : weeksGrandTotal.totalGeral}
                   </span>
-                  {weeksGrandTotal.totalGeral !== monthTotals.totalGeral && (
-                    <span className={`text-[9px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                      ({monthTotals.totalGeral} no mês civil)
-                    </span>
-                  )}
+                  <span className={`text-[9px] block leading-tight truncate mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {selectedWeek !== null 
+                      ? `${monthWeeks[selectedWeek]?.range || ''}`
+                      : (weeksGrandTotal.totalGeral !== monthTotals.totalGeral ? `(${monthTotals.totalGeral} civil)` : `Em ${monthWeeks.length} sem.`)}
+                  </span>
                 </div>
+
                 <div>
-                  <span className={`block text-[10px] font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                  <span className={`block text-[10px] font-bold leading-tight ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     Média Semanal
                   </span>
-                  <span className={`font-extrabold text-base mt-0.5 block ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  <span className={`font-extrabold text-base mt-0.5 block leading-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
                     {(weeksGrandTotal.totalGeral / Math.max(monthWeeks.length, 1)).toFixed(1)} / sem
                   </span>
-                  <span className={`text-[9px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  <span className={`text-[9px] block leading-tight mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                     Em {monthWeeks.length} semanas
                   </span>
                 </div>
+
+                <div className={`rounded-lg p-1.5 -m-1 border ${
+                  isLight ? 'bg-sky-50/70 border-sky-200/70' : 'bg-sky-500/10 border-sky-500/20'
+                }`}>
+                  <span className={`block text-[10px] font-bold leading-tight ${isLight ? 'text-sky-800' : 'text-sky-300'}`}>
+                    {selectedWeek !== null ? `Média Diária (S${selectedWeek + 1})` : 'Média Diária'}
+                  </span>
+                  <span className={`font-extrabold text-base mt-0.5 block leading-tight ${isLight ? 'text-sky-900' : 'text-sky-200'}`}>
+                    {selectedWeek !== null 
+                      ? `${((weeklyCounts[selectedWeek] || 0) / 5).toFixed(1)} / dia`
+                      : `${weeksGrandTotal.avgDaily} / dia`}
+                  </span>
+                  <span className={`text-[9px] block leading-tight mt-0.5 ${isLight ? 'text-sky-700/90' : 'text-sky-400/90'}`}>
+                    {selectedWeek !== null 
+                      ? '5 dias úteis (Seg-Sex)' 
+                      : `${weeksGrandTotal.totalBusinessDays} d. úteis (~${weeksGrandTotal.avgDailyActiveDays}/ativo)`}
+                  </span>
+                </div>
               </div>
+
+              {selectedWeek !== null && (
+                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border ${
+                  isLight ? 'bg-indigo-50 text-indigo-900 border-indigo-200' : 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
+                }`}>
+                  <span>Filtrando: Semana {selectedWeek + 1} ({monthWeeks[selectedWeek]?.range || ''})</span>
+                  <button
+                    onClick={() => {
+                      setSelectedWeek(null);
+                      setSelectedDay(null);
+                    }}
+                    className="underline hover:opacity-80 cursor-pointer font-bold"
+                  >
+                    Ver todas as semanas
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Right Column: Daily Distribution & Calendar Grid */}
@@ -1677,12 +1758,19 @@ export default function ProductMovements({
                 isLight ? 'border-slate-200' : 'border-slate-800/50'
               }`}>
                 <div>
-                  <h3 className={`text-sm font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                    {dailyViewType === 'hourly'
-                      ? (selectedDateStr ? `Análise por Horário • Dia ${String(selectedDay || '').padStart(2, '0')} (${formatBrDate(selectedDateStr)})` : `Análise por Horário • ${monthName} / ${selectedYear}`)
-                      : `Análise Diária • ${monthName}`}
-                  </h3>
-                  <p className={`text-[10px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className={`text-sm font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                      {dailyViewType === 'hourly'
+                        ? (selectedDateStr ? `Análise por Horário • Dia ${String(selectedDay || '').padStart(2, '0')} (${formatBrDate(selectedDateStr)})` : `Análise por Horário • ${monthName} / ${selectedYear}`)
+                        : `Análise Diária • ${monthName}`}
+                    </h3>
+                    <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-md border ${
+                      isLight ? 'bg-sky-50 border-sky-200 text-sky-800' : 'bg-sky-500/10 border-sky-500/30 text-sky-400'
+                    }`} title="Média diária no ciclo das semanas">
+                      Média: {weeksGrandTotal.avgDaily} un/dia útil
+                    </span>
+                  </div>
+                  <p className={`text-[10px] mt-0.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     {dailyViewType === 'hourly'
                       ? (selectedDateStr
                           ? `Visualizando entradas do dia ${formatBrDate(selectedDateStr)} (${getWeekdayName(selectedDateStr)}). Clique nas barras para filtrar.`
