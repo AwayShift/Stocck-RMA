@@ -665,6 +665,277 @@ export default function RmaEntry({
     }
   }, [activeSku, selectedPendingItem]);
 
+  // Common fallback reasons (matching real RMA operations)
+  const DEFAULT_CUSTOMER_REASONS = useMemo(() => [
+    'Arrependimento de compra',
+    'Aparelho não liga / Não funciona',
+    'Defeito intermitente',
+    'Produto danificado no transporte',
+    'Peça / Acessório faltante',
+    'Embalagem violada',
+    'Não Entregue',
+    'Produto diferente do anunciado',
+    'Comprado por engano'
+  ], []);
+
+  // Filter out internal notes, technician tags and non-client reasons
+  const isExcludedCustomerReason = (reasonText: string): boolean => {
+    if (!reasonText) return true;
+    const lower = reasonText.toLowerCase().trim();
+    if (lower.length < 3) return true;
+    if (['-', '--', 'n/a', 'na', 'nenhum', 'sem motivo', 'não informado', 'nao informado', 'ok', 'normal', 'teste', 'test', 'sem defeito', 'aprovado'].includes(lower)) {
+      return true;
+    }
+    // Explicitly requested exclusions: "Entrada de Estoque" and "REVISADA DANI"
+    if (lower.includes('entrada de estoque') || lower.includes('entrada estoque')) {
+      return true;
+    }
+    if (lower.includes('revisada') || lower.includes('revisado') || lower.includes('dani')) {
+      return true;
+    }
+    // Internal technical, logistical or migration notations
+    if (
+      lower.includes('inventário') || 
+      lower.includes('inventario') ||
+      lower.includes('importação') ||
+      lower.includes('importacao') ||
+      lower.includes('migração') ||
+      lower.includes('migracao') ||
+      lower.includes('liberado de pendênci') ||
+      lower.includes('liberado de pendenci') ||
+      lower.includes('ajuste de estoque')
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  // Normalize string removing accents, special characters and extra spaces
+  const normalizeForComparison = (str: string): string => {
+    return str
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ');
+  };
+
+  // Canonical groupings for common RMA motives (unifying synonymous, gender and plural variations)
+  const CANONICAL_REASON_MAP = useMemo(() => [
+    {
+      canonicalDisplay: 'Devolvido',
+      canonicalKey: 'devolvido',
+      matcher: (norm: string) => norm === 'devolvido' || norm === 'devolvida' || norm === 'devolucao' || norm === 'devolvidos' || norm === 'devolvidas' || norm === 'devolucao cliente'
+    },
+    {
+      canonicalDisplay: 'Não Entregue',
+      canonicalKey: 'nao entregue',
+      matcher: (norm: string) => norm.includes('nao entregue') || norm.includes('objeto nao entregue') || norm.includes('destinatario ausente') || norm.includes('devolucao correios') || norm.includes('devolucao transportadora')
+    },
+    {
+      canonicalDisplay: 'Arrependimento de compra',
+      canonicalKey: 'arrependimento',
+      matcher: (norm: string) => norm.includes('arrependimento') || norm.includes('desistencia') || norm.includes('desistiu')
+    },
+    {
+      canonicalDisplay: 'Aparelho não liga / Não funciona',
+      canonicalKey: 'nao liga',
+      matcher: (norm: string) => (norm.includes('nao liga') || norm.includes('nao funciona') || norm.includes('nao liga nada') || norm.includes('sem sinal') || norm.includes('parou de funcionar')) && !norm.includes('intermitente')
+    },
+    {
+      canonicalDisplay: 'Defeito intermitente',
+      canonicalKey: 'intermitente',
+      matcher: (norm: string) => norm.includes('intermitente') || norm.includes('as vezes funciona') || norm.includes('as vezes nao')
+    },
+    {
+      canonicalDisplay: 'Produto danificado no transporte',
+      canonicalKey: 'danificado transporte',
+      matcher: (norm: string) => norm.includes('transporte') || norm.includes('avaria de frete') || norm.includes('caixa amassada') || norm.includes('danificado correios')
+    },
+    {
+      canonicalDisplay: 'Peça / Acessório faltante',
+      canonicalKey: 'peca faltante',
+      matcher: (norm: string) => (norm.includes('faltante') || norm.includes('faltando') || norm.includes('incompleto') || norm.includes('incompleta')) && (norm.includes('peca') || norm.includes('acessorio') || norm.includes('cabo') || norm.includes('item') || norm.includes('fonte') || norm.includes('manual'))
+    },
+    {
+      canonicalDisplay: 'Embalagem violada',
+      canonicalKey: 'embalagem violada',
+      matcher: (norm: string) => norm.includes('violada') || norm.includes('violado') || norm.includes('lacre rompido') || norm.includes('caixa aberta')
+    },
+    {
+      canonicalDisplay: 'Produto com defeito / Avaria',
+      canonicalKey: 'defeito avaria',
+      matcher: (norm: string) => norm === 'com defeito' || norm === 'defeito' || norm === 'avariado' || norm === 'avariada' || norm === 'avaria' || norm === 'quebrado' || norm === 'quebrada' || norm === 'danificado' || norm === 'danificada'
+    },
+    {
+      canonicalDisplay: 'Produto diferente do anunciado',
+      canonicalKey: 'produto divergente',
+      matcher: (norm: string) => norm.includes('diferente do anunciado') || norm.includes('item errado') || norm.includes('produto errado') || norm.includes('modelo divergente') || norm.includes('divergente')
+    },
+    {
+      canonicalDisplay: 'Comprado por engano',
+      canonicalKey: 'comprado engano',
+      matcher: (norm: string) => norm.includes('engano') || norm.includes('compra errada') || norm.includes('pediu errado')
+    }
+  ], []);
+
+  // Helper to extract a semantic root key for any phrase (handling masculine/feminine and plurals)
+  const getSemanticReasonKey = (raw: string): { key: string; display: string } => {
+    const norm = normalizeForComparison(raw);
+
+    // 1. Check dictionary mappings
+    for (const rule of CANONICAL_REASON_MAP) {
+      if (rule.matcher(norm)) {
+        return { key: rule.canonicalKey, display: rule.canonicalDisplay };
+      }
+    }
+
+    // 2. Token stemmer for gender and number variations (e.g. devolvido vs devolvida -> devolvid)
+    const tokens = norm.split(' ').map(token => {
+      let t = token;
+      if (t.length > 4 && t.endsWith('s')) t = t.slice(0, -1);
+      if (t.length > 4 && (t.endsWith('o') || t.endsWith('a'))) t = t.slice(0, -1);
+      return t;
+    });
+
+    const stemKey = tokens.join(' ');
+    const formatted = raw.trim().charAt(0).toUpperCase() + raw.trim().slice(1);
+    return { key: stemKey, display: formatted };
+  };
+
+  // Detect if two reason keys or texts are redundant / stem duplicates
+  const areReasonsRedundant = (rawA: string, rawB: string): boolean => {
+    if (rawA === rawB) return true;
+    const a = normalizeForComparison(rawA);
+    const b = normalizeForComparison(rawB);
+    if (a === b) return true;
+
+    const keyA = getSemanticReasonKey(rawA).key;
+    const keyB = getSemanticReasonKey(rawB).key;
+    if (keyA === keyB) return true;
+
+    // Check prefix or word root overlap
+    if (keyA.length >= 5 && keyB.length >= 5) {
+      if (keyA.startsWith(keyB) || keyB.startsWith(keyA)) return true;
+      const aRoot = keyA.slice(0, Math.min(keyA.length, 6));
+      const bRoot = keyB.slice(0, Math.min(keyB.length, 6));
+      if (aRoot.length >= 5 && aRoot === bRoot) return true;
+    }
+    return false;
+  };
+
+  // Top 5 most used customer reasons dynamically computed from history without redundancies
+  const topReasonSuggestions = useMemo(() => {
+    const counts: Record<string, { count: number; canonicalDisplay: string; canonicalKey: string }> = {};
+
+    const registerReason = (rawReason?: string, weight = 1) => {
+      if (!rawReason) return;
+      const trimmed = rawReason.trim();
+      if (isExcludedCustomerReason(trimmed)) return;
+
+      // In case reasons were saved comma-separated, split and count individual motives
+      const parts = trimmed.split(/[,;]+/).map(p => p.trim()).filter(p => p.length >= 3 && !isExcludedCustomerReason(p));
+      const itemsToCount = parts.length > 0 ? parts : (!isExcludedCustomerReason(trimmed) ? [trimmed] : []);
+
+      itemsToCount.forEach(part => {
+        if (isExcludedCustomerReason(part)) return;
+        const { key, display } = getSemanticReasonKey(part);
+
+        if (!counts[key]) {
+          counts[key] = {
+            count: weight,
+            canonicalDisplay: display,
+            canonicalKey: key
+          };
+        } else {
+          counts[key].count += weight;
+        }
+      });
+    };
+
+    const currentProductSku = activeSku?.toLowerCase().trim();
+
+    // 1. Triage history
+    if (units && units.length > 0) {
+      units.forEach(u => {
+        const isCurrentProduct = (selectedProductId && u.baseProductId === selectedProductId) ||
+                                 (currentProductSku && u.baseProductSku?.toLowerCase().trim() === currentProductSku);
+        registerReason(u.customerReason, isCurrentProduct ? 3 : 1);
+      });
+    }
+
+    // 2. Pending items history
+    if (pendingItems && pendingItems.length > 0) {
+      pendingItems.forEach(p => {
+        const isCurrentProduct = currentProductSku && p.sku?.toLowerCase().trim() === currentProductSku;
+        registerReason(p.customerReason, isCurrentProduct ? 3 : 1);
+      });
+    }
+
+    // Sort by frequency descending
+    const sorted = Object.values(counts).sort((a, b) => b.count - a.count);
+
+    const result: string[] = [];
+    const seenKeys: string[] = [];
+
+    for (const item of sorted) {
+      if (isExcludedCustomerReason(item.canonicalDisplay)) continue;
+      const { key, display } = getSemanticReasonKey(item.canonicalDisplay);
+      if (seenKeys.some(seenKey => areReasonsRedundant(seenKey, key))) continue;
+
+      seenKeys.push(key);
+      result.push(display);
+      if (result.length >= 5) break;
+    }
+
+    // If fewer than 5 from history, complete with defaults (strictly max 5 and no redundancy)
+    if (result.length < 5) {
+      for (const def of DEFAULT_CUSTOMER_REASONS) {
+        if (isExcludedCustomerReason(def)) continue;
+        const { key, display } = getSemanticReasonKey(def);
+        if (seenKeys.some(seenKey => areReasonsRedundant(seenKey, key))) continue;
+
+        seenKeys.push(key);
+        result.push(display);
+        if (result.length >= 5) break;
+      }
+    }
+
+    return result.slice(0, 5);
+  }, [units, pendingItems, selectedProductId, activeSku, DEFAULT_CUSTOMER_REASONS, CANONICAL_REASON_MAP]);
+
+  const isReasonSelected = (sugg: string) => {
+    if (!customerReason) return false;
+    const normCustomer = normalizeForComparison(customerReason);
+    const normSugg = normalizeForComparison(sugg);
+    if (normCustomer.includes(normSugg)) return true;
+
+    const parts = customerReason.split(/[,;]+/).map(p => p.trim()).filter(Boolean);
+    return parts.some(p => areReasonsRedundant(p, sugg));
+  };
+
+  const handleToggleReason = (sugg: string) => {
+    if (!customerReason || !customerReason.trim()) {
+      setCustomerReason(sugg);
+      return;
+    }
+
+    const current = customerReason.trim();
+    if (isReasonSelected(sugg)) {
+      // Toggle off / remove matching or redundant phrases from customerReason
+      const parts = current
+        .split(/[,;]+/)
+        .map(p => p.trim())
+        .filter(p => p.length > 0 && !areReasonsRedundant(p, sugg));
+      setCustomerReason(parts.join(', '));
+    } else {
+      // Append cleanly
+      const cleanCurrent = current.replace(/[,;\s]+$/, '');
+      setCustomerReason(`${cleanCurrent}, ${sugg}`);
+    }
+  };
+
   // Sync search input with selected product or allow free typing
   const handleSelectProduct = (p: BaseProduct) => {
     setSelectedProductId(p.id);
@@ -838,7 +1109,7 @@ export default function RmaEntry({
         orderNumber: orderNumber.trim(),
         platform,
         destinationSector,
-        customerReason: customerReason.trim() || 'Entrada de Estoque',
+        customerReason: customerReason.trim() || 'Não informado',
         deviceStatus: finalDeviceStatus,
         packageStatus: finalPackageStatus,
         accessoriesInclusion: accessoriesInclusion.trim(),
@@ -1387,32 +1658,83 @@ export default function RmaEntry({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  {/* Reclamação / Motivo do Cliente */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Motivo / Reclamação do Cliente</label>
-                    <input 
-                      type="text"
-                      placeholder="Ex: Devolução por desistência, não ligou..."
-                      value={customerReason}
-                      onChange={(e) => setCustomerReason(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
-                      id="textarea-customer-reason"
-                    />
+                {/* Reclamação / Motivo do Cliente with Dynamic Top 5 Suggestions (like Image 2) */}
+                <div className="space-y-2 pt-2 border-t border-slate-800/80" id="field-customer-reason-container">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <FileText className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-sky-600' : 'text-sky-400'}`} />
+                      <label className={`text-[11px] font-bold uppercase tracking-wider ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                        Motivo da Devolução / Reclamação do Cliente
+                      </label>
+                    </div>
+                    <span className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                      Informado pelo cliente ou plataforma
+                    </span>
                   </div>
 
-                  {/* Acessórios inclusos */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Acessórios Inclusos</label>
-                    <input 
-                      type="text"
-                      placeholder="Ex: Completo com cabo e manual..."
-                      value={accessoriesInclusion}
-                      onChange={(e) => setAccessoriesInclusion(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
-                      id="input-accessories-inclusion"
-                    />
+                  <input 
+                    type="text"
+                    placeholder="Ex: Arrependimento, cliente alegou defeito no motor, peça faltante, não ligou..."
+                    value={customerReason}
+                    onChange={(e) => setCustomerReason(e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg text-xs transition-colors focus:outline-none ${
+                      isLight 
+                        ? 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20' 
+                        : 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-500 focus:border-sky-500'
+                    }`}
+                    id="textarea-customer-reason"
+                  />
+
+                  {/* Sugestões de motivos mais usados (máximo 5) */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5" id="customer-reason-suggestions">
+                    {topReasonSuggestions.map((suggestion) => {
+                      const isSelected = isReasonSelected(suggestion);
+                      return (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onClick={() => handleToggleReason(suggestion)}
+                          id={`btn-suggest-reason-${suggestion.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all text-left flex items-center gap-1 cursor-pointer select-none ${
+                            isSelected
+                              ? isLight
+                                ? 'bg-sky-50 text-sky-700 border-sky-400 font-bold shadow-sm'
+                                : 'bg-sky-500/20 text-sky-300 border-sky-500/70 font-bold shadow-sm shadow-sky-500/10'
+                              : isLight
+                                ? 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900 hover:bg-slate-50'
+                                : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200 hover:bg-slate-900'
+                          }`}
+                          title={isSelected ? `Remover motivo: "${suggestion}"` : `Adicionar motivo: "${suggestion}"`}
+                        >
+                          {isSelected ? (
+                            <Check className={`w-3 h-3 shrink-0 stroke-[2.5] ${isLight ? 'text-sky-600' : 'text-sky-400'}`} />
+                          ) : (
+                            <span className={`font-bold text-xs select-none leading-none ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>+</span>
+                          )}
+                          <span>{suggestion}</span>
+                        </button>
+                      );
+                    })}
                   </div>
+                </div>
+
+                {/* Acessórios inclusos */}
+                <div className="space-y-1.5 pt-1">
+                  <label className={`text-[11px] font-bold uppercase tracking-wider ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                    Acessórios Inclusos
+                  </label>
+                  <input 
+                    type="text"
+                    placeholder="Ex: Todos os acessórios inclusos, ou cabo, fonte, manual..."
+                    value={accessoriesInclusion}
+                    onChange={(e) => setAccessoriesInclusion(e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg text-xs transition-colors focus:outline-none ${
+                      isLight 
+                        ? 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 focus:border-sky-500' 
+                        : 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500'
+                    }`}
+                    id="input-accessories-inclusion"
+                  />
                 </div>
               </div>
 
@@ -2115,7 +2437,7 @@ export default function RmaEntry({
                 <div className="flex justify-between items-start py-2">
                   <span className={`font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Motivo / Entrada:</span>
                   <span className="font-medium text-right max-w-[65%] text-slate-900 dark:text-slate-100">
-                    {summaryModalData.customerReason || 'Entrada de Estoque'}
+                    {summaryModalData.customerReason || 'Não informado'}
                   </span>
                 </div>
 
