@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.5
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   TrendingUp, 
   Database, 
@@ -658,6 +658,15 @@ export default function App() {
     setActiveTab('stock');
   };
 
+  // Active pending items that require priority attention (excludes 'Resolvido' and 'Baixa' priority)
+  const activePendingItemsCount = useMemo(() => {
+    return pendingItems.filter(p => {
+      if (p.status === 'Resolvido') return false;
+      const prio = (p.priority || '').trim().toLowerCase();
+      return prio !== 'baixa';
+    }).length;
+  }, [pendingItems]);
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4" id="auth-loading-screen">
@@ -755,9 +764,9 @@ export default function App() {
               >
                 <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                 <span>Pendências</span>
-                {pendingItems.filter(p => p.status !== 'Resolvido').length > 0 && (
+                {activePendingItemsCount > 0 && (
                   <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold ml-0.5">
-                    {pendingItems.filter(p => p.status !== 'Resolvido').length}
+                    {activePendingItemsCount}
                   </span>
                 )}
               </button>
@@ -842,9 +851,9 @@ export default function App() {
         >
           <Clock className={`w-3.5 h-3.5 ${activeTab === 'pending' ? 'text-sky-400' : 'text-slate-400'}`} />
           <span>Pendências</span>
-          {pendingItems.filter(p => p.status !== 'Resolvido').length > 0 && (
+          {activePendingItemsCount > 0 && (
             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold ml-0.5">
-              {pendingItems.filter(p => p.status !== 'Resolvido').length}
+              {activePendingItemsCount}
             </span>
           )}
         </button>
@@ -913,7 +922,7 @@ export default function App() {
                 dailyInflows={dailyInflows}
                 onSaveDailyInflow={handleSaveDailyInflow}
                 onDeleteDailyInflow={handleDeleteDailyInflow}
-                pendingItemsCount={pendingItems.filter(p => p.status !== 'Resolvido').length}
+                pendingItemsCount={activePendingItemsCount}
                 onViewUnit={handleViewUnitDetails}
                 onUpdateUnit={handleSaveTriage}
                 onNavigateToStock={handleNavigateToStockWithFilters}
