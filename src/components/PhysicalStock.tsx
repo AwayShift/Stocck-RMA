@@ -4543,10 +4543,10 @@ export default function PhysicalStock({
                   confirmConfig.onConfirm();
                   setConfirmConfig(null);
                 }}
-                className={`px-4 py-2 rounded-xl text-xs font-black text-white transition-all cursor-pointer ${
-                  confirmConfig.type === 'danger' ? 'bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-600/15' :
-                  confirmConfig.type === 'success' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/15' :
-                  'bg-sky-600 hover:bg-sky-500 shadow-lg shadow-sky-600/15'
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  confirmConfig.type === 'danger' ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/15' :
+                  confirmConfig.type === 'success' ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/15' :
+                  'bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-600/15'
                 }`}
               >
                 Confirmar

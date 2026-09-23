@@ -2856,7 +2856,6 @@ export default function ProductMovements({
         unitsByDayMap={unitsByDayMap}
         allUnits={units}
       />
-
     </div>
   );
 }
