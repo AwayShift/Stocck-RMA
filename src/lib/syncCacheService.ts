@@ -182,8 +182,8 @@ if (crossTabBus) {
   };
 }
 
-// Safety buffer in ms to protect against clock drift and in-flight transactions
-const SYNC_SAFETY_BUFFER_MS = 60 * 1000; // 60 seconds
+// Safety buffer in ms to protect against clock drift and in-flight transactions (5 minutes)
+const SYNC_SAFETY_BUFFER_MS = 5 * 60 * 1000; // 300 seconds buffer
 
 /**
  * Load items from LocalStorage
@@ -280,64 +280,68 @@ export const syncBaseProductsIncrementally = async (
       ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
       : null;
 
-    const [updatedRes, idsRes] = await Promise.all([
+    const [updatedRes, recentRes] = await Promise.all([
+      safeSyncTimestamp
+        ? supabase
+            .from('products')
+            .select(PRODUCT_COLUMNS)
+            .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
+            .order('updated_at', { ascending: false })
+            .limit(1000)
+        : supabase
+            .from('products')
+            .select(PRODUCT_COLUMNS)
+            .order('created_at', { ascending: false })
+            .limit(100),
       supabase
         .from('products')
         .select(PRODUCT_COLUMNS)
-        .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: true })
-        .limit(3000),
-      supabase
-        .from('products')
-        .select('id')
-        .limit(20000)
+        .order('created_at', { ascending: false })
+        .limit(50)
     ]);
 
-    if (updatedRes.error) {
-      console.warn('Incremental product sync error, trying select(*):', updatedRes.error);
+    let incomingData: any[] = [];
+    if (updatedRes.data && Array.isArray(updatedRes.data)) {
+      incomingData.push(...updatedRes.data);
+    } else if (updatedRes.error) {
+      // Fallback query if or clause not supported
       const fallbackUpdated = await supabase
         .from('products')
-        .select('*')
+        .select(PRODUCT_COLUMNS)
         .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: true })
-        .limit(3000);
-      if (!fallbackUpdated.error && fallbackUpdated.data) {
-        updatedRes.data = fallbackUpdated.data;
-        updatedRes.error = null;
-      } else {
-        return currentCached;
+        .order('updated_at', { ascending: false })
+        .limit(1000);
+      if (fallbackUpdated.data && Array.isArray(fallbackUpdated.data)) {
+        incomingData.push(...fallbackUpdated.data);
       }
     }
 
-    let validIdSet: Set<string> | null = null;
-    if (!idsRes.error && Array.isArray(idsRes.data)) {
-      if (idsRes.data.length > 0 || currentCached.length <= 2) {
-        validIdSet = new Set(idsRes.data.map(r => r.id));
-      }
+    if (recentRes.data && Array.isArray(recentRes.data)) {
+      incomingData.push(...recentRes.data);
     }
 
     const updatedMap = new Map<string, BaseProduct>();
     
-    // 1. Keep only items that still exist on server
+    // 1. Always retain all existing cached products (never drop due to unpaginated checks)
     currentCached.forEach(p => {
-      if (!validIdSet || validIdSet.has(p.id)) {
+      if (p && p.id) {
         updatedMap.set(p.id, p);
       }
     });
 
-    // 2. Apply deltas
-    if (updatedRes.data && updatedRes.data.length > 0) {
-      updatedRes.data.forEach(r => {
+    // 2. Merge all new, recent, and updated products
+    incomingData.forEach(r => {
+      if (r && r.id) {
         const prod = mapSupabaseToProduct(r);
-        if (!validIdSet || validIdSet.has(prod.id)) {
-          updatedMap.set(prod.id, prod);
-        }
-      });
-    }
+        updatedMap.set(prod.id, prod);
+      }
+    });
 
-    const merged = Array.from(updatedMap.values()).sort(
-      (a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime()
-    );
+    const merged = Array.from(updatedMap.values()).sort((a, b) => {
+      const tA = new Date(a.createdAt || 0).getTime() || 0;
+      const tB = new Date(b.createdAt || 0).getTime() || 0;
+      return tB - tA;
+    });
 
     memoryProducts = merged;
     persistToStorage(CACHE_KEY_PRODUCTS, merged);
@@ -345,7 +349,7 @@ export const syncBaseProductsIncrementally = async (
     saveMetadata();
     return merged;
   } catch (err) {
-    console.warn('Incremental sync exception:', err);
+    console.warn('Incremental sync exception for products:', err);
     return currentCached;
   }
 };
@@ -424,75 +428,84 @@ export const syncTriageUnitsIncrementally = async (
       ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
       : null;
 
-    const [updatedRes, idsRes] = await Promise.all([
+    const [updatedRes, recentRes] = await Promise.all([
+      safeSyncTimestamp
+        ? supabase
+            .from('triage_units')
+            .select(getTriageColumns())
+            .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
+            .order('updated_at', { ascending: false })
+            .limit(1000)
+        : supabase
+            .from('triage_units')
+            .select(getTriageColumns())
+            .order('created_at', { ascending: false })
+            .limit(100),
       supabase
         .from('triage_units')
         .select(getTriageColumns())
-        .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: true })
-        .limit(5000),
-      supabase
-        .from('triage_units')
-        .select('id')
-        .limit(20000)
+        .order('created_at', { ascending: false })
+        .limit(60)
     ]);
 
-    if (updatedRes.error) {
+    let incomingData: any[] = [];
+
+    if (updatedRes.data && Array.isArray(updatedRes.data)) {
+      incomingData.push(...updatedRes.data);
+    } else if (updatedRes.error) {
       if (updatedRes.error.message?.includes('exclude_from_daily_count') || updatedRes.error.code === '42703') {
         setHasExcludeDailyCol(false);
       }
-      console.warn('Incremental triage sync error, trying safe columns / select(*):', updatedRes.error);
+      console.warn('Incremental triage sync fallback due to:', updatedRes.error.message);
       const safeFallback = await supabase
         .from('triage_units')
         .select(getTriageColumns())
         .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: true })
-        .limit(5000);
-      if (!safeFallback.error && safeFallback.data) {
-        updatedRes.data = safeFallback.data;
-        updatedRes.error = null;
-      } else {
-        const starFallback = await supabase
-          .from('triage_units')
-          .select('*')
-          .gt('updated_at', safeSyncTimestamp || lastSync)
-          .order('updated_at', { ascending: true })
-          .limit(5000);
-        if (!starFallback.error && starFallback.data) {
-          updatedRes.data = starFallback.data;
-          updatedRes.error = null;
-        } else {
-          return currentCached;
-        }
+        .order('updated_at', { ascending: false })
+        .limit(1000);
+      if (safeFallback.data && Array.isArray(safeFallback.data)) {
+        incomingData.push(...safeFallback.data);
       }
     }
 
-    let validIdSet: Set<string> | null = null;
-    if (!idsRes.error && Array.isArray(idsRes.data)) {
-      if (idsRes.data.length > 0 || currentCached.length <= 2) {
-        validIdSet = new Set(idsRes.data.map(r => r.id));
+    if (recentRes.data && Array.isArray(recentRes.data)) {
+      incomingData.push(...recentRes.data);
+    } else if (recentRes.error) {
+      if (recentRes.error.message?.includes('exclude_from_daily_count') || recentRes.error.code === '42703') {
+        setHasExcludeDailyCol(false);
+      }
+      const safeRecentFallback = await supabase
+        .from('triage_units')
+        .select(getTriageColumns())
+        .order('created_at', { ascending: false })
+        .limit(60);
+      if (safeRecentFallback.data && Array.isArray(safeRecentFallback.data)) {
+        incomingData.push(...safeRecentFallback.data);
       }
     }
 
     const unitMap = new Map<string, TriageUnit>();
+
+    // 1. Always retain all existing cached triage units (never drop due to unpaginated server checks)
     currentCached.forEach(u => {
-      if (!validIdSet || validIdSet.has(u.id)) {
+      if (u && u.id) {
         unitMap.set(u.id, u);
       }
     });
 
-    if (updatedRes.data && updatedRes.data.length > 0) {
-      updatedRes.data.forEach(r => {
+    // 2. Merge all new, recent, and updated triage units
+    incomingData.forEach(r => {
+      if (r && r.id) {
         const unit = mapSupabaseToTriageUnit(r);
-        if (!validIdSet || validIdSet.has(unit.id)) {
-          unitMap.set(unit.id, unit);
-        }
-      });
-    }
+        unitMap.set(unit.id, unit);
+      }
+    });
 
-    const merged = Array.from(unitMap.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    const merged = Array.from(unitMap.values()).sort((a, b) => {
+      const tA = new Date(a.createdAt || 0).getTime() || 0;
+      const tB = new Date(b.createdAt || 0).getTime() || 0;
+      return tB - tA;
+    });
 
     memoryTriageUnits = merged;
     persistToStorage(CACHE_KEY_TRIAGE_UNITS, merged);
@@ -566,64 +579,70 @@ export const syncDailyInflowsIncrementally = async (
       ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
       : null;
 
-    let [updatedRes, idsRes] = await Promise.all([
+    const [updatedRes, recentRes] = await Promise.all([
+      safeSyncTimestamp
+        ? supabase
+            .from('daily_inflows')
+            .select(INFLOW_COLUMNS)
+            .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
+            .order('updated_at', { ascending: false })
+            .limit(200)
+        : supabase
+            .from('daily_inflows')
+            .select(INFLOW_COLUMNS)
+            .order('date', { ascending: false })
+            .limit(60),
       supabase
         .from('daily_inflows')
         .select(INFLOW_COLUMNS)
-        .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: true }),
-      supabase
-        .from('daily_inflows')
-        .select('id, date')
-        .limit(10000)
+        .order('date', { ascending: false })
+        .limit(30)
     ]);
 
-    if (updatedRes.error) {
+    let incomingData: any[] = [];
+    if (updatedRes.data && Array.isArray(updatedRes.data)) {
+      incomingData.push(...updatedRes.data);
+    } else if (updatedRes.error) {
       const fallback = await supabase
         .from('daily_inflows')
-        .select('*')
+        .select(INFLOW_COLUMNS)
         .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: true });
-      if (!fallback.error && fallback.data) {
-        updatedRes.data = fallback.data;
-        updatedRes.error = null;
+        .order('updated_at', { ascending: false })
+        .limit(200);
+      if (fallback.data && Array.isArray(fallback.data)) {
+        incomingData.push(...fallback.data);
       }
     }
 
-    const validIdSet = new Set<string>();
-    const validDateSet = new Set<string>();
-    if (!idsRes.error && idsRes.data) {
-      idsRes.data.forEach(r => {
-        if (r.id) validIdSet.add(r.id);
-        if (r.date) validDateSet.add(r.date);
-      });
+    if (recentRes.data && Array.isArray(recentRes.data)) {
+      incomingData.push(...recentRes.data);
     }
 
     const inflowMap = new Map<string, DailyInflowRecord>();
+
+    // 1. Always retain all cached daily inflows
     currentCached.forEach(d => {
-      // Retain cached record if either id or date exists in Supabase (or if idsRes failed)
-      const isValid = idsRes.error || !idsRes.data || validIdSet.has(d.id) || validDateSet.has(d.date);
-      if (isValid && d.date) {
+      if (d && d.date) {
         inflowMap.set(d.date, d);
       }
     });
 
-    if (updatedRes.data && updatedRes.data.length > 0) {
-      updatedRes.data.forEach(r => {
+    // 2. Merge all incoming recent/updated inflows
+    incomingData.forEach(r => {
+      if (r && r.date) {
         const inflow = mapSupabaseToDailyInflow(r);
-        if (inflow.date) {
-          inflowMap.set(inflow.date, inflow);
-        }
-      });
-    }
+        inflowMap.set(inflow.date, inflow);
+      }
+    });
 
-    const merged = Array.from(inflowMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const merged = Array.from(inflowMap.values()).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     memoryDailyInflows = merged;
     persistToStorage(CACHE_KEY_DAILY_INFLOWS, merged);
     syncMeta.lastSyncDailyInflows = queryStartTime;
     saveMetadata();
     return merged;
   } catch (err) {
+    console.warn('Incremental sync exception for daily inflows:', err);
     return currentCached;
   }
 };
@@ -699,70 +718,78 @@ export const syncPendingItemsIncrementally = async (
       ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
       : null;
 
-    const [updatedRes, idsRes] = await Promise.all([
+    const [updatedRes, recentRes] = await Promise.all([
+      safeSyncTimestamp
+        ? supabase
+            .from('pending_items')
+            .select(getPendingColumns())
+            .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
+            .order('updated_at', { ascending: false })
+            .limit(1000)
+        : supabase
+            .from('pending_items')
+            .select(getPendingColumns())
+            .order('created_at', { ascending: false })
+            .limit(100),
       supabase
         .from('pending_items')
         .select(getPendingColumns())
-        .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: true })
-        .limit(3000),
-      supabase
-        .from('pending_items')
-        .select('id')
-        .limit(20000)
+        .order('created_at', { ascending: false })
+        .limit(60)
     ]);
 
-    if (updatedRes.error) {
+    let incomingData: any[] = [];
+    if (updatedRes.data && Array.isArray(updatedRes.data)) {
+      incomingData.push(...updatedRes.data);
+    } else if (updatedRes.error) {
       setHasPendingExtendedCols(false);
       const safeFallback = await supabase
         .from('pending_items')
         .select(getPendingColumns())
         .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: true })
-        .limit(3000);
-      if (!safeFallback.error && safeFallback.data) {
-        updatedRes.data = safeFallback.data;
-        updatedRes.error = null;
-      } else {
-        const starFallback = await supabase
-          .from('pending_items')
-          .select('*')
-          .gt('updated_at', safeSyncTimestamp || lastSync)
-          .order('updated_at', { ascending: true })
-          .limit(3000);
-        if (!starFallback.error && starFallback.data) {
-          updatedRes.data = starFallback.data;
-          updatedRes.error = null;
-        } else {
-          return currentCached;
-        }
+        .order('updated_at', { ascending: false })
+        .limit(1000);
+      if (safeFallback.data && Array.isArray(safeFallback.data)) {
+        incomingData.push(...safeFallback.data);
       }
     }
 
-    let validIdSet: Set<string> | null = null;
-    if (!idsRes.error && idsRes.data) {
-      validIdSet = new Set(idsRes.data.map(r => r.id));
+    if (recentRes.data && Array.isArray(recentRes.data)) {
+      incomingData.push(...recentRes.data);
+    } else if (recentRes.error) {
+      setHasPendingExtendedCols(false);
+      const safeRecentFallback = await supabase
+        .from('pending_items')
+        .select(getPendingColumns())
+        .order('created_at', { ascending: false })
+        .limit(60);
+      if (safeRecentFallback.data && Array.isArray(safeRecentFallback.data)) {
+        incomingData.push(...safeRecentFallback.data);
+      }
     }
 
     const itemMap = new Map<string, PendingItem>();
+
+    // 1. Always retain all cached pending items (never drop due to unpaginated checks)
     currentCached.forEach(p => {
-      if (!validIdSet || validIdSet.has(p.id)) {
+      if (p && p.id) {
         itemMap.set(p.id, p);
       }
     });
 
-    if (updatedRes.data && updatedRes.data.length > 0) {
-      updatedRes.data.forEach(r => {
+    // 2. Merge all new, recent, and updated pending items
+    incomingData.forEach(r => {
+      if (r && r.id) {
         const item = mapSupabaseToPendingItem(r);
-        if (!validIdSet || validIdSet.has(item.id)) {
-          itemMap.set(item.id, item);
-        }
-      });
-    }
+        itemMap.set(item.id, item);
+      }
+    });
 
-    const merged = Array.from(itemMap.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    const merged = Array.from(itemMap.values()).sort((a, b) => {
+      const tA = new Date(a.createdAt || 0).getTime() || 0;
+      const tB = new Date(b.createdAt || 0).getTime() || 0;
+      return tB - tA;
+    });
 
     memoryPendingItems = merged;
     persistToStorage(CACHE_KEY_PENDING_ITEMS, merged);
@@ -770,6 +797,7 @@ export const syncPendingItemsIncrementally = async (
     saveMetadata();
     return merged;
   } catch (err) {
+    console.warn('Incremental sync exception for pending items:', err);
     return currentCached;
   }
 };
@@ -790,6 +818,7 @@ export const handleRealtimeProductEvent = (
     const filtered = list.filter(p => p.id !== oldId);
     memoryProducts = filtered;
     persistToStorage(CACHE_KEY_PRODUCTS, filtered);
+    if (oldId) broadcastCrossTabMutation('products', 'remove', { id: oldId });
     return filtered;
   }
 
@@ -801,8 +830,14 @@ export const handleRealtimeProductEvent = (
     } else {
       list.unshift(newProduct);
     }
+    list.sort((a, b) => {
+      const tA = new Date(a.createdAt || 0).getTime() || 0;
+      const tB = new Date(b.createdAt || 0).getTime() || 0;
+      return tB - tA;
+    });
     memoryProducts = list;
     persistToStorage(CACHE_KEY_PRODUCTS, list);
+    broadcastCrossTabMutation('products', 'update', { item: newProduct });
     return list;
   }
 
@@ -821,6 +856,7 @@ export const handleRealtimeTriageUnitEvent = (
     const filtered = list.filter(u => u.id !== oldId);
     memoryTriageUnits = filtered;
     persistToStorage(CACHE_KEY_TRIAGE_UNITS, filtered);
+    if (oldId) broadcastCrossTabMutation('triage_units', 'remove', { id: oldId });
     return filtered;
   }
 
@@ -832,8 +868,14 @@ export const handleRealtimeTriageUnitEvent = (
     } else {
       list.unshift(newUnit);
     }
+    list.sort((a, b) => {
+      const tA = new Date(a.createdAt || 0).getTime() || 0;
+      const tB = new Date(b.createdAt || 0).getTime() || 0;
+      return tB - tA;
+    });
     memoryTriageUnits = list;
     persistToStorage(CACHE_KEY_TRIAGE_UNITS, list);
+    broadcastCrossTabMutation('triage_units', 'update', { item: newUnit });
     return list;
   }
 
@@ -852,6 +894,7 @@ export const handleRealtimeDailyInflowEvent = (
     const filtered = list.filter(d => d.id !== oldId);
     memoryDailyInflows = filtered;
     persistToStorage(CACHE_KEY_DAILY_INFLOWS, filtered);
+    if (oldId) broadcastCrossTabMutation('daily_inflows', 'remove', { id: oldId });
     return filtered;
   }
 
@@ -863,9 +906,10 @@ export const handleRealtimeDailyInflowEvent = (
     } else {
       list.push(newInflow);
     }
-    list.sort((a, b) => a.date.localeCompare(b.date));
+    list.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     memoryDailyInflows = list;
     persistToStorage(CACHE_KEY_DAILY_INFLOWS, list);
+    broadcastCrossTabMutation('daily_inflows', 'update', { item: newInflow });
     return list;
   }
 
@@ -884,6 +928,7 @@ export const handleRealtimePendingItemEvent = (
     const filtered = list.filter(p => p.id !== oldId);
     memoryPendingItems = filtered;
     persistToStorage(CACHE_KEY_PENDING_ITEMS, filtered);
+    if (oldId) broadcastCrossTabMutation('pending_items', 'remove', { id: oldId });
     return filtered;
   }
 
@@ -895,8 +940,14 @@ export const handleRealtimePendingItemEvent = (
     } else {
       list.unshift(newItem);
     }
+    list.sort((a, b) => {
+      const tA = new Date(a.createdAt || 0).getTime() || 0;
+      const tB = new Date(b.createdAt || 0).getTime() || 0;
+      return tB - tA;
+    });
     memoryPendingItems = list;
     persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
+    broadcastCrossTabMutation('pending_items', 'update', { item: newItem });
     return list;
   }
 

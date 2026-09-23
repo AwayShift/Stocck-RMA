@@ -347,11 +347,12 @@ export default function App() {
 
     // Cross-tab storage event listener fallback for browsers backgrounding BroadcastChannel
     const handleStorage = (e: StorageEvent) => {
-      if (e.key?.startsWith('stocckrma_cached_')) {
-        if (e.key.includes('products')) setProducts(getCachedBaseProducts());
-        if (e.key.includes('triage_units')) setTriageUnits(getCachedTriageUnits());
-        if (e.key.includes('daily_inflows')) setDailyInflows(getCachedDailyInflows());
-        if (e.key.includes('pending_items')) setPendingItems(getCachedPendingItems());
+      if (!e.key) return;
+      if (e.key.startsWith('stocck_cache_') || e.key.startsWith('stocckrma_')) {
+        if (e.key.includes('product')) setProducts(getCachedBaseProducts());
+        if (e.key.includes('triage')) setTriageUnits(getCachedTriageUnits());
+        if (e.key.includes('inflow')) setDailyInflows(getCachedDailyInflows());
+        if (e.key.includes('pending')) setPendingItems(getCachedPendingItems());
       }
     };
     window.addEventListener('storage', handleStorage);

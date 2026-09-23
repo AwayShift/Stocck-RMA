@@ -238,7 +238,11 @@ export const subscribeBaseProducts = (
         const updatedList = handleRealtimeProductEvent(payload.eventType, payload);
         callback(updatedList);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          syncBaseProductsIncrementally().then(callback).catch(() => {});
+        }
+      });
     return () => {
       supabase.removeChannel(channel);
     };
@@ -278,7 +282,11 @@ export const subscribeTriageUnits = (
         const updatedList = handleRealtimeTriageUnitEvent(payload.eventType, payload);
         callback(updatedList);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          syncTriageUnitsIncrementally().then(callback).catch(() => {});
+        }
+      });
     return () => {
       supabase.removeChannel(channel);
     };
@@ -403,7 +411,11 @@ export const subscribeDailyInflows = (
         const updatedList = handleRealtimeDailyInflowEvent(payload.eventType, payload);
         callback(updatedList);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          syncDailyInflowsIncrementally().then(callback).catch(() => {});
+        }
+      });
     return () => {
       supabase.removeChannel(channel);
     };
@@ -439,7 +451,11 @@ export const subscribePendingItems = (
         const updatedList = handleRealtimePendingItemEvent(payload.eventType, payload);
         callback(updatedList);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          syncPendingItemsIncrementally().then(callback).catch(() => {});
+        }
+      });
     return () => {
       supabase.removeChannel(channel);
     };
