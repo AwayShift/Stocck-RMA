@@ -236,6 +236,13 @@ export default function PhysicalStock({
     savedPhotosCount: number;
   } | null>(null);
 
+  // Sector transfer to Openbox modal state (mandatory STI requirement)
+  const [openboxMoveModalData, setOpenboxMoveModalData] = useState<{
+    unit: TriageUnit;
+    stiCode: string;
+    error: string | null;
+  } | null>(null);
+
   // Selected unit details
   const currentUnit = units.find(u => u.id === (selectedUnitId || initialSelectedUnit?.id));
 
@@ -501,15 +508,27 @@ export default function PhysicalStock({
       if (updatedForm.destinationSector === 'Openbox') {
         const normSti = normalizeStiCode(updatedForm.trackingCode);
         if (!normSti) {
-          setActionError('O Código STI é obrigatório para produtos no setor OpenBox.');
+          setActionError('O Código STI é obrigatório para produtos no setor Openbox. Por favor, preencha o código STI.');
           setIsSavingEdit(false);
-          setTimeout(() => setActionError(null), 4000);
+          setTimeout(() => setActionError(null), 5000);
           return;
         }
         if (!isValidStiCode(normSti)) {
           setActionError('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
           setIsSavingEdit(false);
-          setTimeout(() => setActionError(null), 4000);
+          setTimeout(() => setActionError(null), 5000);
+          return;
+        }
+        // Verify if STI is already used by another active unit in stock
+        const isDuplicate = units.some(u => 
+          u.id !== updatedForm.id && 
+          u.status === 'Estoque' && 
+          normalizeStiCode(u.trackingCode) === normSti
+        );
+        if (isDuplicate) {
+          setActionError(`O Código STI "${normSti}" já está cadastrado em outra unidade ativa no estoque.`);
+          setIsSavingEdit(false);
+          setTimeout(() => setActionError(null), 5000);
           return;
         }
         updatedForm.trackingCode = normSti;
@@ -1169,9 +1188,20 @@ export default function PhysicalStock({
     });
   };
 
-  // Action: Move Sector (with custom confirmation and photo strategy options for Principal)
+  // Action: Move Sector (with custom confirmation, mandatory STI for Openbox, and photo strategy options for Principal)
   const handleMoveSector = (unit: TriageUnit, newSector: DestinationSectorType) => {
     if (unit.destinationSector === newSector) return;
+
+    // If moving to Openbox, require STI code via dedicated confirmation modal
+    if (newSector === 'Openbox') {
+      setEditingSector('Openbox');
+      setOpenboxMoveModalData({
+        unit,
+        stiCode: unit.trackingCode ? formatStiInput(unit.trackingCode) : '',
+        error: null
+      });
+      return;
+    }
 
     const baseProd = findBaseProduct(unit, products);
     const baseImgs = getBaseProductImages(baseProd);
@@ -1207,6 +1237,8 @@ export default function PhysicalStock({
         const updated: TriageUnit = {
           ...unit,
           destinationSector: newSector,
+          // When moving away from Openbox to Principal or RMA, clear trackingCode
+          trackingCode: '',
           originSector: unit.destinationSector,
           initialEntryDate: previousInitialDate,
           transferredAt: transferMoment,
@@ -1229,6 +1261,76 @@ export default function PhysicalStock({
         }
       }
     });
+  };
+
+  // Action: Execute sector transfer to Openbox with mandatory STI validation
+  const handleConfirmOpenboxMove = async () => {
+    if (!openboxMoveModalData) return;
+    const { unit, stiCode } = openboxMoveModalData;
+    const cleanSti = normalizeStiCode(stiCode);
+
+    if (!cleanSti) {
+      setOpenboxMoveModalData(prev => prev ? {
+        ...prev,
+        error: 'O Código STI é obrigatório para mover produtos para o Openbox.'
+      } : null);
+      return;
+    }
+
+    if (!isValidStiCode(cleanSti)) {
+      setOpenboxMoveModalData(prev => prev ? {
+        ...prev,
+        error: 'Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).'
+      } : null);
+      return;
+    }
+
+    // Verify if this STI is already used by another active unit in stock
+    const isDuplicate = units.some(u => 
+      u.id !== unit.id && 
+      u.status === 'Estoque' && 
+      normalizeStiCode(u.trackingCode) === cleanSti
+    );
+    if (isDuplicate) {
+      setOpenboxMoveModalData(prev => prev ? {
+        ...prev,
+        error: `O Código STI "${cleanSti}" já está cadastrado em outra unidade ativa no estoque.`
+      } : null);
+      return;
+    }
+
+    const transferMoment = new Date().toISOString();
+    const previousInitialDate = unit.initialEntryDate || unit.createdAt;
+    const updated: TriageUnit = {
+      ...unit,
+      destinationSector: 'Openbox',
+      trackingCode: cleanSti,
+      originSector: unit.destinationSector,
+      initialEntryDate: previousInitialDate,
+      transferredAt: transferMoment,
+      createdAt: transferMoment, // Recontabiliza no registro no momento da transferência
+      updatedAt: transferMoment,
+      excludeFromDailyCount: false
+    };
+
+    try {
+      await onUpdateUnit(updated);
+      setOpenboxMoveModalData(null);
+      setEditingSector('');
+      setActionSuccess(`Produto movido para o Openbox com sucesso! Código STI: ${cleanSti}`);
+      setTimeout(() => setActionSuccess(null), 3500);
+    } catch (err: any) {
+      console.error('Error moving to Openbox:', err);
+      setOpenboxMoveModalData(prev => prev ? {
+        ...prev,
+        error: `Erro ao mover para Openbox: ${err?.message || err}`
+      } : null);
+    }
+  };
+
+  const handleCancelOpenboxMove = () => {
+    setOpenboxMoveModalData(null);
+    setEditingSector('');
   };
 
   // Action: Execute sector transfer with selected photo strategy (Keep Saved / Use Base / Combine Both)
@@ -1272,6 +1374,7 @@ export default function PhysicalStock({
     const updated: TriageUnit = {
       ...unit,
       destinationSector: targetSector,
+      trackingCode: targetSector === 'Openbox' ? unit.trackingCode : '',
       originSector: unit.destinationSector,
       initialEntryDate: previousInitialDate,
       transferredAt: transferMoment,
@@ -2968,10 +3071,23 @@ export default function PhysicalStock({
 
                     {editForm.destinationSector === 'Openbox' && (
                       <div className="animate-in fade-in duration-200">
-                        <label className="block text-[11px] font-bold mb-1 text-amber-400">
-                          <span>Código STI / Rastreio</span>
-                          <span className="text-rose-400 font-bold ml-1">* (Obrigatório)</span>
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-bold text-amber-800 dark:text-amber-400 flex items-center gap-1">
+                            <span>Código STI / Rastreio</span>
+                            <span className="text-rose-600 dark:text-rose-400 font-bold">* (Obrigatório)</span>
+                          </label>
+                          {editForm.trackingCode && (
+                            isValidStiCode(editForm.trackingCode) ? (
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                                <Check className="w-2.5 h-2.5 stroke-[3]" /> Válido
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                                STI + 6 dígitos
+                              </span>
+                            )
+                          )}
+                        </div>
                         <input 
                           type="text" 
                           value={editForm.trackingCode || ''} 
@@ -2980,7 +3096,11 @@ export default function PhysicalStock({
                             setEditForm({ ...editForm, trackingCode: formatted });
                           }} 
                           maxLength={9}
-                          className="w-full bg-slate-900 rounded-lg p-2.5 text-xs font-bold font-mono focus:outline-none border border-amber-500/50 text-amber-200 placeholder-amber-500/40 focus:border-amber-400"
+                          className={`w-full bg-slate-900 rounded-lg p-2.5 text-xs font-bold font-mono focus:outline-none border transition-colors ${
+                            isValidStiCode(editForm.trackingCode)
+                              ? 'border-emerald-500 text-emerald-800 dark:text-emerald-200 focus:border-emerald-600'
+                              : 'border-amber-500 text-amber-900 dark:text-amber-200 placeholder-amber-500/60 focus:border-amber-600'
+                          }`}
                           placeholder="Ex: STI134920"
                         />
                       </div>
@@ -3169,6 +3289,46 @@ export default function PhysicalStock({
                             {editForm.initialEntryDate ? ` (Entrada inicial: ${new Date(editForm.initialEntryDate).toLocaleDateString('pt-BR')})` : ''}
                           </span>
                         </p>
+                      )}
+
+                      {/* Explicit Openbox STI requirement notice & input */}
+                      {editForm.destinationSector === 'Openbox' && (
+                        <div className="mt-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                              <Tag className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                              <span>Código STI Obrigatório para Openbox</span>
+                              <span className="text-rose-600 dark:text-rose-400 font-bold">*</span>
+                            </label>
+                            {isValidStiCode(editForm.trackingCode) ? (
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <Check className="w-3 h-3 stroke-[3]" /> STI Válido
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                                Obrigatório (STI + 6 dígitos)
+                              </span>
+                            )}
+                          </div>
+                          <input 
+                            type="text" 
+                            value={editForm.trackingCode || ''} 
+                            onChange={(e) => {
+                              const formatted = formatStiInput(e.target.value);
+                              setEditForm({ ...editForm, trackingCode: formatted });
+                            }} 
+                            maxLength={9}
+                            className={`w-full bg-slate-900 rounded-lg p-2.5 text-xs font-mono font-bold focus:outline-none border transition-colors ${
+                              isValidStiCode(editForm.trackingCode)
+                                ? 'border-emerald-500 text-emerald-800 dark:text-emerald-300 focus:border-emerald-600'
+                                : 'border-amber-500 text-amber-900 dark:text-amber-200 placeholder-amber-600/50 focus:border-amber-600'
+                            }`}
+                            placeholder="Ex: STI134920"
+                          />
+                          <p className="text-[10.5px] text-amber-800 dark:text-amber-300/80 font-medium">
+                            Produtos no Openbox obrigatoriamente exigem o código STI no formato <strong className="text-amber-950 dark:text-amber-200 font-bold">STI + 6 números</strong>.
+                          </p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -4506,6 +4666,180 @@ export default function PhysicalStock({
                 Cancelar Transferência
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Move Sector to Openbox (Mandatory STI Code Requirement) */}
+      {openboxMoveModalData && (
+        <div 
+          className="fixed inset-0 z-[120] bg-black/85 flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCancelOpenboxMove();
+          }}
+        >
+          <div 
+            className="w-full max-w-lg bg-slate-900 border border-amber-500/40 rounded-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150 text-slate-100"
+            onClick={(e) => e.stopPropagation()}
+            id="modal-move-to-openbox"
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-500 dark:text-amber-400 border border-amber-500/30 shrink-0">
+                  <Box className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Mover Produto para o Openbox</h3>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold mt-0.5">
+                    Produtos no Openbox obrigatoriamente precisam de Código STI
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={handleCancelOpenboxMove}
+                className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Mandatory Requirement Callout */}
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-900 dark:text-amber-300 leading-relaxed flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-amber-950 dark:text-amber-200">Exigência Obrigatória do Setor Openbox:</strong>
+                <p className="mt-0.5 text-amber-800 dark:text-amber-300/90 text-[11.5px]">
+                  Para transferir este item para o armazém do Openbox, é obrigatório informar o código STI válido no formato <strong>STI + 6 dígitos</strong> (ex: STI134920).
+                </p>
+              </div>
+            </div>
+
+            {/* Unit Info Card */}
+            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">Produto:</span>
+                <span className="font-bold text-slate-900 dark:text-white text-right truncate">
+                  {getResolvedUnitProductName(openboxMoveModalData.unit, products)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">SKU:</span>
+                <span className="font-mono font-bold text-sky-600 dark:text-sky-400">
+                  {openboxMoveModalData.unit.baseProductSku}
+                </span>
+              </div>
+              {openboxMoveModalData.unit.serialNumber && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">Número de Série:</span>
+                  <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
+                    {openboxMoveModalData.unit.serialNumber}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">Mudança de Setor:</span>
+                <div className="flex items-center gap-2 font-bold">
+                  <span className={`px-2 py-0.5 rounded text-[10px] ${getSectorBadgeClass(openboxMoveModalData.unit.destinationSector)}`}>
+                    {openboxMoveModalData.unit.destinationSector}
+                  </span>
+                  <ArrowRightLeft className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/40">
+                    Setor Openbox (Outlet)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* STI Code Input Field */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span>Código STI do Produto</span>
+                  <span className="text-rose-600 dark:text-rose-400 font-bold">* (Obrigatório)</span>
+                </label>
+                {openboxMoveModalData.stiCode && (
+                  isValidStiCode(openboxMoveModalData.stiCode) ? (
+                    <span className="text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                      <Check className="w-3 h-3 stroke-[3]" /> Formato Válido
+                    </span>
+                  ) : (
+                    <span className="text-[10.5px] font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1 bg-rose-500/10 border border-rose-500/30 px-2 py-0.5 rounded-md">
+                      STI + 6 dígitos obrigatório
+                    </span>
+                  )
+                )}
+              </div>
+
+              <div className="relative">
+                <input 
+                  type="text"
+                  autoFocus
+                  maxLength={9}
+                  value={openboxMoveModalData.stiCode}
+                  onChange={(e) => {
+                    const formatted = formatStiInput(e.target.value);
+                    setOpenboxMoveModalData(prev => prev ? {
+                      ...prev,
+                      stiCode: formatted,
+                      error: null
+                    } : null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleConfirmOpenboxMove();
+                    }
+                  }}
+                  placeholder="Ex: STI134920"
+                  className={`w-full bg-slate-950 rounded-xl px-4 py-3 text-sm font-mono font-bold focus:outline-none border-2 transition-all ${
+                    isValidStiCode(openboxMoveModalData.stiCode)
+                      ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 focus:border-emerald-600 shadow-sm shadow-emerald-500/10'
+                      : openboxMoveModalData.stiCode
+                        ? 'border-amber-500 text-amber-800 dark:text-amber-200 focus:border-amber-600'
+                        : 'border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:border-amber-500'
+                  }`}
+                  id="input-openbox-sti-code"
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                Pode ser digitado diretamente com ou sem prefixo STI (Ex: digite <strong className="text-amber-800 dark:text-amber-300 font-mono">134920</strong> ou <strong className="text-amber-800 dark:text-amber-300 font-mono">STI134920</strong>).
+              </p>
+            </div>
+
+            {/* Error Message if any */}
+            {openboxMoveModalData.error && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2 animate-in fade-in duration-150">
+                <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                <span className="font-semibold">{openboxMoveModalData.error}</span>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button 
+                type="button"
+                onClick={handleCancelOpenboxMove}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button"
+                onClick={handleConfirmOpenboxMove}
+                disabled={!isValidStiCode(openboxMoveModalData.stiCode)}
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black shadow-lg shadow-amber-600/20 flex items-center gap-2 transition-all cursor-pointer"
+                id="btn-confirm-move-openbox"
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>Confirmar e Mover para Openbox</span>
+              </button>
+            </div>
+
           </div>
         </div>
       )}

@@ -1009,6 +1009,10 @@ export default function PendingItems({
         setTransferError('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
         return;
       }
+      if (units && units.some(u => u.status === 'Estoque' && normalizeStiCode(u.trackingCode) === cleanSti)) {
+        setTransferError(`O Código STI "${cleanSti}" já está cadastrado em outro produto ativo no estoque.`);
+        return;
+      }
     }
 
     if (!transferSku.trim()) {
@@ -3283,16 +3287,16 @@ export default function PendingItems({
                         : 'bg-slate-950 border-emerald-500/40'
                     }`}>
                       <div className="flex items-center justify-between">
-                        <label className="block text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                          <ShieldCheck className="w-4 h-4 text-amber-400" />
+                        <label className="block text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                           <span>Código STI / Rastreio (Obrigatório para Openbox) *</span>
                         </label>
                         {!transferSti.trim() ? (
-                          <span className="text-[10px] font-bold text-amber-400/90 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+                          <span className="text-[10px] font-bold text-amber-800 dark:text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
                             Pendente de preenchimento
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 flex items-center gap-1">
                             <Check className="w-3 h-3" /> Preenchido
                           </span>
                         )}
@@ -3308,12 +3312,12 @@ export default function PendingItems({
                         }}
                         placeholder="Ex: STI134920"
                         maxLength={9}
-                        className={`w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none transition-all ${
+                        className={`w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-all ${
                           transferError && !transferSti.trim()
                             ? 'border-2 border-rose-500 focus:border-rose-400 shadow-sm shadow-rose-500/20'
                             : !transferSti.trim()
-                            ? 'border border-amber-500/60 focus:border-amber-400'
-                            : 'border border-slate-800 focus:border-emerald-400'
+                            ? 'border border-amber-500 focus:border-amber-600'
+                            : 'border border-slate-300 dark:border-slate-800 focus:border-emerald-400'
                         }`}
                         id="input-transfer-sti"
                       />

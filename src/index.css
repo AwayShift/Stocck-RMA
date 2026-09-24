@@ -4514,6 +4514,62 @@ html.dark #platform-row-Kabum[data-selected="true"] {
   box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25) !important;
 }
 
+/* ==========================================================================
+   Openbox STI Modal & Input High-Contrast Light Mode Enhancements
+   ========================================================================== */
+
+html.light #modal-move-to-openbox {
+  background-color: #ffffff !important;
+  border: 1.5px solid #f59e0b !important;
+  box-shadow: 0 20px 35px -5px rgba(245, 158, 11, 0.15), 0 10px 15px -5px rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light #modal-move-to-openbox .bg-slate-950 {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light #input-openbox-sti-code,
+html.light #input-transfer-sti {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.light #input-openbox-sti-code::placeholder,
+html.light #input-transfer-sti::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light .bg-amber-500\/10 {
+  background-color: #fffbeb !important;
+}
+
+html.light .border-amber-500\/30,
+html.light .border-amber-500\/40,
+html.light .border-amber-500\/50,
+html.light .border-amber-500\/70 {
+  border-color: #f59e0b !important;
+}
+
+html.light .text-amber-200,
+html.light .text-amber-300 {
+  color: #92400e !important; /* Dark amber-800 for high readability on light backgrounds */
+}
+
+html.light .text-amber-400 {
+  color: #b45309 !important; /* Amber-700 */
+}
+
+html.light #btn-confirm-move-openbox {
+  background-color: #d97706 !important;
+  color: #ffffff !important;
+}
+
+html.light #btn-confirm-move-openbox:hover:not(:disabled) {
+  background-color: #b45309 !important;
+}
+
+
 
 
 
