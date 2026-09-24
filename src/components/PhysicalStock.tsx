@@ -1329,30 +1329,12 @@ export default function PhysicalStock({
 
   const getPlatformStyle = (p: PlatformType) => {
     switch(p) {
-      case 'Mercado Livre': 
-        return isLight 
-          ? 'bg-yellow-100 text-yellow-950 border-yellow-400 font-extrabold shadow-xs'
-          : 'bg-yellow-400/15 text-yellow-300 border-yellow-400/50 font-bold shadow-xs';
-      case 'Shopee': 
-        return isLight
-          ? 'bg-orange-100 text-orange-950 border-orange-400 font-extrabold shadow-xs'
-          : 'bg-orange-500/15 text-orange-400 border-orange-500/40 font-bold shadow-xs';
-      case 'Amazon': 
-        return isLight
-          ? 'bg-blue-100 text-blue-950 border-blue-400 font-bold'
-          : 'bg-sky-500/15 text-sky-300 border-sky-500/40 font-bold';
-      case 'Amazon Ta Novo': 
-        return isLight
-          ? 'bg-emerald-100 text-emerald-950 border-emerald-400 font-bold'
-          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 font-bold';
-      case 'Kabum': 
-        return isLight
-          ? 'bg-indigo-100 text-indigo-950 border-indigo-400 font-bold'
-          : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/40 font-bold';
-      default: 
-        return isLight
-          ? 'bg-slate-100 text-slate-800 border-slate-300 font-bold'
-          : 'bg-slate-500/15 text-slate-300 border-slate-500/30 font-bold';
+      case 'Mercado Livre': return 'bg-yellow-400/15 text-yellow-900 dark:text-yellow-300 dark:bg-yellow-400/20 border border-yellow-400/50 dark:border-yellow-400/60 font-bold shadow-sm shadow-yellow-500/10';
+      case 'Shopee': return 'bg-orange-500/10 text-orange-800 dark:text-orange-400 border border-orange-500/30 font-medium';
+      case 'Amazon': return 'bg-blue-500/10 text-sky-800 dark:text-blue-400 border border-blue-500/30 font-medium';
+      case 'Amazon Ta Novo': return 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-400 border border-emerald-500/30 font-medium';
+      case 'Kabum': return 'bg-indigo-500/10 text-indigo-800 dark:text-indigo-400 border border-indigo-500/30 font-medium';
+      default: return 'bg-zinc-500/10 text-zinc-800 dark:text-zinc-400 border border-zinc-500/20 font-medium';
     }
   };
 
@@ -2361,22 +2343,9 @@ export default function PhysicalStock({
                       {unit.platform ? (
                         <span 
                           data-platform={unit.platform}
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border transition-colors ${pStyle}`}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${pStyle}`}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            unit.platform === 'Mercado Livre'
-                              ? 'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.7)]'
-                              : unit.platform === 'Shopee'
-                              ? 'bg-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.7)]'
-                              : unit.platform === 'Amazon'
-                              ? 'bg-sky-400'
-                              : unit.platform === 'Amazon Ta Novo'
-                              ? 'bg-emerald-400'
-                              : unit.platform === 'Kabum'
-                              ? 'bg-indigo-400'
-                              : 'bg-slate-400'
-                          }`} />
-                          <span>{unit.platform}</span>
+                          {unit.platform}
                         </span>
                       ) : (
                         <span className="text-[10px] text-slate-500 italic">Sem Plataforma</span>
@@ -2587,22 +2556,9 @@ export default function PhysicalStock({
                         {unit.platform ? (
                           <span 
                             data-platform={unit.platform}
-                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border ${pStyle}`}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyle}`}
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                              unit.platform === 'Mercado Livre'
-                                ? 'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.7)]'
-                                : unit.platform === 'Shopee'
-                                ? 'bg-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.7)]'
-                                : unit.platform === 'Amazon'
-                                ? 'bg-sky-400'
-                                : unit.platform === 'Amazon Ta Novo'
-                                ? 'bg-emerald-400'
-                                : unit.platform === 'Kabum'
-                                ? 'bg-indigo-400'
-                                : 'bg-slate-400'
-                            }`} />
-                            <span>{unit.platform}</span>
+                            {unit.platform}
                           </span>
                         ) : null}
                         {unit.originSector && (
@@ -4028,16 +3984,9 @@ export default function PhysicalStock({
                         <span className="text-slate-400 font-semibold text-[11px]">Plataforma / Canal:</span>
                         <span 
                           data-platform={currentUnit.platform}
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getPlatformStyle(currentUnit.platform)}`}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            currentUnit.platform === 'Mercado Livre'
-                              ? 'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.7)]'
-                              : currentUnit.platform === 'Shopee'
-                              ? 'bg-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.7)]'
-                              : 'bg-slate-400'
-                          }`} />
-                          <span>{currentUnit.platform}</span>
+                          {currentUnit.platform}
                         </span>
                       </div>
                     ) : (

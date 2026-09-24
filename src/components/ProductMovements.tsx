@@ -2782,9 +2782,9 @@ export default function ProductMovements({
                             {item.destinationSector !== 'Openbox' && (
                               <span className={`unit-platform text-[10px] font-bold ${
                                 item.platform === 'Mercado Livre'
-                                  ? 'text-yellow-300'
+                                  ? 'text-yellow-600 dark:text-yellow-300'
                                   : item.platform === 'Shopee'
-                                  ? 'text-orange-400'
+                                  ? 'text-orange-600 dark:text-orange-400'
                                   : 'text-slate-400'
                               }`}>
                                 • {item.platform}

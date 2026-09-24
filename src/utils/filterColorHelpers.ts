@@ -37,19 +37,19 @@ export function getPlatformFilterStyle(platform: PlatformType | string | null | 
   switch (normalized) {
     case 'Mercado Livre':
       return {
-        badgeClasses: 'bg-yellow-400/15 border-yellow-400/50 text-yellow-300 font-bold shadow-xs',
-        dotClasses: 'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.6)]',
-        hoverBtnClasses: 'hover:text-yellow-200 hover:bg-yellow-400/20',
-        selectClasses: 'border-yellow-400/60 bg-yellow-400/15 text-yellow-300 font-bold',
+        badgeClasses: 'bg-yellow-400/15 border-yellow-400/60 text-yellow-900 dark:text-yellow-300 dark:bg-yellow-400/20 dark:border-yellow-400/70 font-bold',
+        dotClasses: 'bg-yellow-400',
+        hoverBtnClasses: 'hover:text-yellow-950 dark:hover:text-yellow-200 hover:bg-yellow-400/20',
+        selectClasses: 'border-yellow-400/70 bg-yellow-50 dark:bg-yellow-400/20 text-yellow-950 dark:text-yellow-300 font-bold',
         ringClasses: 'border-yellow-400 ring-2 ring-yellow-400/50',
         label: 'Mercado Livre'
       };
     case 'Shopee':
       return {
-        badgeClasses: 'bg-orange-500/15 border-orange-500/50 text-orange-400 font-bold shadow-xs',
-        dotClasses: 'bg-orange-500 shadow-[0_0_6px_rgba(249,115,22,0.6)]',
-        hoverBtnClasses: 'hover:text-orange-200 hover:bg-orange-500/20',
-        selectClasses: 'border-orange-500/60 bg-orange-500/15 text-orange-400 font-bold',
+        badgeClasses: 'bg-orange-500/15 border-orange-500/50 text-orange-800 dark:text-orange-200 font-bold',
+        dotClasses: 'bg-orange-500',
+        hoverBtnClasses: 'hover:text-orange-950 dark:hover:text-orange-100 hover:bg-orange-500/20',
+        selectClasses: 'border-orange-500/60 bg-orange-50 dark:bg-orange-950/25 text-orange-900 dark:text-orange-300 font-bold',
         ringClasses: 'border-orange-500 ring-2 ring-orange-500/40',
         label: 'Shopee'
       };

@@ -1601,22 +1601,15 @@ export default function PendingItems({
                       </span>
                       <span 
                         data-platform={item.platform || 'Mercado Livre'}
-                        className={`pending-platform-badge inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                        className={`pending-platform-badge text-[10px] font-bold px-2 py-0.5 rounded-md border ${
                           (item.platform || 'Mercado Livre') === 'Mercado Livre'
-                            ? 'bg-yellow-400/15 text-yellow-300 border-yellow-400/50 shadow-xs'
+                            ? 'bg-yellow-400/15 text-yellow-800 dark:text-yellow-300 dark:bg-yellow-400/20 border-yellow-400/60 dark:border-yellow-400/70 shadow-sm shadow-yellow-500/10'
                             : (item.platform || 'Mercado Livre') === 'Shopee'
-                            ? 'bg-orange-500/15 text-orange-400 border-orange-500/50 shadow-xs'
-                            : 'bg-slate-950 text-slate-300 border-slate-800'
+                            ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 dark:bg-orange-500/20 border-orange-500/60 dark:border-orange-500/70'
+                            : 'bg-slate-950 text-slate-400 border-slate-800'
                         }`}
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          (item.platform || 'Mercado Livre') === 'Mercado Livre'
-                            ? 'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.7)]'
-                            : (item.platform || 'Mercado Livre') === 'Shopee'
-                            ? 'bg-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.7)]'
-                            : 'bg-slate-400'
-                        }`} />
-                        <span>{item.platform || 'Mercado Livre'}</span>
+                        {item.platform || 'Mercado Livre'}
                       </span>
                       {item.voltage && item.voltage !== 'N/A' && (
                         <span className="pending-voltage-badge text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
@@ -1937,22 +1930,15 @@ export default function PendingItems({
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <span 
                           data-platform={item.platform || 'Mercado Livre'}
-                          className={`inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded border ${
+                          className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded border ${
                             (item.platform || 'Mercado Livre') === 'Mercado Livre'
-                              ? 'bg-yellow-400/15 text-yellow-300 border-yellow-400/50'
+                              ? 'bg-yellow-400/15 text-yellow-800 dark:text-yellow-300 dark:bg-yellow-400/20 border-yellow-400/50 dark:border-yellow-400/60 font-bold'
                               : (item.platform || 'Mercado Livre') === 'Shopee'
-                              ? 'bg-orange-500/15 text-orange-400 border-orange-500/50'
-                              : 'text-slate-300 border-slate-800 bg-slate-950'
+                              ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 dark:bg-orange-500/20 border-orange-500/50 dark:border-orange-500/60 font-bold'
+                              : 'text-slate-300 border-transparent'
                           }`}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            (item.platform || 'Mercado Livre') === 'Mercado Livre'
-                              ? 'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.7)]'
-                              : (item.platform || 'Mercado Livre') === 'Shopee'
-                              ? 'bg-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.7)]'
-                              : 'bg-slate-400'
-                          }`} />
-                          <span>{item.platform || 'Mercado Livre'}</span>
+                          {item.platform || 'Mercado Livre'}
                         </span>
                       </td>
 

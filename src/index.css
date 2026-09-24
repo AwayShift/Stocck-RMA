@@ -4434,55 +4434,84 @@ html.light #manual-inflow-modal .inflow-btn-save:hover:not(:disabled) {
 }
 
 /* ==========================================================================
-   HIGH-CONTRAST PLATFORM BADGES (UNIVERSAL COMPONENT & CARD STYLES)
-   Ensures luminous, crystal-clear contrast matching reference designs
+   HIGH-CONTRAST PLATFORM BADGES (DARK MODE ONLY)
+   Ensures luminous, crystal-clear contrast in dark mode while leaving light mode untouched
    ========================================================================== */
 
-/* Dark Mode Mercado Livre Badges & Indicators */
-html.dark [data-platform="Mercado Livre"],
-html.dark span[data-platform="Mercado Livre"] {
+/* Dark Mode Mercado Livre Badges (Excludes breakdown rows & dropdowns) */
+html.dark span[data-platform="Mercado Livre"]:not(.platform-breakdown-row):not(.platform-option-item):not(.platform-trigger-btn):not(.platform-filtering-badge) {
   background-color: rgba(250, 204, 21, 0.15) !important;
   border-color: rgba(250, 204, 21, 0.5) !important;
   color: #fde047 !important;
   font-weight: 700 !important;
 }
 
-html.dark [data-platform="Mercado Livre"] span.bg-yellow-400,
-html.dark [data-platform="Mercado Livre"] .platform-dot {
-  background-color: #facc15 !important;
-  box-shadow: 0 0 6px rgba(250, 204, 21, 0.7) !important;
-}
-
-/* Dark Mode Shopee Badges & Indicators */
-html.dark [data-platform="Shopee"],
-html.dark span[data-platform="Shopee"] {
+/* Dark Mode Shopee Badges (Excludes breakdown rows & dropdowns) */
+html.dark span[data-platform="Shopee"]:not(.platform-breakdown-row):not(.platform-option-item):not(.platform-trigger-btn):not(.platform-filtering-badge) {
   background-color: rgba(249, 115, 22, 0.15) !important;
   border-color: rgba(249, 115, 22, 0.45) !important;
   color: #fb923c !important;
   font-weight: 700 !important;
 }
 
-html.dark [data-platform="Shopee"] span.bg-orange-400,
-html.dark [data-platform="Shopee"] .platform-dot {
-  background-color: #fb923c !important;
-  box-shadow: 0 0 6px rgba(249, 115, 22, 0.7) !important;
+/* ==========================================================================
+   PLATFORM BREAKDOWN ROWS GUARANTEE (DASHBOARD FILTER INTEGRITY)
+   Ensures unselected rows remain neutral and only selected rows show active state
+   ========================================================================== */
+.platform-breakdown-row[data-selected="false"],
+div.platform-breakdown-row[data-selected="false"],
+html.dark .platform-breakdown-row[data-selected="false"],
+html.dark div.platform-breakdown-row[data-selected="false"] {
+  background-color: rgba(2, 6, 23, 0.4) !important;
+  border-color: rgba(30, 41, 59, 0.8) !important;
+  box-shadow: none !important;
+  color: inherit !important;
 }
 
-/* Light Mode Overrides for Mercado Livre & Shopee */
-html.light [data-platform="Mercado Livre"],
-html.light span[data-platform="Mercado Livre"]:not(.platform-trigger-btn):not(.filter-platform-badge) {
-  background-color: #fefce8 !important;
+html.dark .platform-breakdown-row[data-selected="false"]:hover,
+html.dark div.platform-breakdown-row[data-selected="false"]:hover {
+  background-color: rgba(30, 41, 59, 0.6) !important;
+  border-color: rgba(51, 65, 85, 1) !important;
+}
+
+html.dark .platform-breakdown-row[data-selected="false"] .platform-name-text {
+  color: #e2e8f0 !important;
+}
+
+/* Selected state dark mode overrides */
+html.dark .platform-breakdown-row[data-platform="Mercado Livre"][data-selected="true"],
+html.dark #platform-row-Mercado-Livre[data-selected="true"] {
+  background-color: rgba(250, 204, 21, 0.15) !important;
   border-color: #facc15 !important;
-  color: #713f12 !important;
-  font-weight: 800 !important;
+  box-shadow: 0 4px 14px rgba(250, 204, 21, 0.25) !important;
 }
 
-html.light [data-platform="Shopee"],
-html.light span[data-platform="Shopee"]:not(.platform-trigger-btn):not(.filter-platform-badge) {
-  background-color: #fff7ed !important;
+html.dark .platform-breakdown-row[data-platform="Shopee"][data-selected="true"],
+html.dark #platform-row-Shopee[data-selected="true"] {
+  background-color: rgba(249, 115, 22, 0.15) !important;
   border-color: #f97316 !important;
-  color: #9a3412 !important;
-  font-weight: 800 !important;
+  box-shadow: 0 4px 14px rgba(249, 115, 22, 0.25) !important;
+}
+
+html.dark .platform-breakdown-row[data-platform="Amazon"][data-selected="true"],
+html.dark #platform-row-Amazon[data-selected="true"] {
+  background-color: rgba(14, 165, 233, 0.15) !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 4px 14px rgba(14, 165, 233, 0.25) !important;
+}
+
+html.dark .platform-breakdown-row[data-platform="Amazon Ta Novo"][data-selected="true"],
+html.dark #platform-row-Amazon-Ta-Novo[data-selected="true"] {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  border-color: #34d399 !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25) !important;
+}
+
+html.dark .platform-breakdown-row[data-platform="Kabum"][data-selected="true"],
+html.dark #platform-row-Kabum[data-selected="true"] {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+  border-color: #818cf8 !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25) !important;
 }
 
 
