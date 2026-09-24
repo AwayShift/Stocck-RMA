@@ -572,7 +572,7 @@ export default function SettingsModal({
                         Ativo
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400">Métricas de dados, latência e registros</p>
+                    <p className="text-[11px] text-slate-400">Conexão do banco e CDN Cloudinary</p>
                   </div>
                 </div>
 
@@ -585,7 +585,7 @@ export default function SettingsModal({
                   className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap"
                   id="btn-settings-open-db-switcher"
                 >
-                  Ver Métricas
+                  Alterar Banco
                 </button>
               </div>
 

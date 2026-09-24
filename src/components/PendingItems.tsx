@@ -1599,8 +1599,24 @@ export default function PendingItems({
                         <span>{prioInfo.icon}</span>
                         <span>{prioInfo.label}</span>
                       </span>
-                      <span className="pending-platform-badge text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 border border-slate-800">
-                        {item.platform || 'Mercado Livre'}
+                      <span 
+                        data-platform={item.platform || 'Mercado Livre'}
+                        className={`pending-platform-badge inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                          (item.platform || 'Mercado Livre') === 'Mercado Livre'
+                            ? 'bg-yellow-400/15 text-yellow-300 border-yellow-400/50 shadow-xs'
+                            : (item.platform || 'Mercado Livre') === 'Shopee'
+                            ? 'bg-orange-500/15 text-orange-400 border-orange-500/50 shadow-xs'
+                            : 'bg-slate-950 text-slate-300 border-slate-800'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          (item.platform || 'Mercado Livre') === 'Mercado Livre'
+                            ? 'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.7)]'
+                            : (item.platform || 'Mercado Livre') === 'Shopee'
+                            ? 'bg-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.7)]'
+                            : 'bg-slate-400'
+                        }`} />
+                        <span>{item.platform || 'Mercado Livre'}</span>
                       </span>
                       {item.voltage && item.voltage !== 'N/A' && (
                         <span className="pending-voltage-badge text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
@@ -1919,8 +1935,24 @@ export default function PendingItems({
 
                       {/* Platform */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="text-xs text-slate-300 font-medium">
-                          {item.platform || 'Mercado Livre'}
+                        <span 
+                          data-platform={item.platform || 'Mercado Livre'}
+                          className={`inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded border ${
+                            (item.platform || 'Mercado Livre') === 'Mercado Livre'
+                              ? 'bg-yellow-400/15 text-yellow-300 border-yellow-400/50'
+                              : (item.platform || 'Mercado Livre') === 'Shopee'
+                              ? 'bg-orange-500/15 text-orange-400 border-orange-500/50'
+                              : 'text-slate-300 border-slate-800 bg-slate-950'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            (item.platform || 'Mercado Livre') === 'Mercado Livre'
+                              ? 'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.7)]'
+                              : (item.platform || 'Mercado Livre') === 'Shopee'
+                              ? 'bg-orange-400 shadow-[0_0_6px_rgba(249,115,22,0.7)]'
+                              : 'bg-slate-400'
+                          }`} />
+                          <span>{item.platform || 'Mercado Livre'}</span>
                         </span>
                       </td>
 

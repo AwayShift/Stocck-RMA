@@ -166,19 +166,49 @@ export default function Dashboard({
   // Platform colors & logos styling
   const getPlatformStyle = (p: PlatformType) => {
     switch(p) {
-      case 'Mercado Livre': return { bg: 'bg-yellow-500/10', text: 'text-amber-800 dark:text-yellow-400', border: 'border-yellow-500/30', barBg: 'bg-amber-500', dotBg: 'bg-amber-500' };
-      case 'Shopee': return { bg: 'bg-orange-500/10', text: 'text-orange-800 dark:text-orange-400', border: 'border-orange-500/30', barBg: 'bg-orange-500', dotBg: 'bg-orange-500' };
-      case 'Amazon': return { bg: 'bg-blue-500/10', text: 'text-sky-800 dark:text-blue-400', border: 'border-blue-500/30', barBg: 'bg-sky-500', dotBg: 'bg-sky-500' };
+      case 'Mercado Livre': return { 
+        bg: 'bg-yellow-400/15', 
+        text: 'text-yellow-300 font-bold', 
+        border: 'border-yellow-400/50', 
+        barBg: 'bg-yellow-400', 
+        dotBg: 'bg-yellow-400' 
+      };
+      case 'Shopee': return { 
+        bg: 'bg-orange-500/15', 
+        text: 'text-orange-400 font-bold', 
+        border: 'border-orange-500/40', 
+        barBg: 'bg-orange-500', 
+        dotBg: 'bg-orange-500' 
+      };
+      case 'Amazon': return { 
+        bg: 'bg-sky-500/15', 
+        text: 'text-sky-300 font-bold', 
+        border: 'border-sky-500/40', 
+        barBg: 'bg-sky-500', 
+        dotBg: 'bg-sky-400' 
+      };
       case 'Amazon Ta Novo': return { 
         bg: 'bg-emerald-500/15', 
-        text: 'text-emerald-800 dark:text-emerald-400', 
-        border: 'border-emerald-500/30', 
+        text: 'text-emerald-300 font-bold', 
+        border: 'border-emerald-500/40', 
         barBg: 'bg-emerald-500', 
-        dotBg: 'bg-emerald-500',
+        dotBg: 'bg-emerald-400',
         customColor: 'rgba(16, 185, 129, 0.8)'
       };
-      case 'Kabum': return { bg: 'bg-indigo-500/10', text: 'text-indigo-800 dark:text-indigo-400', border: 'border-indigo-500/30', barBg: 'bg-indigo-500', dotBg: 'bg-indigo-500' };
-      default: return { bg: 'bg-zinc-500/10', text: 'text-zinc-800 dark:text-zinc-400', border: 'border-zinc-500/30', barBg: 'bg-zinc-400', dotBg: 'bg-zinc-400' };
+      case 'Kabum': return { 
+        bg: 'bg-indigo-500/15', 
+        text: 'text-indigo-300 font-bold', 
+        border: 'border-indigo-500/40', 
+        barBg: 'bg-indigo-500', 
+        dotBg: 'bg-indigo-400' 
+      };
+      default: return { 
+        bg: 'bg-slate-500/15', 
+        text: 'text-slate-300 font-bold', 
+        border: 'border-slate-500/30', 
+        barBg: 'bg-slate-400', 
+        dotBg: 'bg-slate-400' 
+      };
     }
   };
 

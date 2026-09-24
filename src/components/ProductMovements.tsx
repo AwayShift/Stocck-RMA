@@ -2780,7 +2780,13 @@ export default function ProductMovements({
                               {item.baseProductSku}
                             </span>
                             {item.destinationSector !== 'Openbox' && (
-                              <span className="unit-platform text-[10px] font-bold text-slate-400">
+                              <span className={`unit-platform text-[10px] font-bold ${
+                                item.platform === 'Mercado Livre'
+                                  ? 'text-yellow-300'
+                                  : item.platform === 'Shopee'
+                                  ? 'text-orange-400'
+                                  : 'text-slate-400'
+                              }`}>
                                 • {item.platform}
                               </span>
                             )}

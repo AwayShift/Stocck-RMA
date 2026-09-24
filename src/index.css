@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
@@ -1939,6 +1941,34 @@ html.light .pending-platform-badge {
   font-weight: 700 !important;
 }
 
+html.light .pending-platform-badge[data-platform="Mercado Livre"] {
+  background-color: #fefce8 !important;
+  border-color: #eab308 !important;
+  color: #713f12 !important;
+  font-weight: 800 !important;
+}
+
+html.light .pending-platform-badge[data-platform="Shopee"] {
+  background-color: #fff7ed !important;
+  border-color: #f97316 !important;
+  color: #9a3412 !important;
+  font-weight: 800 !important;
+}
+
+html.dark .pending-platform-badge[data-platform="Mercado Livre"] {
+  background-color: rgba(250, 204, 21, 0.18) !important;
+  border-color: rgba(250, 204, 21, 0.6) !important;
+  color: #fde047 !important;
+  font-weight: 800 !important;
+}
+
+html.dark .pending-platform-badge[data-platform="Shopee"] {
+  background-color: rgba(249, 115, 22, 0.18) !important;
+  border-color: rgba(249, 115, 22, 0.6) !important;
+  color: #fdba74 !important;
+  font-weight: 800 !important;
+}
+
 html.light .pending-voltage-badge {
   background-color: #f1f5f9 !important;
   color: #475569 !important;
@@ -3340,9 +3370,15 @@ html.light .platform-dropdown-menu span.text-\[10px\] {
 
 /* Trigger Button - Light Mode per Platform */
 html.light .platform-trigger-btn[data-platform="Mercado Livre"] {
-  background-color: #fffbeb !important;
-  border-color: #f59e0b !important;
-  color: #78350f !important;
+  background-color: #fefce8 !important;
+  border-color: #facc15 !important;
+  color: #713f12 !important;
+}
+
+html.dark .platform-trigger-btn[data-platform="Mercado Livre"] {
+  background-color: rgba(250, 204, 21, 0.15) !important;
+  border-color: #facc15 !important;
+  color: #fde047 !important;
 }
 
 html.light .platform-trigger-btn[data-platform="Shopee"] {
@@ -3394,11 +3430,23 @@ html.light .platform-option-item[data-platform="Mercado Livre"]:hover {
   border-color: #facc15 !important;
 }
 html.light .platform-option-item[data-platform="Mercado Livre"][aria-selected="true"] {
-  background-color: #fef3c7 !important;
-  border-color: #f59e0b !important;
+  background-color: #fef9c3 !important;
+  border-color: #eab308 !important;
 }
 html.light .platform-option-item[data-platform="Mercado Livre"][aria-selected="true"] span.text-xs {
-  color: #78350f !important;
+  color: #713f12 !important;
+}
+
+html.dark .platform-option-item[data-platform="Mercado Livre"]:hover {
+  background-color: rgba(250, 204, 21, 0.15) !important;
+  border-color: rgba(250, 204, 21, 0.5) !important;
+}
+html.dark .platform-option-item[data-platform="Mercado Livre"][aria-selected="true"] {
+  background-color: rgba(250, 204, 21, 0.22) !important;
+  border-color: #facc15 !important;
+}
+html.dark .platform-option-item[data-platform="Mercado Livre"][aria-selected="true"] span.text-xs {
+  color: #fde047 !important;
 }
 
 /* Shopee Option */
@@ -3565,11 +3613,20 @@ html.light #dashboard-active-filters-bar span.text-slate-400 {
 /* --- PLATFORM FILTER COLORS IN LIGHT MODE --- */
 html.light .filter-platform-badge[data-platform="Mercado Livre"] {
   background-color: #fefce8 !important;
-  border-color: #f59e0b !important;
-  color: #78350f !important;
+  border-color: #eab308 !important;
+  color: #713f12 !important;
 }
 html.light .filter-platform-badge[data-platform="Mercado Livre"] .filter-badge-dot {
-  background-color: #d97706 !important;
+  background-color: #eab308 !important;
+}
+
+html.dark .filter-platform-badge[data-platform="Mercado Livre"] {
+  background-color: rgba(250, 204, 21, 0.18) !important;
+  border-color: rgba(250, 204, 21, 0.6) !important;
+  color: #fde047 !important;
+}
+html.dark .filter-platform-badge[data-platform="Mercado Livre"] .filter-badge-dot {
+  background-color: #facc15 !important;
 }
 
 html.light .filter-platform-badge[data-platform="Shopee"] {
@@ -3689,15 +3746,30 @@ html.light #platform-row-Shopee .platform-filtering-badge {
 html.light #platform-row-Mercado-Livre[data-selected="true"],
 html.light .platform-breakdown-row[data-platform="Mercado Livre"][data-selected="true"] {
   background-color: #fefce8 !important;
-  border-color: #f59e0b !important;
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15) !important;
+  border-color: #eab308 !important;
+  box-shadow: 0 4px 12px rgba(234, 179, 8, 0.2) !important;
 }
 
 html.light .platform-filtering-badge[data-platform="Mercado Livre"],
 html.light #platform-row-Mercado-Livre .platform-filtering-badge {
-  background-color: #fef3c7 !important;
-  border-color: #f59e0b !important;
-  color: #78350f !important;
+  background-color: #fef9c3 !important;
+  border-color: #eab308 !important;
+  color: #713f12 !important;
+  font-weight: 800 !important;
+}
+
+html.dark #platform-row-Mercado-Livre[data-selected="true"],
+html.dark .platform-breakdown-row[data-platform="Mercado Livre"][data-selected="true"] {
+  background-color: rgba(250, 204, 21, 0.12) !important;
+  border-color: #facc15 !important;
+  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.25) !important;
+}
+
+html.dark .platform-filtering-badge[data-platform="Mercado Livre"],
+html.dark #platform-row-Mercado-Livre .platform-filtering-badge {
+  background-color: rgba(250, 204, 21, 0.25) !important;
+  border-color: #facc15 !important;
+  color: #fde047 !important;
   font-weight: 800 !important;
 }
 
@@ -4360,6 +4432,59 @@ html.light #manual-inflow-modal .inflow-btn-save {
 html.light #manual-inflow-modal .inflow-btn-save:hover:not(:disabled) {
   background-color: #047857 !important;
 }
+
+/* ==========================================================================
+   HIGH-CONTRAST PLATFORM BADGES (UNIVERSAL COMPONENT & CARD STYLES)
+   Ensures luminous, crystal-clear contrast matching reference designs
+   ========================================================================== */
+
+/* Dark Mode Mercado Livre Badges & Indicators */
+html.dark [data-platform="Mercado Livre"],
+html.dark span[data-platform="Mercado Livre"] {
+  background-color: rgba(250, 204, 21, 0.15) !important;
+  border-color: rgba(250, 204, 21, 0.5) !important;
+  color: #fde047 !important;
+  font-weight: 700 !important;
+}
+
+html.dark [data-platform="Mercado Livre"] span.bg-yellow-400,
+html.dark [data-platform="Mercado Livre"] .platform-dot {
+  background-color: #facc15 !important;
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.7) !important;
+}
+
+/* Dark Mode Shopee Badges & Indicators */
+html.dark [data-platform="Shopee"],
+html.dark span[data-platform="Shopee"] {
+  background-color: rgba(249, 115, 22, 0.15) !important;
+  border-color: rgba(249, 115, 22, 0.45) !important;
+  color: #fb923c !important;
+  font-weight: 700 !important;
+}
+
+html.dark [data-platform="Shopee"] span.bg-orange-400,
+html.dark [data-platform="Shopee"] .platform-dot {
+  background-color: #fb923c !important;
+  box-shadow: 0 0 6px rgba(249, 115, 22, 0.7) !important;
+}
+
+/* Light Mode Overrides for Mercado Livre & Shopee */
+html.light [data-platform="Mercado Livre"],
+html.light span[data-platform="Mercado Livre"]:not(.platform-trigger-btn):not(.filter-platform-badge) {
+  background-color: #fefce8 !important;
+  border-color: #facc15 !important;
+  color: #713f12 !important;
+  font-weight: 800 !important;
+}
+
+html.light [data-platform="Shopee"],
+html.light span[data-platform="Shopee"]:not(.platform-trigger-btn):not(.filter-platform-badge) {
+  background-color: #fff7ed !important;
+  border-color: #f97316 !important;
+  color: #9a3412 !important;
+  font-weight: 800 !important;
+}
+
 
 
 
