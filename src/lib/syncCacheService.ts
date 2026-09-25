@@ -280,44 +280,39 @@ export const syncBaseProductsIncrementally = async (
       ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
       : null;
 
-    const [updatedRes, recentRes] = await Promise.all([
-      safeSyncTimestamp
-        ? supabase
-            .from('products')
-            .select(PRODUCT_COLUMNS)
-            .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
-            .order('updated_at', { ascending: false })
-            .limit(1000)
-        : supabase
-            .from('products')
-            .select(PRODUCT_COLUMNS)
-            .order('created_at', { ascending: false })
-            .limit(100),
-      supabase
+    let incomingData: any[] = [];
+
+    if (safeSyncTimestamp) {
+      const updatedRes = await supabase
+        .from('products')
+        .select(PRODUCT_COLUMNS)
+        .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
+        .order('updated_at', { ascending: false })
+        .limit(500);
+
+      if (updatedRes.data && Array.isArray(updatedRes.data)) {
+        incomingData.push(...updatedRes.data);
+      } else if (updatedRes.error) {
+        // Fallback query if or clause not supported
+        const fallbackUpdated = await supabase
+          .from('products')
+          .select(PRODUCT_COLUMNS)
+          .gt('updated_at', safeSyncTimestamp || lastSync)
+          .order('updated_at', { ascending: false })
+          .limit(500);
+        if (fallbackUpdated.data && Array.isArray(fallbackUpdated.data)) {
+          incomingData.push(...fallbackUpdated.data);
+        }
+      }
+    } else {
+      const initialRes = await supabase
         .from('products')
         .select(PRODUCT_COLUMNS)
         .order('created_at', { ascending: false })
-        .limit(50)
-    ]);
-
-    let incomingData: any[] = [];
-    if (updatedRes.data && Array.isArray(updatedRes.data)) {
-      incomingData.push(...updatedRes.data);
-    } else if (updatedRes.error) {
-      // Fallback query if or clause not supported
-      const fallbackUpdated = await supabase
-        .from('products')
-        .select(PRODUCT_COLUMNS)
-        .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: false })
-        .limit(1000);
-      if (fallbackUpdated.data && Array.isArray(fallbackUpdated.data)) {
-        incomingData.push(...fallbackUpdated.data);
+        .limit(100);
+      if (initialRes.data && Array.isArray(initialRes.data)) {
+        incomingData.push(...initialRes.data);
       }
-    }
-
-    if (recentRes.data && Array.isArray(recentRes.data)) {
-      incomingData.push(...recentRes.data);
     }
 
     const updatedMap = new Map<string, BaseProduct>();
@@ -428,59 +423,41 @@ export const syncTriageUnitsIncrementally = async (
       ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
       : null;
 
-    const [updatedRes, recentRes] = await Promise.all([
-      safeSyncTimestamp
-        ? supabase
-            .from('triage_units')
-            .select(getTriageColumns())
-            .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
-            .order('updated_at', { ascending: false })
-            .limit(1000)
-        : supabase
-            .from('triage_units')
-            .select(getTriageColumns())
-            .order('created_at', { ascending: false })
-            .limit(100),
-      supabase
-        .from('triage_units')
-        .select(getTriageColumns())
-        .order('created_at', { ascending: false })
-        .limit(60)
-    ]);
-
     let incomingData: any[] = [];
 
-    if (updatedRes.data && Array.isArray(updatedRes.data)) {
-      incomingData.push(...updatedRes.data);
-    } else if (updatedRes.error) {
-      if (updatedRes.error.message?.includes('exclude_from_daily_count') || updatedRes.error.code === '42703') {
-        setHasExcludeDailyCol(false);
-      }
-      console.warn('Incremental triage sync fallback due to:', updatedRes.error.message);
-      const safeFallback = await supabase
+    if (safeSyncTimestamp) {
+      const updatedRes = await supabase
         .from('triage_units')
         .select(getTriageColumns())
-        .gt('updated_at', safeSyncTimestamp || lastSync)
+        .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
         .order('updated_at', { ascending: false })
-        .limit(1000);
-      if (safeFallback.data && Array.isArray(safeFallback.data)) {
-        incomingData.push(...safeFallback.data);
-      }
-    }
+        .limit(500);
 
-    if (recentRes.data && Array.isArray(recentRes.data)) {
-      incomingData.push(...recentRes.data);
-    } else if (recentRes.error) {
-      if (recentRes.error.message?.includes('exclude_from_daily_count') || recentRes.error.code === '42703') {
-        setHasExcludeDailyCol(false);
+      if (updatedRes.data && Array.isArray(updatedRes.data)) {
+        incomingData.push(...updatedRes.data);
+      } else if (updatedRes.error) {
+        if (updatedRes.error.message?.includes('exclude_from_daily_count') || updatedRes.error.code === '42703') {
+          setHasExcludeDailyCol(false);
+        }
+        console.warn('Incremental triage sync fallback due to:', updatedRes.error.message);
+        const safeFallback = await supabase
+          .from('triage_units')
+          .select(getTriageColumns())
+          .gt('updated_at', safeSyncTimestamp || lastSync)
+          .order('updated_at', { ascending: false })
+          .limit(500);
+        if (safeFallback.data && Array.isArray(safeFallback.data)) {
+          incomingData.push(...safeFallback.data);
+        }
       }
-      const safeRecentFallback = await supabase
+    } else {
+      const initialRes = await supabase
         .from('triage_units')
         .select(getTriageColumns())
         .order('created_at', { ascending: false })
-        .limit(60);
-      if (safeRecentFallback.data && Array.isArray(safeRecentFallback.data)) {
-        incomingData.push(...safeRecentFallback.data);
+        .limit(100);
+      if (initialRes.data && Array.isArray(initialRes.data)) {
+        incomingData.push(...initialRes.data);
       }
     }
 
@@ -579,43 +556,38 @@ export const syncDailyInflowsIncrementally = async (
       ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
       : null;
 
-    const [updatedRes, recentRes] = await Promise.all([
-      safeSyncTimestamp
-        ? supabase
-            .from('daily_inflows')
-            .select(INFLOW_COLUMNS)
-            .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
-            .order('updated_at', { ascending: false })
-            .limit(200)
-        : supabase
-            .from('daily_inflows')
-            .select(INFLOW_COLUMNS)
-            .order('date', { ascending: false })
-            .limit(60),
-      supabase
+    let incomingData: any[] = [];
+
+    if (safeSyncTimestamp) {
+      const updatedRes = await supabase
+        .from('daily_inflows')
+        .select(INFLOW_COLUMNS)
+        .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
+        .order('updated_at', { ascending: false })
+        .limit(200);
+
+      if (updatedRes.data && Array.isArray(updatedRes.data)) {
+        incomingData.push(...updatedRes.data);
+      } else if (updatedRes.error) {
+        const fallback = await supabase
+          .from('daily_inflows')
+          .select(INFLOW_COLUMNS)
+          .gt('updated_at', safeSyncTimestamp || lastSync)
+          .order('updated_at', { ascending: false })
+          .limit(200);
+        if (fallback.data && Array.isArray(fallback.data)) {
+          incomingData.push(...fallback.data);
+        }
+      }
+    } else {
+      const initialRes = await supabase
         .from('daily_inflows')
         .select(INFLOW_COLUMNS)
         .order('date', { ascending: false })
-        .limit(30)
-    ]);
-
-    let incomingData: any[] = [];
-    if (updatedRes.data && Array.isArray(updatedRes.data)) {
-      incomingData.push(...updatedRes.data);
-    } else if (updatedRes.error) {
-      const fallback = await supabase
-        .from('daily_inflows')
-        .select(INFLOW_COLUMNS)
-        .gt('updated_at', safeSyncTimestamp || lastSync)
-        .order('updated_at', { ascending: false })
-        .limit(200);
-      if (fallback.data && Array.isArray(fallback.data)) {
-        incomingData.push(...fallback.data);
+        .limit(60);
+      if (initialRes.data && Array.isArray(initialRes.data)) {
+        incomingData.push(...initialRes.data);
       }
-    }
-
-    if (recentRes.data && Array.isArray(recentRes.data)) {
-      incomingData.push(...recentRes.data);
     }
 
     const inflowMap = new Map<string, DailyInflowRecord>();
@@ -718,53 +690,38 @@ export const syncPendingItemsIncrementally = async (
       ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
       : null;
 
-    const [updatedRes, recentRes] = await Promise.all([
-      safeSyncTimestamp
-        ? supabase
-            .from('pending_items')
-            .select(getPendingColumns())
-            .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
-            .order('updated_at', { ascending: false })
-            .limit(1000)
-        : supabase
-            .from('pending_items')
-            .select(getPendingColumns())
-            .order('created_at', { ascending: false })
-            .limit(100),
-      supabase
-        .from('pending_items')
-        .select(getPendingColumns())
-        .order('created_at', { ascending: false })
-        .limit(60)
-    ]);
-
     let incomingData: any[] = [];
-    if (updatedRes.data && Array.isArray(updatedRes.data)) {
-      incomingData.push(...updatedRes.data);
-    } else if (updatedRes.error) {
-      setHasPendingExtendedCols(false);
-      const safeFallback = await supabase
+
+    if (safeSyncTimestamp) {
+      const updatedRes = await supabase
         .from('pending_items')
         .select(getPendingColumns())
-        .gt('updated_at', safeSyncTimestamp || lastSync)
+        .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
         .order('updated_at', { ascending: false })
-        .limit(1000);
-      if (safeFallback.data && Array.isArray(safeFallback.data)) {
-        incomingData.push(...safeFallback.data);
-      }
-    }
+        .limit(500);
 
-    if (recentRes.data && Array.isArray(recentRes.data)) {
-      incomingData.push(...recentRes.data);
-    } else if (recentRes.error) {
-      setHasPendingExtendedCols(false);
-      const safeRecentFallback = await supabase
+      if (updatedRes.data && Array.isArray(updatedRes.data)) {
+        incomingData.push(...updatedRes.data);
+      } else if (updatedRes.error) {
+        setHasPendingExtendedCols(false);
+        const safeFallback = await supabase
+          .from('pending_items')
+          .select(getPendingColumns())
+          .gt('updated_at', safeSyncTimestamp || lastSync)
+          .order('updated_at', { ascending: false })
+          .limit(500);
+        if (safeFallback.data && Array.isArray(safeFallback.data)) {
+          incomingData.push(...safeFallback.data);
+        }
+      }
+    } else {
+      const initialRes = await supabase
         .from('pending_items')
         .select(getPendingColumns())
         .order('created_at', { ascending: false })
-        .limit(60);
-      if (safeRecentFallback.data && Array.isArray(safeRecentFallback.data)) {
-        incomingData.push(...safeRecentFallback.data);
+        .limit(100);
+      if (initialRes.data && Array.isArray(initialRes.data)) {
+        incomingData.push(...initialRes.data);
       }
     }
 

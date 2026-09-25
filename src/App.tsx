@@ -386,12 +386,12 @@ export default function App() {
     window.addEventListener('focus', handleVisibilityOrFocus);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
-    // Periodic gentle delta sync every 6s as fast fallback if mobile browser paused WebSockets
+    // Periodic gentle delta sync every 60s as fallback if mobile browser paused WebSockets
     const syncInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
         refreshIncrementalData();
       }
-    }, 6000);
+    }, 60000);
 
     return () => {
       window.removeEventListener('focus', handleVisibilityOrFocus);

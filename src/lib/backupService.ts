@@ -565,7 +565,7 @@ export const subscribeToCloudBackups = (
       try {
         const { data, error } = await supabase
           .from('backup_snapshots')
-          .select('id, filename, created_at, created_by, trigger_type, checksum, total_items, file_size_formatted, size_bytes, chunk_index, total_chunks, data')
+          .select('id, filename, created_at, created_by, trigger_type, checksum, total_items, file_size_formatted, size_bytes, chunk_index, total_chunks')
           .eq('chunk_index', 0)
           .neq('id', 'config_backup_schedule')
           .order('created_at', { ascending: false })
