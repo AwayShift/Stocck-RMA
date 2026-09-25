@@ -1118,7 +1118,14 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     rawNotes = rawNotes.replace(/\[PENDING_ID:.*?\]\s*/g, '').trim();
   }
 
-  if (u.originSector) {
+  const isRealStockOrigin = Boolean(
+    u.originSector && 
+    u.originSector.trim().toLowerCase() !== 'pendências' && 
+    u.originSector.trim().toLowerCase() !== 'pendencias' && 
+    u.originSector.trim().toLowerCase() !== 'sem setor'
+  );
+
+  if (isRealStockOrigin) {
     const originMeta = `[ORIGIN_SECTOR:${u.originSector}]`;
     rawNotes = rawNotes.replace(/\[ORIGIN_SECTOR:.*?\]\s*/g, '').trim();
     rawNotes = rawNotes ? `${rawNotes}\n${originMeta}` : originMeta;
@@ -1134,7 +1141,7 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     rawNotes = rawNotes.replace(/\[INITIAL_ENTRY_DATE:.*?\]\s*/g, '').trim();
   }
 
-  if (u.transferredAt) {
+  if (u.transferredAt && isRealStockOrigin) {
     const transMeta = `[TRANSFERRED_AT:${u.transferredAt}]`;
     rawNotes = rawNotes.replace(/\[TRANSFERRED_AT:.*?\]\s*/g, '').trim();
     rawNotes = rawNotes ? `${rawNotes}\n${transMeta}` : transMeta;
@@ -1169,14 +1176,12 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     updated_at: now
   };
 
-  if (u.originSector && getHasTriageTransferCols() !== false) {
-    payload.origin_sector = u.originSector;
+  if (getHasTriageTransferCols() !== false) {
+    payload.origin_sector = isRealStockOrigin ? u.originSector : null;
+    payload.transferred_at = isRealStockOrigin && u.transferredAt ? u.transferredAt : null;
   }
   if (u.initialEntryDate && getHasTriageTransferCols() !== false) {
     payload.initial_entry_date = u.initialEntryDate;
-  }
-  if (u.transferredAt && getHasTriageTransferCols() !== false) {
-    payload.transferred_at = u.transferredAt;
   }
 
   if (u.pendingRegistrationNumber && getHasTriagePendingCols() !== false) {
@@ -1250,6 +1255,14 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
     const originMatch = decompressedNotes.match(/\[ORIGIN_SECTOR:(.*?)\]/);
     if (originMatch && originMatch[1]) {
       originSector = originMatch[1].trim();
+    }
+  }
+
+  // Pendências não é setor de estoque físico; se for 'Pendências' ou 'Sem Setor', anula
+  if (originSector) {
+    const s = originSector.trim().toLowerCase();
+    if (s === 'pendências' || s === 'pendencias' || s === 'sem setor') {
+      originSector = undefined;
     }
   }
 

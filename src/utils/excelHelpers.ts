@@ -1296,7 +1296,12 @@ export function exportStockInventoryToExcel(
     const pedido = (unit.orderNumber || '').trim();
 
     // 9. ESTOQUE DE ORIGEM E DATAS
-    const estoqueOrigem = (unit.originSector || '').trim();
+    const rawOrigin = (unit.originSector || '').trim();
+    const isRealOrigin = rawOrigin && 
+      rawOrigin.toLowerCase() !== 'pendências' && 
+      rawOrigin.toLowerCase() !== 'pendencias' && 
+      rawOrigin.toLowerCase() !== 'sem setor';
+    const estoqueOrigem = isRealOrigin ? rawOrigin : '';
     let dataEntradaInicial = '';
     if (unit.initialEntryDate) {
       try {

@@ -95,6 +95,13 @@ const stripHtml = (html?: string): string => {
     .trim();
 };
 
+export const isRealStockTransfer = (originSector?: string): boolean => {
+  if (!originSector) return false;
+  const s = originSector.trim().toLowerCase();
+  if (s === 'pendências' || s === 'pendencias' || s === 'sem setor' || s === '') return false;
+  return ['principal', 'estoque principal', 'rma', 'openbox'].includes(s);
+};
+
 export default function PhysicalStock({ 
   units, 
   products = [],
@@ -409,8 +416,10 @@ export default function PhysicalStock({
     const catalogProduct = products.find(p => (unit.baseProductId && p.id === unit.baseProductId) || (unit.baseProductSku && p.sku === unit.baseProductSku));
     const resolvedSku = unit.baseProductSku || (unit as any).sku || catalogProduct?.sku || '';
     const resolvedName = getResolvedUnitProductName(unit, products);
+    const sanitizedOriginSector = isRealStockTransfer(unit.originSector) ? unit.originSector : undefined;
     setEditForm({ 
       ...unit,
+      originSector: sanitizedOriginSector,
       baseProductName: resolvedName,
       baseProductSku: resolvedSku,
       platform: (unit.platform || '') as any,
@@ -549,6 +558,8 @@ export default function PhysicalStock({
         updatedForm.createdAt = transferMoment; // Contabiliza novamente no registro no momento da transferência
         updatedForm.updatedAt = transferMoment;
         updatedForm.excludeFromDailyCount = false; // Garante que será contabilizado no registro diário
+      } else if (!isRealStockTransfer(updatedForm.originSector)) {
+        updatedForm.originSector = undefined;
       }
 
       // Ensure product name uses the registered system name if generic or blank
@@ -2414,7 +2425,7 @@ export default function PhysicalStock({
                           {new Date(unit.createdAt).toLocaleDateString('pt-BR')} {new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </p>
-                      {unit.originSector && (
+                      {isRealStockTransfer(unit.originSector) && (
                         <p className="text-slate-400 font-medium flex items-center gap-1.5 text-[9.5px]" title={`Item transferido do estoque ${unit.originSector}`}>
                           <ArrowRightLeft className="w-3 h-3 text-amber-400 shrink-0" />
                           <span className="text-amber-400 font-semibold">Origem ({unit.originSector}):</span>
@@ -2454,7 +2465,7 @@ export default function PhysicalStock({
                         <span className="text-[10px] text-slate-500 italic">Sem Plataforma</span>
                       )}
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {unit.originSector && (
+                        {isRealStockTransfer(unit.originSector) && (
                           <span 
                             className="px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1"
                             title={`Produto transferido do estoque ${unit.originSector}`}
@@ -2664,7 +2675,7 @@ export default function PhysicalStock({
                             {unit.platform}
                           </span>
                         ) : null}
-                        {unit.originSector && (
+                        {isRealStockTransfer(unit.originSector) && (
                           <span 
                             className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1"
                             title={`Produto transferido do estoque ${unit.originSector}${unit.initialEntryDate ? ' em ' + new Date(unit.initialEntryDate).toLocaleDateString('pt-BR') : ''}`}
@@ -2743,7 +2754,7 @@ export default function PhysicalStock({
                           {new Date(unit.createdAt).toLocaleDateString('pt-BR')} {new Date(unit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </p>
-                      {unit.originSector && (
+                      {isRealStockTransfer(unit.originSector) && (
                         <p className="text-slate-400 font-medium flex items-center gap-1 text-[9.5px]" title="Data do primeiro registro antes da transferência de estoque">
                           <ArrowRightLeft className="w-3 h-3 text-amber-400 shrink-0" />
                           <span className="text-amber-400 font-semibold">Origem ({unit.originSector}):</span>
@@ -3281,7 +3292,7 @@ export default function PhysicalStock({
                         <option value="Principal">Estoque Principal (Prontos / Novos)</option>
                         <option value="RMA">RMA (Assistência Técnica)</option>
                       </select>
-                      {editForm.originSector && (
+                      {isRealStockTransfer(editForm.originSector) && (
                         <p className="text-[10.5px] text-amber-400/95 flex items-center gap-1.5 mt-1.5 bg-amber-500/10 border border-amber-500/25 px-2.5 py-1.5 rounded-lg">
                           <ArrowRightLeft className="w-3.5 h-3.5 shrink-0 text-amber-400" />
                           <span>
@@ -4115,7 +4126,7 @@ export default function PhysicalStock({
                     )}
                   </div>
 
-                  {/* Sector */}
+                    {/* Sector */}
                   <div className="space-y-1.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Setor Físico</span>
                     <span className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border block truncate ${
@@ -4127,7 +4138,7 @@ export default function PhysicalStock({
                     }`}>
                       {currentUnit.destinationSector}
                     </span>
-                    {currentUnit.originSector && (
+                    {isRealStockTransfer(currentUnit.originSector) && (
                       <div className="flex items-center gap-1 text-[10.5px] text-amber-400 font-semibold pt-0.5" title={`Transferido de ${currentUnit.originSector}`}>
                         <ArrowRightLeft className="w-3 h-3 text-amber-400 shrink-0" />
                         <span>Origem: <strong className="text-amber-300 font-bold">{currentUnit.originSector}</strong></span>
@@ -4189,7 +4200,7 @@ export default function PhysicalStock({
                         <Clock className="w-3.5 h-3.5 text-slate-500" />
                         <span>Data de Entrada: <strong className="text-slate-200">{new Date(currentUnit.createdAt).toLocaleDateString('pt-BR')} às {new Date(currentUnit.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
                       </div>
-                      {currentUnit.originSector && (
+                      {isRealStockTransfer(currentUnit.originSector) && (
                         <>
                           <span className="text-slate-600 hidden sm:inline">•</span>
                           <div className="flex items-center gap-1.5 text-amber-400" title={`Produto transferido do estoque ${currentUnit.originSector}`}>
