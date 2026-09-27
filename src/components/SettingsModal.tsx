@@ -29,7 +29,8 @@ import {
   Download,
   LogOut,
   Code,
-  Copy
+  Copy,
+  BarChart3
 } from 'lucide-react';
 import { ThemeMode } from '../lib/theme';
 import { SUPABASE_SQL_SCHEMA } from '../lib/supabase';
@@ -576,17 +577,32 @@ export default function SettingsModal({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenDbSwitcherModal?.();
-                  }}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap"
-                  id="btn-settings-open-db-switcher"
-                >
-                  Alterar Banco
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenDbSwitcherModal?.();
+                    }}
+                    className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shadow-sm"
+                    id="btn-settings-view-db-metrics"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    <span>Métricas &amp; Cota</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenDbSwitcherModal?.();
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                    id="btn-settings-open-db-switcher"
+                  >
+                    Alterar Banco
+                  </button>
+                </div>
               </div>
 
               {/* Backup & Contingency Card */}

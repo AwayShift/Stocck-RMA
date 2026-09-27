@@ -19,13 +19,26 @@ import {
   ShieldCheck,
   Zap,
   Settings,
-  ArrowRight
+  ArrowRight,
+  Activity,
+  BarChart3,
+  HardDrive,
+  Key,
+  Server,
+  Layers,
+  CheckCircle2,
+  XCircle,
+  HelpCircle
 } from 'lucide-react';
 import {
   getSupabaseClient,
   getSupabaseConfig,
   saveSupabaseConfig,
   extractSupabaseProjectRef,
+  fetchOfficialSupabaseUsage,
+  OfficialSupabaseUsage,
+  getSupabaseManagementToken,
+  saveSupabaseManagementToken,
   SUPABASE_SQL_SCHEMA,
   SUPABASE_QUICK_PATCH_SQL,
   SupabaseConfig
@@ -130,6 +143,37 @@ export default function DatabaseSwitcherModal({
     }
   };
 
+  // Supabase Official Metrics & PAT State
+  const [supabaseUsage, setSupabaseUsage] = useState<OfficialSupabaseUsage | null>(null);
+  const [isLoadingUsage, setIsLoadingUsage] = useState<boolean>(false);
+  const [customTokenInput, setCustomTokenInput] = useState<string>(() => getSupabaseManagementToken());
+  const [showTokenInput, setShowTokenInput] = useState<boolean>(false);
+  const [showTokenSecret, setShowTokenSecret] = useState<boolean>(false);
+  const [tokenSaveSuccess, setTokenSaveSuccess] = useState<boolean>(false);
+
+  // Test official Supabase metrics using Vercel serverless proxy or token
+  const testSupabaseMetrics = async (tokenOverride?: string) => {
+    setIsLoadingUsage(true);
+    try {
+      const tokenToUse = tokenOverride !== undefined ? tokenOverride : customTokenInput;
+      const usage = await fetchOfficialSupabaseUsage(projectRef, tokenToUse || undefined);
+      setSupabaseUsage(usage);
+    } catch (err: any) {
+      console.error('Erro ao consultar métricas oficiais do Supabase:', err);
+    } finally {
+      setIsLoadingUsage(false);
+    }
+  };
+
+  const handleSaveCustomToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = customTokenInput.trim();
+    saveSupabaseManagementToken(clean);
+    setTokenSaveSuccess(true);
+    setTimeout(() => setTokenSaveSuccess(false), 3000);
+    testSupabaseMetrics(clean);
+  };
+
   useEffect(() => {
     if (isOpen) {
       const currentConfig = getSupabaseConfig();
@@ -144,6 +188,7 @@ export default function DatabaseSwitcherModal({
 
       testDatabaseConnection();
       refreshCloudinaryMetrics();
+      testSupabaseMetrics();
     }
   }, [isOpen]);
 
@@ -320,6 +365,282 @@ export default function DatabaseSwitcherModal({
               <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-xs text-rose-300 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                 <span>{connectionErrorMsg}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Section 1.5: Official Supabase Usage Metrics & Token Status (Vercel Integration) */}
+          <div 
+            id="db-official-usage-card"
+            className="p-4 sm:p-5 bg-gradient-to-r from-[#0f172a] via-[#111827] to-[#0b1329] border border-sky-800/50 rounded-xl space-y-4"
+          >
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                  <BarChart3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-xs font-bold text-white tracking-wide uppercase">
+                      Métricas Oficiais de Uso &amp; Cota (Supabase)
+                    </h3>
+                    {supabaseUsage?.tokenValid ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded bg-emerald-950/90 text-emerald-400 border border-emerald-800">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        Token Autenticado
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded bg-rose-950/90 text-rose-400 border border-rose-800">
+                        <XCircle className="w-3 h-3 text-rose-400" />
+                        Token Pendente
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Telemetria oficial da conta (Egress, PostgreSQL, Storage e integridade da chave PAT).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowTokenInput(!showTokenInput)}
+                  className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  title="Gerenciar Chave PAT do Supabase"
+                >
+                  <Key className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{showTokenInput ? 'Fechar Chave' : 'Chave PAT'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => testSupabaseMetrics()}
+                  disabled={isLoadingUsage}
+                  className="px-3 py-1.5 bg-sky-950/80 hover:bg-sky-900/80 text-sky-300 border border-sky-700/60 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  title="Consultar API oficial de métricas do Supabase"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isLoadingUsage ? 'animate-spin' : ''}`} />
+                  <span>{isLoadingUsage ? 'Verificando...' : 'Testar Token & Métricas'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Token Status Message or Errors */}
+            {supabaseUsage?.tokenValid ? (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>
+                    <strong>Conexão validada com sucesso!</strong> Projeto: <span className="font-mono text-white">{supabaseUsage.projectName}</span> ({supabaseUsage.region})
+                  </span>
+                </div>
+                <span className="text-[10px] text-emerald-400/80 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">
+                  Fonte: {supabaseUsage.tokenSource === 'vercel_environment' ? 'Ambiente Vercel' : 'Chave PAT Configurada'}
+                </span>
+              </div>
+            ) : supabaseUsage?.error ? (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-white">Falha ao verificar o Token do Supabase:</span>
+                    <span>{supabaseUsage.error}</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 pl-6">
+                  Dica: No painel da Vercel (Project Settings &gt; Environment Variables), adicione a variável <code className="text-sky-300 font-mono">SUPABASE_MANAGEMENT_TOKEN</code> com o token gerado no Supabase (inicia com <code className="text-amber-300 font-mono">sbp_</code>), ou clique no botão &quot;Chave PAT&quot; acima para inserir e testar diretamente.
+                </p>
+              </div>
+            ) : null}
+
+            {/* Token Input Drawer */}
+            {showTokenInput && (
+              <form onSubmit={handleSaveCustomToken} className="p-3.5 bg-slate-950/90 border border-amber-900/40 rounded-xl space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Personal Access Token (PAT) do Supabase</span>
+                  </h4>
+                  <a
+                    href="https://supabase.com/dashboard/account/tokens"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
+                  >
+                    <span>Gerar Token no Supabase</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
+                    Token PAT (sbp_...)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showTokenSecret ? 'text' : 'password'}
+                      value={customTokenInput}
+                      onChange={(e) => setCustomTokenInput(e.target.value)}
+                      placeholder="sbp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      className="w-full bg-[#111111] border border-slate-700 focus:border-amber-400 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-600 outline-none pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowTokenSecret(!showTokenSecret)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1"
+                      title={showTokenSecret ? 'Ocultar' : 'Mostrar'}
+                    >
+                      {showTokenSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {tokenSaveSuccess && (
+                  <div className="p-2 bg-[#1b3326] border border-[#2e5d42] rounded-lg text-xs text-[#3ecf8e] flex items-center gap-2">
+                    <Check className="w-3.5 h-3.5 text-[#3ecf8e] shrink-0" />
+                    <span>Token salvo e testado com sucesso!</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowTokenInput(false)}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!customTokenInput.trim() || isLoadingUsage}
+                    className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>Salvar e Testar Token</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Official Usage Stats Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+              {/* Card 1: Egress */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 font-medium">Egress (Transferência)</span>
+                  <span className="text-[9px] font-bold text-sky-400 font-mono">
+                    {supabaseUsage ? `${supabaseUsage.egressPercent}%` : '--'}
+                  </span>
+                </div>
+                <div className="text-base sm:text-lg font-bold text-white font-mono">
+                  {isLoadingUsage ? '...' : (supabaseUsage?.egressGb || '0 GB')}
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      (supabaseUsage?.egressPercent || 0) > 85 ? 'bg-rose-500' :
+                      (supabaseUsage?.egressPercent || 0) > 60 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.min(100, supabaseUsage?.egressPercent || 0)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-500 block">
+                  Limite: {supabaseUsage?.egressLimitGb || '5 GB'}
+                </span>
+              </div>
+
+              {/* Card 2: Database Size */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 font-medium">Banco (PostgreSQL)</span>
+                  <span className="text-[9px] font-bold text-emerald-400 font-mono">
+                    {supabaseUsage ? `${supabaseUsage.databaseSizePercent}%` : '--'}
+                  </span>
+                </div>
+                <div className="text-base sm:text-lg font-bold text-white font-mono">
+                  {isLoadingUsage ? '...' : (supabaseUsage?.databaseSizeGb || '0 GB')}
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, supabaseUsage?.databaseSizePercent || 0)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-500 block">
+                  Limite: {supabaseUsage?.databaseSizeLimitGb || '0,5 GB'}
+                </span>
+              </div>
+
+              {/* Card 3: Storage */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 font-medium">Storage Supabase</span>
+                  <span className="text-[9px] font-bold text-sky-400 font-mono">
+                    {supabaseUsage ? `${supabaseUsage.storagePercent}%` : '--'}
+                  </span>
+                </div>
+                <div className="text-base sm:text-lg font-bold text-white font-mono">
+                  {isLoadingUsage ? '...' : (supabaseUsage?.storageSizeGb || '0 GB')}
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className="h-full rounded-full bg-sky-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, supabaseUsage?.storagePercent || 0)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-500 block">
+                  {supabaseUsage?.storageObjectsCount ? `${supabaseUsage.storageObjectsCount} arquivos` : 'Limite: 1 GB'}
+                </span>
+              </div>
+
+              {/* Card 4: Users / MAU */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 font-medium">Usuários (Auth)</span>
+                  <span className="text-[9px] font-bold text-teal-400 font-mono">
+                    {supabaseUsage ? `${supabaseUsage.mauPercent}%` : '--'}
+                  </span>
+                </div>
+                <div className="text-base sm:text-lg font-bold text-white font-mono">
+                  {isLoadingUsage ? '...' : (supabaseUsage?.mau ?? 0)}
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className="h-full rounded-full bg-teal-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.max(1, supabaseUsage?.mauPercent || 0))}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-500 block">
+                  Limite: 50.000
+                </span>
+              </div>
+            </div>
+
+            {/* Top Tables Detail (when available) */}
+            {Array.isArray(supabaseUsage?.tables) && supabaseUsage.tables.length > 0 && (
+              <div className="pt-2 border-t border-slate-800/60">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Maiores Tabelas no PostgreSQL:</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Total em disco: {supabaseUsage.rawResponse?.dbPretty || supabaseUsage.databaseSizeGb}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-36 overflow-y-auto pr-1">
+                  {supabaseUsage.tables.slice(0, 8).map((tbl, idx) => (
+                    <div key={idx} className="p-2 bg-slate-950/40 border border-slate-800/50 rounded flex items-center justify-between text-[11px]">
+                      <span className="text-slate-300 font-mono truncate" title={tbl.tableName}>
+                        {tbl.tableName}
+                      </span>
+                      <span className="text-sky-400 font-mono font-bold shrink-0 ml-1.5">
+                        {tbl.sizePretty}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

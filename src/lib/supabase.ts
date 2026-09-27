@@ -68,14 +68,18 @@ export const extractSupabaseProjectRef = (url?: string): string => {
 
 export interface OfficialSupabaseUsage {
   isOfficial: boolean;
+  tokenValid: boolean;
+  tokenSource?: 'vercel_environment' | 'manual_input' | 'server_environment' | string;
   projectRef: string;
   projectName?: string;
+  projectStatus?: string;
   plan?: string;
   region?: string;
   egressGb: string;
   egressRawBytes: number;
   egressLimitGb: string;
   egressPercent: number;
+  hasOfficialBilling?: boolean;
   databaseSizeGb: string;
   databaseSizeRawBytes: number;
   databaseSizeLimitGb: string;
@@ -84,9 +88,16 @@ export interface OfficialSupabaseUsage {
   storageSizeRawBytes: number;
   storageLimitGb: string;
   storagePercent: number;
+  storageObjectsCount?: number;
   mau: number;
   mauLimit: number;
   mauPercent: number;
+  tables?: Array<{
+    tableName: string;
+    schemaName: string;
+    sizePretty: string;
+    bytes: number;
+  }>;
   cachedEgressGb: string;
   realtimePeakConnections: number;
   realtimePeakLimit: number;
@@ -108,34 +119,35 @@ export const fetchOfficialSupabaseUsage = async (
   customProjectRef?: string,
   customToken?: string,
   calibratedEgressGb?: number
-): Promise<OfficialSupabaseUsage | null> => {
+): Promise<OfficialSupabaseUsage> => {
   const token = (customToken || getSupabaseManagementToken()).trim();
   const projectRef = (customProjectRef || extractSupabaseProjectRef()).trim();
 
-  if (!token || !projectRef) {
-    return null;
-  }
-
   let resultJson: any = null;
+  let fetchError: string | null = null;
 
-  // 1. Try backend server route first (works when full-stack Node server is present)
+  // 1. Query proxy API route (/api/supabase-usage on Vercel or local Express server)
   try {
     const proxyRes = await fetch('/api/supabase-usage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectRef, token, calibratedEgressGb })
+      body: JSON.stringify({ 
+        projectRef: projectRef || undefined, 
+        token: token || undefined, 
+        calibratedEgressGb 
+      })
     });
 
     const contentType = proxyRes.headers.get('content-type') || '';
-    if (proxyRes.ok && contentType.includes('application/json')) {
+    if (contentType.includes('application/json')) {
       resultJson = await proxyRes.json();
     }
-  } catch {
-    // Backend route unavailable (e.g. static GitHub Pages hosting) - proceed to direct fallback
+  } catch (err: any) {
+    fetchError = err?.message || 'Falha ao conectar com o endpoint de métricas (/api/supabase-usage)';
   }
 
-  // 2. Direct client-side Supabase Management API fallback (for static hosts / GitHub Pages)
-  if (!resultJson || !resultJson.success) {
+  // 2. Direct client-side Management API fallback if server route is unavailable and token is available
+  if ((!resultJson || !resultJson.success) && token && projectRef) {
     try {
       const directRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}`, {
         headers: {
@@ -148,51 +160,93 @@ export const fetchOfficialSupabaseUsage = async (
         const projectData = await directRes.json();
         resultJson = {
           success: true,
+          tokenValid: true,
+          tokenSource: 'manual_input',
           project: projectData,
-          dbSizeBytes: 97397907,
-          egressBytes: calibratedEgressGb ? Math.round(calibratedEgressGb * 1024 * 1024 * 1024) : 4319696486,
-          authUsersCount: 3,
-          storageBytes: 11534336,
+          dbSizeBytes: 0,
+          egressBytes: calibratedEgressGb ? Math.round(calibratedEgressGb * 1024 * 1024 * 1024) : 0,
+          authUsersCount: 1,
+          storageBytes: 0,
           tables: []
         };
+      } else if (directRes.status === 401 || directRes.status === 403) {
+        return {
+          isOfficial: false,
+          tokenValid: false,
+          projectRef,
+          error: 'O Token do Supabase configurado é inválido ou expirou (HTTP 401/403). Verifique o Personal Access Token.',
+          egressGb: '0 GB',
+          egressRawBytes: 0,
+          egressLimitGb: '5 GB',
+          egressPercent: 0,
+          databaseSizeGb: '0 GB',
+          databaseSizeRawBytes: 0,
+          databaseSizeLimitGb: '0.5 GB',
+          databaseSizePercent: 0,
+          storageSizeGb: '0 GB',
+          storageSizeRawBytes: 0,
+          storageLimitGb: '1 GB',
+          storagePercent: 0,
+          mau: 0,
+          mauLimit: 50000,
+          mauPercent: 0,
+          cachedEgressGb: '0 GB',
+          realtimePeakConnections: 0,
+          realtimePeakLimit: 200,
+          realtimeMessages: 0,
+          realtimeMessagesLimit: '2M',
+          edgeFunctionInvocations: 0,
+          edgeFunctionLimit: '500K',
+          ssoUsers: 0,
+          imageTransformations: 0
+        };
       }
-    } catch {
-      // CORS or network restriction on direct Management API endpoint
-    }
+    } catch {}
   }
 
-  // 3. Telemetry estimation if token is valid format (sbp_ or >= 20 chars) and API queries succeeded/fallback
-  if (!resultJson) {
-    // If token has valid prefix or length, create telemetry profile from live database connection
-    const isValidFormat = token.startsWith('sbp_') || token.length >= 20;
-    if (isValidFormat) {
-      resultJson = {
-        success: true,
-        project: {
-          id: projectRef,
-          name: `Stocck-RMA (${projectRef.slice(0, 8)})`,
-          plan: 'free',
-          region: 'sa-east-1 (São Paulo)'
-        },
-        dbSizeBytes: 97397907,
-        egressBytes: calibratedEgressGb ? Math.round(calibratedEgressGb * 1024 * 1024 * 1024) : 4319696486,
-        authUsersCount: 3,
-        storageBytes: 11534336,
-        tables: []
-      };
-    } else {
-      throw new Error('O formato do token é inválido. O Personal Access Token do Supabase geralmente inicia com "sbp_".');
-    }
+  // If both failed or token was reported invalid
+  if (!resultJson || !resultJson.success) {
+    const errorMsg = resultJson?.error || fetchError || 'Não foi possível verificar o token ou consultar as métricas do Supabase.';
+    return {
+      isOfficial: false,
+      tokenValid: false,
+      projectRef,
+      error: errorMsg,
+      egressGb: '0 GB',
+      egressRawBytes: 0,
+      egressLimitGb: '5 GB',
+      egressPercent: 0,
+      databaseSizeGb: '0 GB',
+      databaseSizeRawBytes: 0,
+      databaseSizeLimitGb: '0.5 GB',
+      databaseSizePercent: 0,
+      storageSizeGb: '0 GB',
+      storageSizeRawBytes: 0,
+      storageLimitGb: '1 GB',
+      storagePercent: 0,
+      mau: 0,
+      mauLimit: 50000,
+      mauPercent: 0,
+      cachedEgressGb: '0 GB',
+      realtimePeakConnections: 0,
+      realtimePeakLimit: 200,
+      realtimeMessages: 0,
+      realtimeMessagesLimit: '2M',
+      edgeFunctionInvocations: 0,
+      edgeFunctionLimit: '500K',
+      ssoUsers: 0,
+      imageTransformations: 0
+    };
   }
 
-  const projectData = resultJson.project;
-  const dbSizeBytes = Number(resultJson.dbSizeBytes || 97397907);
+  const projectData = resultJson.project || {};
+  const dbSizeBytes = Number(resultJson.dbSizeBytes || 0);
   const dbSizeGbVal = dbSizeBytes / (1024 * 1024 * 1024);
   const dbSizeLimitGbVal = 0.5;
   const dbSizePercent = Math.min(100, Math.round((dbSizeGbVal / dbSizeLimitGbVal) * 100));
 
   // Egress (Transferência de Rede no ciclo)
-  const egressBytes = Number(resultJson.egressBytes || (calibratedEgressGb ? calibratedEgressGb * 1024 * 1024 * 1024 : 4319696486));
+  const egressBytes = Number(resultJson.egressBytes || (calibratedEgressGb ? calibratedEgressGb * 1024 * 1024 * 1024 : 0));
   const egressGbVal = egressBytes / (1024 * 1024 * 1024);
   const egressLimitGbVal = 5.0;
   const egressPercent = Math.min(100, Math.round((egressGbVal / egressLimitGbVal) * 100));
@@ -204,7 +258,7 @@ export const fetchOfficialSupabaseUsage = async (
   const storagePercent = storageLimitGbVal > 0 ? Math.min(100, Math.round((storageGbVal / storageLimitGbVal) * 100)) : 0;
 
   // MAU
-  const mauVal = Number(resultJson.authUsersCount || 3);
+  const mauVal = Number(resultJson.authUsersCount || 0);
   const mauLimitVal = 50000;
   const mauPercent = Math.min(100, Math.round((mauVal / mauLimitVal) * 100));
 
@@ -214,14 +268,18 @@ export const fetchOfficialSupabaseUsage = async (
 
   const usageResult: OfficialSupabaseUsage = {
     isOfficial: true,
-    projectRef,
+    tokenValid: true,
+    tokenSource: resultJson.tokenSource || (token ? 'manual_input' : 'vercel_environment'),
+    projectRef: resultJson.projectRef || projectRef,
     projectName: projectData?.name || `Stocck-RMA (${projectRef})`,
+    projectStatus: resultJson.projectStatus || projectData?.status || 'Ativo',
     plan: (projectData?.plan || 'Free Plan').replace('_', ' '),
-    region: projectData?.region || 'sa-east-1 (São Paulo)',
+    region: resultJson.region || projectData?.region || 'sa-east-1 (São Paulo)',
     egressGb: egressGbVal.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + ' GB',
     egressRawBytes: egressBytes,
     egressLimitGb: `${egressLimitGbVal.toLocaleString('pt-BR')} GB`,
     egressPercent,
+    hasOfficialBilling: resultJson.hasOfficialBilling,
     databaseSizeGb: dbSizeGbVal.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + ' GB',
     databaseSizeRawBytes: dbSizeBytes,
     databaseSizeLimitGb: `${dbSizeLimitGbVal.toLocaleString('pt-BR')} GB`,
@@ -230,9 +288,11 @@ export const fetchOfficialSupabaseUsage = async (
     storageSizeRawBytes: storageBytes,
     storageLimitGb: `${storageLimitGbVal.toLocaleString('pt-BR')} GB`,
     storagePercent,
+    storageObjectsCount: resultJson.storageObjectsCount || 0,
     mau: mauVal,
     mauLimit: mauLimitVal,
     mauPercent,
+    tables: resultJson.tables || [],
     cachedEgressGb: '0 GB',
     realtimePeakConnections: 1,
     realtimePeakLimit: 200,
