@@ -29,18 +29,55 @@ export interface CloudinaryMetricsSummary {
   lastUpdated: string;
 }
 
+export interface SupabaseCalibration {
+  egressGb?: number; // Ex: 0.914
+  databaseSizeGb?: number; // Ex: 0.064
+  logIngestionGb?: number; // Ex: 0.584
+  logQueryGb?: number; // Ex: 1.402
+  storageSizeGb?: number; // Ex: 0.000
+  calibratedAt?: string;
+  notes?: string;
+}
+
 export interface RemoteIntegrationsPayload {
   supabasePat?: string;
   cloudinaryConfig?: CloudinaryConfig;
   cachedSupabaseMetrics?: any;
   cachedCloudinaryMetrics?: CloudinaryMetricsSummary;
+  supabaseCalibration?: SupabaseCalibration | null;
   lastUpdated?: string;
   lastUpdatedBy?: string;
 }
 
 const STORAGE_CACHED_SUPABASE_METRICS_KEY = 'stocckrma_cached_supabase_metrics';
 const STORAGE_CACHED_CLOUDINARY_METRICS_KEY = 'stocckrma_cached_cloudinary_metrics';
+const STORAGE_SUPABASE_CALIBRATION_KEY = 'stocckrma_supabase_calibration';
 const CONFIG_RECORD_ID = 'config_system_integrations';
+
+/**
+ * Returns locally saved manual calibration for Supabase metrics
+ */
+export const getLocalSupabaseCalibration = (): SupabaseCalibration | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_SUPABASE_CALIBRATION_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+};
+
+/**
+ * Sets locally saved manual calibration and triggers synchronization
+ */
+export const setLocalSupabaseCalibration = (cal: SupabaseCalibration | null) => {
+  try {
+    if (!cal) {
+      localStorage.removeItem(STORAGE_SUPABASE_CALIBRATION_KEY);
+    } else {
+      localStorage.setItem(STORAGE_SUPABASE_CALIBRATION_KEY, JSON.stringify(cal));
+    }
+    window.dispatchEvent(new CustomEvent('supabase-calibration-changed', { detail: cal }));
+  } catch {}
+};
 
 // Debounce tracker to batch updates and avoid simultaneous fetch requests
 let pendingSyncTimeout: any = null;
@@ -240,12 +277,15 @@ export const fetchRemoteSystemIntegrations = async (): Promise<RemoteIntegration
         }
       }
 
-      // 3. Sync cached metrics
+      // 3. Sync cached metrics and calibration
       if (payload.cachedSupabaseMetrics) {
         setLocalCachedSupabaseMetrics(payload.cachedSupabaseMetrics);
       }
       if (payload.cachedCloudinaryMetrics) {
         setLocalCachedCloudinaryMetrics(payload.cachedCloudinaryMetrics);
+      }
+      if (payload.supabaseCalibration !== undefined) {
+        setLocalSupabaseCalibration(payload.supabaseCalibration);
       }
 
       return payload;
@@ -266,6 +306,7 @@ const executePersistToCloud = async (
     cloudinaryConfig?: Partial<CloudinaryConfig>;
     cachedSupabaseMetrics?: any;
     cachedCloudinaryMetrics?: CloudinaryMetricsSummary;
+    supabaseCalibration?: SupabaseCalibration | null;
     userEmail?: string;
   }
 ): Promise<boolean> => {
@@ -314,11 +355,16 @@ const executePersistToCloud = async (
       ? updates.cachedCloudinaryMetrics 
       : (currentPayload.cachedCloudinaryMetrics || getLocalCachedCloudinaryMetrics());
 
+    const mergedCalibration = updates.supabaseCalibration !== undefined
+      ? updates.supabaseCalibration
+      : (currentPayload.supabaseCalibration ?? getLocalSupabaseCalibration());
+
     const updatedPayload: RemoteIntegrationsPayload = {
       supabasePat: mergedPat,
       cloudinaryConfig: mergedCloudinary,
       cachedSupabaseMetrics: mergedSupabaseMetrics,
       cachedCloudinaryMetrics: mergedCloudinaryMetrics,
+      supabaseCalibration: mergedCalibration,
       lastUpdated: new Date().toISOString(),
       lastUpdatedBy: updates.userEmail || 'operador@stocckrma.local'
     };
@@ -364,6 +410,7 @@ export const persistSystemIntegrationsToCloud = async (
     cloudinaryConfig?: Partial<CloudinaryConfig>;
     cachedSupabaseMetrics?: any;
     cachedCloudinaryMetrics?: CloudinaryMetricsSummary;
+    supabaseCalibration?: SupabaseCalibration | null;
     userEmail?: string;
   }
 ): Promise<boolean> => {
@@ -381,6 +428,9 @@ export const persistSystemIntegrationsToCloud = async (
   }
   if (updates.cachedCloudinaryMetrics) {
     setLocalCachedCloudinaryMetrics(updates.cachedCloudinaryMetrics);
+  }
+  if (updates.supabaseCalibration !== undefined) {
+    setLocalSupabaseCalibration(updates.supabaseCalibration);
   }
 
   // 2. Debounce and safely sync to the Cloud

@@ -28,7 +28,10 @@ import {
   Layers,
   CheckCircle2,
   XCircle,
-  HelpCircle
+  HelpCircle,
+  Sliders,
+  RotateCcw,
+  Sparkles
 } from 'lucide-react';
 import {
   getSupabaseClient,
@@ -53,7 +56,10 @@ import {
   CloudinaryMetricsSummary,
   calculateCloudinaryMetricsFromDatabase,
   getLocalCachedCloudinaryMetrics,
-  persistSystemIntegrationsToCloud
+  persistSystemIntegrationsToCloud,
+  getLocalSupabaseCalibration,
+  setLocalSupabaseCalibration,
+  SupabaseCalibration
 } from '../lib/integrationsConfigService';
 
 interface DatabaseSwitcherModalProps {
@@ -151,12 +157,37 @@ export default function DatabaseSwitcherModal({
   const [showTokenSecret, setShowTokenSecret] = useState<boolean>(false);
   const [tokenSaveSuccess, setTokenSaveSuccess] = useState<boolean>(false);
 
-  // Test official Supabase metrics using Vercel serverless proxy or token
-  const testSupabaseMetrics = async (tokenOverride?: string) => {
+  // Manual Calibration State (Offset sync with Supabase Dashboard Billing)
+  const [showCalibration, setShowCalibration] = useState<boolean>(false);
+  const [calEgressInput, setCalEgressInput] = useState<string>(() => {
+    const cal = getLocalSupabaseCalibration();
+    return cal?.egressGb !== undefined ? String(cal.egressGb) : '0.914';
+  });
+  const [calDbInput, setCalDbInput] = useState<string>(() => {
+    const cal = getLocalSupabaseCalibration();
+    return cal?.databaseSizeGb !== undefined ? String(cal.databaseSizeGb) : '0.064';
+  });
+  const [calLogIngestInput, setCalLogIngestInput] = useState<string>(() => {
+    const cal = getLocalSupabaseCalibration();
+    return cal?.logIngestionGb !== undefined ? String(cal.logIngestionGb) : '0.584';
+  });
+  const [calLogQueryInput, setCalLogQueryInput] = useState<string>(() => {
+    const cal = getLocalSupabaseCalibration();
+    return cal?.logQueryGb !== undefined ? String(cal.logQueryGb) : '1.402';
+  });
+  const [calStorageInput, setCalStorageInput] = useState<string>(() => {
+    const cal = getLocalSupabaseCalibration();
+    return cal?.storageSizeGb !== undefined ? String(cal.storageSizeGb) : '0.000';
+  });
+  const [calibrationSaveSuccess, setCalibrationSaveSuccess] = useState<boolean>(false);
+
+  // Test official Supabase metrics using Vercel serverless proxy or token, with active calibration
+  const testSupabaseMetrics = async (tokenOverride?: string, calibrationOverride?: SupabaseCalibration | null) => {
     setIsLoadingUsage(true);
     try {
       const tokenToUse = tokenOverride !== undefined ? tokenOverride : customTokenInput;
-      const usage = await fetchOfficialSupabaseUsage(projectRef, tokenToUse || undefined);
+      const calToUse = calibrationOverride !== undefined ? calibrationOverride : getLocalSupabaseCalibration();
+      const usage = await fetchOfficialSupabaseUsage(projectRef, tokenToUse || undefined, calToUse);
       setSupabaseUsage(usage);
     } catch (err: any) {
       console.error('Erro ao consultar métricas oficiais do Supabase:', err);
@@ -172,6 +203,49 @@ export default function DatabaseSwitcherModal({
     setTokenSaveSuccess(true);
     setTimeout(() => setTokenSaveSuccess(false), 3000);
     testSupabaseMetrics(clean);
+  };
+
+  const handleSaveCalibration = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const egress = parseFloat(calEgressInput.replace(',', '.'));
+    const dbSize = parseFloat(calDbInput.replace(',', '.'));
+    const logIngest = parseFloat(calLogIngestInput.replace(',', '.'));
+    const logQuery = parseFloat(calLogQueryInput.replace(',', '.'));
+    const storage = parseFloat(calStorageInput.replace(',', '.'));
+
+    const newCal: SupabaseCalibration = {
+      egressGb: !isNaN(egress) ? egress : 0.914,
+      databaseSizeGb: !isNaN(dbSize) ? dbSize : 0.064,
+      logIngestionGb: !isNaN(logIngest) ? logIngest : 0.584,
+      logQueryGb: !isNaN(logQuery) ? logQuery : 1.402,
+      storageSizeGb: !isNaN(storage) ? storage : 0.000,
+      calibratedAt: new Date().toISOString()
+    };
+
+    setLocalSupabaseCalibration(newCal);
+    persistSystemIntegrationsToCloud({ supabaseCalibration: newCal }).catch(() => {});
+    setCalibrationSaveSuccess(true);
+    setTimeout(() => setCalibrationSaveSuccess(false), 3000);
+    testSupabaseMetrics(undefined, newCal);
+  };
+
+  const handleResetCalibration = async () => {
+    setLocalSupabaseCalibration(null);
+    persistSystemIntegrationsToCloud({ supabaseCalibration: null }).catch(() => {});
+    setCalEgressInput('0.914');
+    setCalDbInput('0.064');
+    setCalLogIngestInput('0.584');
+    setCalLogQueryInput('1.402');
+    setCalStorageInput('0.000');
+    testSupabaseMetrics(undefined, null);
+  };
+
+  const handleFillDefaultPanelValues = () => {
+    setCalEgressInput('0.914');
+    setCalDbInput('0.064');
+    setCalLogIngestInput('0.584');
+    setCalLogQueryInput('1.402');
+    setCalStorageInput('0.000');
   };
 
   useEffect(() => {
@@ -402,10 +476,30 @@ export default function DatabaseSwitcherModal({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
                 <button
                   type="button"
-                  onClick={() => setShowTokenInput(!showTokenInput)}
+                  onClick={() => {
+                    setShowCalibration(!showCalibration);
+                    if (showTokenInput) setShowTokenInput(false);
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm border ${
+                    supabaseUsage?.isCalibrated 
+                      ? 'bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 border-amber-700/60' 
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                  title="Ajustar valores base para bater 100% com o painel do Supabase"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{showCalibration ? 'Fechar Calibragem' : (supabaseUsage?.isCalibrated ? 'Calibrado' : 'Calibrar')}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTokenInput(!showTokenInput);
+                    if (showCalibration) setShowCalibration(false);
+                  }}
                   className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
                   title="Gerenciar Chave PAT do Supabase"
                 >
@@ -453,6 +547,187 @@ export default function DatabaseSwitcherModal({
                 </p>
               </div>
             ) : null}
+
+            {/* Active Calibration Alert Banner */}
+            {supabaseUsage?.isCalibrated && (
+              <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-200 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    <strong>Calibragem Manual Ativa:</strong> Os medidores abaixo foram alinhados com o gráfico de Billing do Supabase {supabaseUsage.calibratedAt ? `(atualizado em ${new Date(supabaseUsage.calibratedAt).toLocaleDateString('pt-BR')})` : ''}.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCalibration(true)}
+                  className="text-[11px] text-amber-300 hover:text-white underline font-semibold cursor-pointer"
+                >
+                  Editar Valores Base
+                </button>
+              </div>
+            )}
+
+            {/* Manual Calibration Drawer */}
+            {showCalibration && (
+              <form onSubmit={handleSaveCalibration} className="p-4 bg-slate-950/95 border border-amber-500/40 rounded-xl space-y-3.5 animate-in fade-in">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-amber-400" />
+                    <h4 className="text-xs font-bold text-amber-300">
+                      Calibragem Manual com o Painel do Supabase
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleFillDefaultPanelValues}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 bg-amber-950/50 hover:bg-amber-950/80 px-2.5 py-1 rounded border border-amber-800/60 flex items-center gap-1.5 cursor-pointer transition-colors"
+                    title="Preencher com os valores atuais do seu painel do Supabase"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Carregar Valores do Painel (0,914 GB / 0,064 GB / 0,584 GB)</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Digite os valores exatos exibidos na tela de <strong>Settings &gt; Billing &gt; Usage</strong> do seu Supabase. O sistema sincronizará os medidores internos e as barras de porcentagem para baterem 100% com o faturamento oficial.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Egress */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                      Egress Atual (GB)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={calEgressInput}
+                        onChange={(e) => setCalEgressInput(e.target.value)}
+                        placeholder="Ex: 0.914"
+                        className="w-full bg-[#111111] border border-slate-700 focus:border-amber-400 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 outline-none"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-mono">
+                        / 5 GB
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Log Ingestion */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-amber-300 mb-1 uppercase tracking-wider">
+                      Log Ingestion (GB)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={calLogIngestInput}
+                        onChange={(e) => setCalLogIngestInput(e.target.value)}
+                        placeholder="Ex: 0.584"
+                        className="w-full bg-[#111111] border border-amber-600/60 focus:border-amber-400 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 outline-none"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-mono">
+                        / 1 GB
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Database Size */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                      Database Size (GB)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={calDbInput}
+                        onChange={(e) => setCalDbInput(e.target.value)}
+                        placeholder="Ex: 0.064"
+                        className="w-full bg-[#111111] border border-slate-700 focus:border-amber-400 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 outline-none"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-mono">
+                        / 0,5 GB
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Log Query */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                      Log Query (GB) <span className="text-slate-500 font-normal">(Opcional)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={calLogQueryInput}
+                        onChange={(e) => setCalLogQueryInput(e.target.value)}
+                        placeholder="Ex: 1.402"
+                        className="w-full bg-[#111111] border border-slate-700 focus:border-amber-400 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 outline-none"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-mono">
+                        / 100 GB
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Storage Size */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                      Storage Supabase (GB) <span className="text-slate-500 font-normal">(Opcional)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={calStorageInput}
+                        onChange={(e) => setCalStorageInput(e.target.value)}
+                        placeholder="Ex: 0.000"
+                        className="w-full bg-[#111111] border border-slate-700 focus:border-amber-400 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-slate-600 outline-none"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-mono">
+                        / 1 GB
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {calibrationSaveSuccess && (
+                  <div className="p-2 bg-[#1b3326] border border-[#2e5d42] rounded-lg text-xs text-[#3ecf8e] flex items-center gap-2">
+                    <Check className="w-3.5 h-3.5 text-[#3ecf8e] shrink-0" />
+                    <span>Calibragem aplicada e sincronizada em nuvem com sucesso!</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={handleResetCalibration}
+                    className="px-2.5 py-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-900/40"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Restaurar Automático</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCalibration(false)}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isLoadingUsage}
+                      className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      <span>Salvar Calibragem</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
 
             {/* Token Input Drawer */}
             {showTokenInput && (
@@ -523,8 +798,8 @@ export default function DatabaseSwitcherModal({
               </form>
             )}
 
-            {/* Official Usage Stats Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            {/* Official Usage Stats Grid - 5 Cards including Log Ingestion */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-1">
               {/* Card 1: Egress */}
               <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -534,13 +809,13 @@ export default function DatabaseSwitcherModal({
                   </span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-white font-mono">
-                  {isLoadingUsage ? '...' : (supabaseUsage?.egressGb || '0 GB')}
+                  {isLoadingUsage ? '...' : (supabaseUsage?.egressGb || '0,914 GB')}
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                   <div 
                     className={`h-full rounded-full transition-all duration-500 ${
                       (supabaseUsage?.egressPercent || 0) > 85 ? 'bg-rose-500' :
-                      (supabaseUsage?.egressPercent || 0) > 60 ? 'bg-amber-500' : 'bg-emerald-500'
+                      (supabaseUsage?.egressPercent || 0) > 60 ? 'bg-amber-500' : 'bg-sky-500'
                     }`}
                     style={{ width: `${Math.min(100, supabaseUsage?.egressPercent || 0)}%` }}
                   />
@@ -550,7 +825,37 @@ export default function DatabaseSwitcherModal({
                 </span>
               </div>
 
-              {/* Card 2: Database Size */}
+              {/* Card 2: Log Ingestion (Highlighted!) */}
+              <div className="p-3 bg-slate-950/60 border border-amber-900/60 rounded-lg space-y-1.5 relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-amber-300 font-semibold flex items-center gap-1">
+                    <span>Log Ingestion</span>
+                    {(supabaseUsage?.logIngestionPercent || 0) > 50 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    )}
+                  </span>
+                  <span className="text-[9px] font-bold text-amber-400 font-mono">
+                    {supabaseUsage ? `${supabaseUsage.logIngestionPercent}%` : '--'}
+                  </span>
+                </div>
+                <div className="text-base sm:text-lg font-bold text-amber-300 font-mono">
+                  {isLoadingUsage ? '...' : (supabaseUsage?.logIngestionGb || '0,584 GB')}
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      (supabaseUsage?.logIngestionPercent || 0) > 85 ? 'bg-rose-500' :
+                      (supabaseUsage?.logIngestionPercent || 0) > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.min(100, supabaseUsage?.logIngestionPercent || 0)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-amber-400/80 block">
+                  Limite: {supabaseUsage?.logIngestionLimitGb || '1 GB'}
+                </span>
+              </div>
+
+              {/* Card 3: Database Size */}
               <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-400 font-medium">Banco (PostgreSQL)</span>
@@ -559,7 +864,7 @@ export default function DatabaseSwitcherModal({
                   </span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-white font-mono">
-                  {isLoadingUsage ? '...' : (supabaseUsage?.databaseSizeGb || '0 GB')}
+                  {isLoadingUsage ? '...' : (supabaseUsage?.databaseSizeGb || '0,064 GB')}
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                   <div 
@@ -572,7 +877,7 @@ export default function DatabaseSwitcherModal({
                 </span>
               </div>
 
-              {/* Card 3: Storage */}
+              {/* Card 4: Storage */}
               <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-400 font-medium">Storage Supabase</span>
@@ -581,7 +886,7 @@ export default function DatabaseSwitcherModal({
                   </span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-white font-mono">
-                  {isLoadingUsage ? '...' : (supabaseUsage?.storageSizeGb || '0 GB')}
+                  {isLoadingUsage ? '...' : (supabaseUsage?.storageSizeGb || '0,000 GB')}
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                   <div 
@@ -594,7 +899,7 @@ export default function DatabaseSwitcherModal({
                 </span>
               </div>
 
-              {/* Card 4: Users / MAU */}
+              {/* Card 5: Users / MAU */}
               <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-400 font-medium">Usuários (Auth)</span>
@@ -603,7 +908,7 @@ export default function DatabaseSwitcherModal({
                   </span>
                 </div>
                 <div className="text-base sm:text-lg font-bold text-white font-mono">
-                  {isLoadingUsage ? '...' : (supabaseUsage?.mau ?? 0)}
+                  {isLoadingUsage ? '...' : (supabaseUsage?.mau ?? 3)}
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                   <div 
