@@ -37,6 +37,7 @@ import { exportBaseCatalogToExcel } from '../utils/excelHelpers';
 import { CategoryFormSelector } from './CategoryFormSelector';
 import { CategoryBadge } from './CategoryBadge';
 import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
+import { getOptimizedThumbnailUrl } from '../utils/productImages';
 
 interface BaseCatalogProps {
   products: BaseProduct[];
@@ -656,7 +657,13 @@ export default function BaseCatalog({
                           >
                             {product.imageUrl ? (
                               <div className="relative group/thumb">
-                                <img src={product.imageUrl} alt={product.name} className="w-10 h-10 object-cover rounded-lg border border-slate-800 group-hover/item:border-sky-500 bg-slate-950 flex-shrink-0 transition-colors" />
+                                <img 
+                                  src={getOptimizedThumbnailUrl(product.imageUrl, 80, 80)} 
+                                  alt={product.name} 
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="w-10 h-10 object-cover rounded-lg border border-slate-800 group-hover/item:border-sky-500 bg-slate-950 flex-shrink-0 transition-colors" 
+                                />
                               </div>
                             ) : (
                               <div className="w-10 h-10 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-[10px] text-slate-500 font-mono flex-shrink-0 group-hover/item:border-sky-500 transition-colors">
@@ -758,8 +765,10 @@ export default function BaseCatalog({
                         >
                           {displayPhoto ? (
                             <img 
-                              src={displayPhoto} 
+                              src={getOptimizedThumbnailUrl(displayPhoto, 280, 210)} 
                               alt={product.name} 
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-contain transition-transform duration-300 ease-out group-hover:scale-110"
                               referrerPolicy="no-referrer"
                             />

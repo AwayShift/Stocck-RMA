@@ -52,7 +52,7 @@ import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceSta
 import ExcelImportModal from './ExcelImportModal';
 import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
 import { ImageZoomModal } from './ImageZoomModal';
-import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct, getResolvedUnitProductName } from '../utils/productImages';
+import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct, getResolvedUnitProductName, getOptimizedThumbnailUrl } from '../utils/productImages';
 import { exportStockInventoryToExcel } from '../utils/excelHelpers';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
@@ -2342,7 +2342,14 @@ export default function PhysicalStock({
                       }}
                     >
                       {mainPhoto ? (
-                        <img src={mainPhoto} alt={getResolvedUnitProductName(unit, products)} className="w-full h-full object-contain group-hover/thumb:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
+                        <img 
+                          src={getOptimizedThumbnailUrl(mainPhoto, 280, 210)} 
+                          alt={getResolvedUnitProductName(unit, products)} 
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-contain group-hover/thumb:scale-105 transition-transform duration-300" 
+                          referrerPolicy="no-referrer" 
+                        />
                       ) : (
                         <div className="flex flex-col items-center justify-center gap-1.5 text-slate-400 group-hover/thumb:text-sky-500 transition-colors">
                           <Package className="w-9 h-9" />
@@ -2563,7 +2570,13 @@ export default function PhysicalStock({
                       }}
                     >
                       {mainPhoto ? (
-                        <img src={mainPhoto} alt={getResolvedUnitProductName(unit, products)} className="w-full h-full object-contain group-hover/listthumb:scale-110 transition-transform" />
+                        <img 
+                          src={getOptimizedThumbnailUrl(mainPhoto, 96, 96)} 
+                          alt={getResolvedUnitProductName(unit, products)} 
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-contain group-hover/listthumb:scale-110 transition-transform" 
+                        />
                       ) : (
                         <Package className="w-5 h-5 text-slate-400 group-hover/listthumb:text-sky-500 transition-colors" />
                       )}

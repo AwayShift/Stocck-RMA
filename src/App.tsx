@@ -192,15 +192,35 @@ export default function App() {
   const [isLoadingMoreProducts, setIsLoadingMoreProducts] = useState<boolean>(false);
   const lastLoadedUserIdRef = React.useRef<string | null>(null);
 
-  // Initial Data Fetching from Database with safety timeout
+  // Initial Data Fetching from Database with Cache-First strategy to eliminate Egress
   const loadInitialData = async () => {
     try {
       setSyncError(null);
-      
-      // Clean up legacy logs in background
-      purgeExistingAuditLogs().catch(() => {});
 
-      // Use a 4-second race timeout so the UI never hangs indefinitely on cold starts
+      // Check if we already have local cache
+      const cachedProds = getCachedBaseProducts();
+      const cachedTriages = getCachedTriageUnits();
+      const cachedPending = getCachedPendingItems();
+      const cachedInflows = getCachedDailyInflows();
+
+      const hasLocalData = cachedProds.length > 0 || cachedTriages.length > 0;
+
+      if (hasLocalData) {
+        // Instant load from cache: 0ms wait for operator, 0 egress used on initial render
+        if (cachedProds.length > 0) setProducts(cachedProds);
+        if (cachedTriages.length > 0) setTriageUnits(cachedTriages);
+        if (cachedPending.length > 0) setPendingItems(cachedPending);
+        if (cachedInflows.length > 0) setDailyInflows(cachedInflows);
+        setIsLoading(false);
+
+        // Fetch only modified records since last sync timestamp (negligible egress & zero cold-start load)
+        refreshIncrementalData().catch((e) => {
+          console.warn('Background incremental sync on startup note:', e);
+        });
+        return;
+      }
+
+      // If local cache is totally empty (first-time browser session), perform initial fetch
       const fetchPromise = Promise.all([
         getInitialBaseProducts(2500),
         getInitialTriageUnits(2500),
@@ -216,14 +236,14 @@ export default function App() {
 
       if (result === 'TIMEOUT') {
         console.warn('Initial data fetch timed out after 4s, falling back to local cache & background sync.');
-        const cachedProds = getCachedBaseProducts();
-        const cachedTriages = getCachedTriageUnits();
-        const cachedPending = getCachedPendingItems();
-        const cachedInflows = getCachedDailyInflows();
-        if (cachedProds.length > 0) setProducts(cachedProds);
-        if (cachedTriages.length > 0) setTriageUnits(cachedTriages);
-        if (cachedPending.length > 0) setPendingItems(cachedPending);
-        if (cachedInflows.length > 0) setDailyInflows(cachedInflows);
+        const fbProds = getCachedBaseProducts();
+        const fbTriages = getCachedTriageUnits();
+        const fbPending = getCachedPendingItems();
+        const fbInflows = getCachedDailyInflows();
+        if (fbProds.length > 0) setProducts(fbProds);
+        if (fbTriages.length > 0) setTriageUnits(fbTriages);
+        if (fbPending.length > 0) setPendingItems(fbPending);
+        if (fbInflows.length > 0) setDailyInflows(fbInflows);
         setIsLoading(false);
 
         // Continue background completion
@@ -293,9 +313,18 @@ export default function App() {
     }
   }, [user?.id]);
 
-  // Silent incremental delta sync across devices & tabs
-  const refreshIncrementalData = React.useCallback(async () => {
+  // Throttled incremental delta sync across devices & tabs to protect Egress and Logs
+  const lastDeltaSyncTimeRef = React.useRef<number>(0);
+
+  const refreshIncrementalData = React.useCallback(async (force: boolean = false) => {
     if (!user) return;
+    const now = Date.now();
+    // Do not re-query delta if executed less than 30 seconds ago unless forced
+    if (!force && (now - lastDeltaSyncTimeRef.current < 30000)) {
+      return;
+    }
+    lastDeltaSyncTimeRef.current = now;
+
     try {
       const [prodList, triageList, inflowList, pendingList] = await Promise.all([
         syncBaseProductsIncrementally(),
@@ -367,10 +396,13 @@ export default function App() {
     };
   }, [user?.id]);
 
-  // 2. Refresh incremental delta sync on internal tab switch
+  // 2. Light delta sync on internal tab switch with 60s cooldown (avoid spamming queries during fast navigation)
   useEffect(() => {
     if (!user) return;
-    refreshIncrementalData();
+    const now = Date.now();
+    if (now - lastDeltaSyncTimeRef.current >= 60000) {
+      refreshIncrementalData();
+    }
   }, [activeTab, refreshIncrementalData, user]);
 
   // 3. Refresh incremental delta sync when browser tab gains focus or returns from background
@@ -379,6 +411,7 @@ export default function App() {
 
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible') {
+        // When user refocuses the tab after working elsewhere, check for changes
         refreshIncrementalData();
       }
     };
@@ -386,12 +419,12 @@ export default function App() {
     window.addEventListener('focus', handleVisibilityOrFocus);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
-    // Periodic gentle delta sync every 60s as fallback if mobile browser paused WebSockets
+    // Periodic gentle fallback delta sync every 5 minutes (300s) — Realtime WebSockets handle instant changes
     const syncInterval = setInterval(() => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
         refreshIncrementalData();
       }
-    }, 60000);
+    }, 300000);
 
     return () => {
       window.removeEventListener('focus', handleVisibilityOrFocus);

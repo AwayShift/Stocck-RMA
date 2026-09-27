@@ -177,16 +177,9 @@ export const createAuditLog = async (
   return;
 };
 
-// Purge all legacy audit logs from Supabase
+// Purge legacy audit logs (no-op to prevent unnecessary database queries and log ingestion)
 export const purgeExistingAuditLogs = async (): Promise<void> => {
-  try {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      await supabase.from('audit_logs').delete().neq('id', '___non_existent___');
-    }
-  } catch (e) {
-    console.warn('Purge audit_logs table error:', e);
-  }
+  return;
 };
 
 // Image Upload with 3MB limit, WebP conversion, security validation and Supabase/Cloudinary Storage integration

@@ -139,3 +139,30 @@ export function getUnitResolvedPhotos(
     totalPhotosCount
   };
 }
+
+/**
+ * Returns an ultra-lightweight thumbnail URL for list/table rendering.
+ * Automatically leverages Cloudinary CDN transformations (w_*, h_*, c_fill, q_auto, f_auto)
+ * to save megabytes of bandwidth and render instantaneously without downloading raw 3MB files.
+ */
+export function getOptimizedThumbnailUrl(
+  url: string | null | undefined,
+  width: number = 120,
+  height: number = 120
+): string {
+  if (!url) return '';
+  if (typeof url !== 'string') return '';
+
+  // Cloudinary dynamic URL transformation
+  if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
+    // If it already has transformation, return as is or rewrite
+    if (url.includes('/upload/w_') || url.includes('/upload/c_')) {
+      return url;
+    }
+    const transform = `upload/c_fill,w_${width},h_${height},q_auto,f_auto/`;
+    return url.replace('/upload/', `/${transform}`);
+  }
+
+  return url;
+}
+
