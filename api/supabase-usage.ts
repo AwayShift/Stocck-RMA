@@ -12,7 +12,7 @@ export default async function handler(req: any, res: any) {
     const query = req.query || {};
 
     // 1. Identify Token: Passed in request > Vercel Environment Variables
-    const patToken = (
+    let patToken = (
       body.token ||
       query.token ||
       process.env.SUPABASE_MANAGEMENT_TOKEN ||
@@ -22,6 +22,9 @@ export default async function handler(req: any, res: any) {
       process.env.SUPABASE_TOKEN ||
       ''
     ).trim();
+
+    // Sanitize Bearer prefix or surrounding quotes if pasted by user
+    patToken = patToken.replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim();
 
     // 2. Identify Project Ref: Passed in request > extracted from Supabase URL env vars
     let ref = (
@@ -62,6 +65,18 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    // Check if user accidentally pasted an API key (anon / service_role JWT) instead of an account PAT
+    if (patToken.startsWith('eyJ')) {
+      return res.status(400).json({
+        success: false,
+        tokenValid: false,
+        error: 'A chave inserida começa com "eyJ", indicando ser uma chave de API do projeto (anon ou service_role) e não um Personal Access Token. Para métricas oficiais da conta, gere um PAT em supabase.com/dashboard/account/tokens (começa com "sbp_").',
+        projectRef: ref,
+        tokenSource: Boolean(body.token || query.token) ? 'manual_input' : 'vercel_environment',
+        hasTokenInEnv: true
+      });
+    }
+
     if (!ref) {
       return res.status(400).json({
         success: false,
@@ -81,14 +96,26 @@ export default async function handler(req: any, res: any) {
     const projectTestRes = await fetch(`https://api.supabase.com/v1/projects/${ref}`, { headers });
     
     const isExplicitToken = Boolean(body.token || query.token);
-    if (projectTestRes.status === 401 || projectTestRes.status === 403) {
+    if (projectTestRes.status === 403) {
+      return res.status(403).json({
+        success: false,
+        tokenValid: true,
+        error: `O token é autêntico, porém a conta do Supabase não possui permissão de acesso ao projeto '${ref}'. Verifique se o token foi gerado na mesma conta proprietária deste projeto.`,
+        httpStatus: 403,
+        projectRef: ref,
+        tokenSource: isExplicitToken ? 'manual_input' : 'vercel_environment',
+        hasTokenInEnv: true
+      });
+    }
+
+    if (projectTestRes.status === 401) {
       return res.status(401).json({
         success: false,
         tokenValid: false,
         error: isExplicitToken 
-          ? 'O Personal Access Token (PAT) informado é inválido ou expirou no Supabase (HTTP 401 Unauthorized). Gere um novo token no painel do Supabase com permissão All Projects.'
+          ? 'O Personal Access Token (PAT) informado não foi aceito pelo Supabase (HTTP 401 Unauthorized). Verifique se foi copiado integralmente (começa com sbp_) ou se expirou no painel do Supabase.'
           : 'O Token do Supabase configurado na Vercel (SUPABASE_MANAGEMENT_TOKEN) é inválido ou expirou (HTTP 401 Unauthorized). Verifique o Personal Access Token na Vercel ou insira a Chave PAT no botão acima.',
-        httpStatus: projectTestRes.status,
+        httpStatus: 401,
         projectRef: ref,
         tokenSource: isExplicitToken ? 'manual_input' : 'vercel_environment',
         hasTokenInEnv: true

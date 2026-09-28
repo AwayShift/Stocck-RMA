@@ -62,7 +62,8 @@ export const getSupabaseManagementToken = (): string => {
 
 export const saveSupabaseManagementToken = (token: string): void => {
   try {
-    const clean = token.trim();
+    let clean = token.trim();
+    clean = clean.replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim();
     inMemorySupabasePat = clean;
 
     if (clean) {

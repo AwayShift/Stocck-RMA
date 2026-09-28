@@ -157,6 +157,7 @@ export default function DatabaseSwitcherModal({
   const [showTokenInput, setShowTokenInput] = useState<boolean>(false);
   const [showTokenSecret, setShowTokenSecret] = useState<boolean>(false);
   const [tokenSaveSuccess, setTokenSaveSuccess] = useState<boolean>(false);
+  const [showTokenHelp, setShowTokenHelp] = useState<boolean>(false);
 
   // Manual Calibration State (Offset sync with Supabase Dashboard Billing)
   const [showCalibration, setShowCalibration] = useState<boolean>(false);
@@ -201,8 +202,9 @@ export default function DatabaseSwitcherModal({
 
   const handleSaveCustomToken = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = customTokenInput.trim();
+    const clean = customTokenInput.trim().replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim();
     if (!clean) return;
+    setCustomTokenInput(clean);
     saveSupabaseManagementToken(clean);
     setTokenSaveSuccess(true);
     setTimeout(() => setTokenSaveSuccess(false), 3000);
@@ -575,7 +577,15 @@ export default function DatabaseSwitcherModal({
                   </div>
                 </div>
                 <p className="text-[11px] text-slate-400 pl-6">
-                  Dica: No painel da Vercel (Project Settings &gt; Environment Variables), adicione a variável <code className="text-sky-300 font-mono">SUPABASE_MANAGEMENT_TOKEN</code> com o token gerado no Supabase (inicia com <code className="text-amber-300 font-mono">sbp_</code>), ou clique no botão &quot;Chave PAT&quot; acima para inserir e testar diretamente.
+                  {customTokenInput.trim() ? (
+                    <>
+                      Dica: Clique no botão <strong className="text-amber-300">&quot;Chave PAT&quot;</strong> acima para verificar a chave. Certifique-se de que ela começa com <code className="text-amber-300 font-mono">sbp_</code> (gerada em <em>Account Settings &gt; Access Tokens</em>) e possui validade ativa no painel do Supabase.
+                    </>
+                  ) : (
+                    <>
+                      Dica: Clique no botão <strong className="text-amber-300">&quot;Chave PAT&quot;</strong> acima para inserir o token diretamente, ou adicione a variável de ambiente <code className="text-sky-300 font-mono">SUPABASE_MANAGEMENT_TOKEN</code> no painel da Vercel com o token da sua conta (começa com <code className="text-amber-300 font-mono">sbp_</code>).
+                    </>
+                  )}
                 </p>
               </div>
             ) : null}
@@ -784,20 +794,51 @@ export default function DatabaseSwitcherModal({
                   </a>
                 </div>
 
-                {/* Expiration & Persistence Guidance Notice */}
-                <div className="p-3 bg-amber-950/30 border border-amber-700/40 rounded-lg space-y-1.5 text-amber-200">
-                  <div className="flex items-start gap-2">
-                    <HelpCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div className="text-xs leading-relaxed">
-                      <strong className="text-white block mb-0.5">Por que o token pode falhar após algum tempo?</strong>
-                      <p className="text-[11px] text-amber-200/90 leading-normal">
-                        No painel do Supabase, todo Personal Access Token possui um campo de <strong>Expiração (Expiration)</strong>. Se ele foi gerado com prazo curto (como <em>1 dia</em> ou <em>7 dias</em>), o próprio Supabase revoga o token ao fim do período (gerando erro 401).
-                      </p>
-                      <p className="text-[11px] text-amber-200/90 leading-normal mt-1">
-                        <strong>Dica:</strong> Ao gerar o token no Supabase, selecione a validade máxima (ex: <em>1 ano</em> ou <em>sem expiração</em>). O Stocck RMA agora armazena sua chave com tripla camada de redundância (memória local, sessão e nuvem central).
-                      </p>
+                {/* Authenticated Token Confirmation (if validated) */}
+                {supabaseUsage?.tokenValid && customTokenInput.trim() && (
+                  <div className="p-2.5 bg-emerald-950/70 border border-emerald-600/50 rounded-lg text-emerald-200 text-xs flex items-center justify-between gap-2 animate-in fade-in">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>
+                        <strong>Token Autenticado:</strong> Chave validada com sucesso na API do Supabase {supabaseUsage.projectName ? `(${supabaseUsage.projectName})` : ''}.
+                      </span>
                     </div>
+                    <span className="text-[10px] font-mono bg-emerald-900/80 px-2 py-0.5 rounded text-emerald-300 border border-emerald-700 shrink-0">
+                      Ativo
+                    </span>
                   </div>
+                )}
+
+                {/* Collapsible Guidance & Expiration Info (Non-intrusive) */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTokenHelp(!showTokenHelp)}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1.5 cursor-pointer font-medium transition-colors"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{showTokenHelp ? 'Ocultar orientações sobre validade da chave' : 'Como gerar uma chave com validade estendida (1 ano)?'}</span>
+                  </button>
+
+                  {showTokenHelp && (
+                    <div className="mt-2 p-3 bg-slate-900/95 border border-slate-700/80 rounded-lg space-y-2 text-xs text-slate-200 animate-in fade-in shadow-inner">
+                      <strong className="text-white block">Orientações para o Personal Access Token:</strong>
+                      <ol className="list-decimal pl-4 space-y-1.5 text-[11px] text-slate-300">
+                        <li>
+                          Acesse a área de tokens da sua conta no Supabase: <a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noreferrer" className="text-sky-400 hover:underline font-semibold">supabase.com/dashboard/account/tokens</a>.
+                        </li>
+                        <li>
+                          Clique no botão azul <strong>Generate new token</strong>.
+                        </li>
+                        <li>
+                          No campo <strong>Expiration</strong>, selecione o prazo mais longo (ex.: <strong>1 year</strong> ou sem expiração) para evitar que o token expire após poucos dias.
+                        </li>
+                        <li>
+                          Copie o token gerado (inicia com <code className="text-amber-300 font-mono">sbp_</code>) e cole no campo abaixo.
+                        </li>
+                      </ol>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -828,6 +869,24 @@ export default function DatabaseSwitcherModal({
                       {showTokenSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
                   </div>
+
+                  {/* Real-time Inline Token Detection */}
+                  {customTokenInput.trim().startsWith('eyJ') && (
+                    <div className="p-2.5 bg-amber-950/80 border border-amber-500/60 rounded-lg text-xs text-amber-200 flex items-start gap-2 mt-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="text-[11px] leading-relaxed">
+                        <strong className="text-white block">Formato incorreto de chave:</strong>
+                        A chave colada começa com <code className="font-mono text-white">eyJ</code> (chave de API <code className="text-amber-300">anon</code> ou <code className="text-amber-300">service_role</code>). O monitor de métricas precisa do <strong>Personal Access Token (PAT)</strong>, que começa com <code className="font-mono text-amber-300">sbp_</code> e é criado em <a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noreferrer" className="text-sky-400 underline font-semibold">Account Settings &gt; Access Tokens</a>.
+                      </div>
+                    </div>
+                  )}
+
+                  {customTokenInput.trim().startsWith('sbp_') && (
+                    <div className="p-2 bg-sky-950/40 border border-sky-700/40 rounded-lg text-xs text-sky-300 flex items-center gap-2 mt-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                      <span className="text-[11px]">Formato correto de Personal Access Token detectado (<code className="font-mono text-sky-200">sbp_...</code>). Clique em &quot;Salvar e Testar Token&quot; para validar.</span>
+                    </div>
+                  )}
                 </div>
 
                 {tokenSaveSuccess && (

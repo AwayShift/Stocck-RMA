@@ -18,7 +18,7 @@ async function startServer() {
       const body = req.body || {};
       const query = req.query || {};
 
-      const patToken = (
+      let patToken = (
         body.token ||
         query.token ||
         process.env.SUPABASE_MANAGEMENT_TOKEN ||
@@ -28,6 +28,8 @@ async function startServer() {
         process.env.SUPABASE_TOKEN ||
         ""
       ).trim();
+
+      patToken = patToken.replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim();
 
       let ref = (
         body.projectRef ||
@@ -67,6 +69,16 @@ async function startServer() {
         });
       }
 
+      if (patToken.startsWith('eyJ')) {
+        return res.status(400).json({
+          success: false,
+          tokenValid: false,
+          error: 'A chave inserida começa com "eyJ", indicando ser uma chave de API do projeto (anon ou service_role) e não um Personal Access Token. Para métricas oficiais da conta, gere um PAT em supabase.com/dashboard/account/tokens (começa com "sbp_").',
+          projectRef: ref,
+          hasTokenInEnv: true
+        });
+      }
+
       if (!ref) {
         return res.status(400).json({
           success: false,
@@ -83,12 +95,23 @@ async function startServer() {
       };
 
       const projectTestRes = await fetch(`https://api.supabase.com/v1/projects/${ref}`, { headers });
-      if (projectTestRes.status === 401 || projectTestRes.status === 403) {
+      if (projectTestRes.status === 403) {
+        return res.status(403).json({
+          success: false,
+          tokenValid: true,
+          error: `O token é autêntico, porém a conta do Supabase não possui permissão de acesso ao projeto '${ref}'. Verifique se o token foi gerado na mesma conta proprietária deste projeto.`,
+          httpStatus: 403,
+          projectRef: ref,
+          hasTokenInEnv: true
+        });
+      }
+
+      if (projectTestRes.status === 401) {
         return res.status(401).json({
           success: false,
           tokenValid: false,
-          error: "O Token do Supabase é inválido ou expirou (HTTP 401 Unauthorized). Verifique o Personal Access Token (PAT) configurado.",
-          httpStatus: projectTestRes.status,
+          error: "O Personal Access Token (PAT) informado não foi aceito pelo Supabase (HTTP 401 Unauthorized). Verifique se foi copiado integralmente (começa com sbp_) ou se expirou no painel do Supabase.",
+          httpStatus: 401,
           projectRef: ref,
           hasTokenInEnv: true
         });
