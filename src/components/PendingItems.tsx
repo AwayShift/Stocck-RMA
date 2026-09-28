@@ -4197,7 +4197,7 @@ export default function PendingItems({
       {/* RESOLUTION MODAL */}
       {resolvingItem && (
         <div 
-          className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-150 backdrop-blur-sm"
+          className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-slate-950/85"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isSavingResolution) {
               setResolvingItem(null);
@@ -4205,7 +4205,7 @@ export default function PendingItems({
           }}
         >
           <div 
-            className="bg-slate-900 border border-emerald-500/40 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
+            className="bg-slate-900 border border-emerald-500/40 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-4"
             onClick={(e) => e.stopPropagation()}
             id="modal-resolve-pending-item"
           >
