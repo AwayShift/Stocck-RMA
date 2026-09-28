@@ -72,7 +72,7 @@ interface PendingItemsProps {
   units?: TriageUnit[];
   onSavePending: (item: PendingItem) => Promise<void>;
   onDeletePending: (id: string) => Promise<void>;
-  onUpdateStatus: (id: string, status: PendingStatusType) => Promise<void>;
+  onUpdateStatus: (id: string, status: PendingStatusType, resolutionReason?: string) => Promise<void>;
   onTransferToStock: (
     item: PendingItem,
     destination: DestinationSectorType,
@@ -116,6 +116,79 @@ const PRESET_REASONS = [
   'Produto Danificado no Transporte (Avaria)',
   'Outro Motivo'
 ];
+
+export const RESOLUTION_PRESETS = [
+  'Nota Fiscal localizada e anexada ao processo',
+  'Peça de reposição recebida e instalada com sucesso',
+  'Identificação do comprador e pedido confirmada',
+  'Cliente contatado e cancelou a devolução / solicitação',
+  'Produto reembalado e pronto para devolução ao comprador',
+  'Item testado integralmente, nenhum defeito constatado',
+  'Acordo de reembolso concluído junto à plataforma',
+  'Item resolvido administrativamente'
+];
+
+/**
+ * Searches and returns the corresponding stock unit (TriageUnit) linked to a pending item.
+ * Evaluates direct IDs, registration numbers, linked STI, product STI, and customer order number.
+ */
+export const getLinkedStockUnit = (item: PendingItem, stockUnits: TriageUnit[]): TriageUnit | undefined => {
+  if (!stockUnits || stockUnits.length === 0 || !item) return undefined;
+
+  // 1. By direct unit ID or transferred unit ID
+  const directId = item.linkedUnitId || item.transferredUnitId;
+  if (directId) {
+    const found = stockUnits.find(u => u.id === directId);
+    if (found) return found;
+  }
+
+  // 2. By pendingItemId on unit
+  if (item.id) {
+    const foundByPendingId = stockUnits.find(u => u.pendingItemId && u.pendingItemId === item.id);
+    if (foundByPendingId) return foundByPendingId;
+  }
+
+  // 3. By pendingRegistrationNumber on unit
+  if (item.registrationNumber && item.registrationNumber.trim()) {
+    const regUpper = item.registrationNumber.trim().toUpperCase();
+    const foundByReg = stockUnits.find(u => u.pendingRegistrationNumber && u.pendingRegistrationNumber.trim().toUpperCase() === regUpper);
+    if (foundByReg) return foundByReg;
+  }
+
+  // 4. By linkedUnitTrackingCode / STI
+  if (item.linkedUnitTrackingCode && item.linkedUnitTrackingCode.trim()) {
+    const cleanLinkedSti = normalizeStiCode(item.linkedUnitTrackingCode).toLowerCase();
+    const foundByLinkedSti = stockUnits.find(u => normalizeStiCode(u.trackingCode).toLowerCase() === cleanLinkedSti);
+    if (foundByLinkedSti) return foundByLinkedSti;
+  }
+
+  // 5. By trackingCode / STI
+  if (item.trackingCode && item.trackingCode.trim()) {
+    const cleanSti = normalizeStiCode(item.trackingCode).toLowerCase();
+    const foundBySti = stockUnits.find(u => normalizeStiCode(u.trackingCode).toLowerCase() === cleanSti);
+    if (foundBySti) return foundBySti;
+  }
+
+  // 6. By orderNumber (Nº de Pedido)
+  if (item.orderNumber && item.orderNumber.trim()) {
+    const cleanOrder = item.orderNumber.trim().toLowerCase();
+    const foundByOrder = stockUnits.find(u => u.orderNumber && u.orderNumber.trim().toLowerCase() === cleanOrder);
+    if (foundByOrder) return foundByOrder;
+  }
+
+  return undefined;
+};
+
+/**
+ * Checks if a pending item already has an existing unit registered in stock (by link, order number or STI).
+ */
+export const isPendingItemAlreadyInStock = (item: PendingItem, stockUnits: TriageUnit[]): boolean => {
+  if (!item) return false;
+  if (item.transferredToStock) return true;
+  if (item.linkedUnitId || item.transferredUnitId) return true;
+  const linked = getLinkedStockUnit(item, stockUnits);
+  return Boolean(linked);
+};
 
 const PLATFORMS: (PlatformType | 'Outro')[] = [
   'Mercado Livre',
@@ -237,10 +310,17 @@ export default function PendingItems({
   const [formCustomPackageStatus, setFormCustomPackageStatus] = useState('');
   const [formDetailedNotes, setFormDetailedNotes] = useState('');
   const [formStatus, setFormStatus] = useState<PendingStatusType>('Pendente');
+  const [formResolutionReason, setFormResolutionReason] = useState('');
   const [formPhotos, setFormPhotos] = useState<string[]>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Resolution Modal State
+  const [resolvingItem, setResolvingItem] = useState<PendingItem | null>(null);
+  const [resolutionReasonText, setResolutionReasonText] = useState('');
+  const [isSavingResolution, setIsSavingResolution] = useState(false);
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
 
   // Stock Entry integration when creating/saving Pending Item
   const [formAlsoCreateStockEntry, setFormAlsoCreateStockEntry] = useState(false);
@@ -483,7 +563,7 @@ export default function PendingItems({
 
   // Helper to determine if an item is resolved
   const isPendingResolved = (item: PendingItem) => {
-    return item.status === 'Resolvido' || !!item.transferredToStock;
+    return item.status === 'Resolvido' || !!item.transferredToStock || !!item.resolvedAt;
   };
 
   // Filtered & Sorted Items
@@ -507,6 +587,7 @@ export default function PendingItems({
         (item.trackingCode && item.trackingCode.toLowerCase().includes(term)) ||
         (item.orderNumber && item.orderNumber.toLowerCase().includes(term)) ||
         (item.pendingReason && item.pendingReason.toLowerCase().includes(term)) ||
+        (item.resolutionReason && item.resolutionReason.toLowerCase().includes(term)) ||
         (item.detailedNotes && item.detailedNotes.toLowerCase().includes(term)) ||
         (item.platform && item.platform.toLowerCase().includes(term)) ||
         (item.priority && item.priority.toLowerCase().includes(term));
@@ -582,6 +663,7 @@ export default function PendingItems({
     setFormCustomPackageStatus('');
     setFormDetailedNotes('');
     setFormStatus('Pendente');
+    setFormResolutionReason('');
     setFormPhotos([]);
     setFormAlsoCreateStockEntry(false);
     setFormStockDestination('RMA');
@@ -628,6 +710,7 @@ export default function PendingItems({
 
     setFormDetailedNotes(item.detailedNotes || '');
     setFormStatus(item.status || 'Pendente');
+    setFormResolutionReason(item.resolutionReason || '');
     setFormPhotos(item.photos || []);
     setFormAlsoCreateStockEntry(false);
     setFormStockDestination('RMA');
@@ -636,6 +719,36 @@ export default function PendingItems({
     setFormError(null);
     setShowSkuDropdown(false);
     setIsFormModalOpen(true);
+  };
+
+  // Open Resolution Modal
+  const handleInitiateResolve = (item: PendingItem) => {
+    setResolvingItem(item);
+    setResolutionReasonText(item.resolutionReason || '');
+    setResolutionError(null);
+  };
+
+  const handleConfirmResolve = async () => {
+    if (!resolvingItem) return;
+    const cleanReason = resolutionReasonText.trim();
+    if (!cleanReason) {
+      setResolutionError('Por favor, informe o motivo ou justificativa da resolução.');
+      return;
+    }
+    setIsSavingResolution(true);
+    setResolutionError(null);
+    try {
+      await onUpdateStatus(resolvingItem.id, 'Resolvido', cleanReason);
+      setActionSuccess(`Pendência [${resolvingItem.registrationNumber || resolvingItem.sku}] marcada como Resolvida!`);
+      setResolvingItem(null);
+      setResolutionReasonText('');
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: any) {
+      console.error('Erro ao resolver pendência:', err);
+      setResolutionError(err?.message ? `Erro ao atualizar status: ${err.message}` : 'Ocorreu um erro ao resolver a pendência.');
+    } finally {
+      setIsSavingResolution(false);
+    }
   };
 
   // Handle SKU input with autocomplete
@@ -895,6 +1008,22 @@ export default function PendingItems({
         };
       }
 
+      // Check if an existing stock unit matches this item
+      const existingStockUnit = (!createdUnit && !editingItem?.linkedUnitId) ? getLinkedStockUnit({
+        ...editingItem,
+        id: pendingId,
+        sku: finalSku,
+        productName: finalProductName,
+        serialNumber: formSerial.trim(),
+        trackingCode: cleanTracking,
+        orderNumber: formOrderNumber.trim(),
+        registrationNumber: regNumber
+      } as PendingItem, units) : undefined;
+
+      const finalLinkedUnitId = createdUnit ? createdUnit.id : (editingItem?.linkedUnitId || existingStockUnit?.id);
+      const finalLinkedSti = createdUnit ? createdUnit.trackingCode : (editingItem?.linkedUnitTrackingCode || existingStockUnit?.trackingCode);
+      const isTransferred = editingItem ? Boolean(editingItem.transferredToStock) : false;
+
       const itemToSave: PendingItem = {
         id: pendingId,
         registrationNumber: regNumber,
@@ -913,11 +1042,13 @@ export default function PendingItems({
         detailedNotes: formDetailedNotes.trim(),
         status: formStatus,
         photos: formPhotos,
-        linkedUnitId: createdUnit ? createdUnit.id : editingItem?.linkedUnitId,
-        linkedUnitTrackingCode: createdUnit ? createdUnit.trackingCode : editingItem?.linkedUnitTrackingCode,
-        transferredToStock: false,
-        transferredUnitId: createdUnit ? createdUnit.id : editingItem?.transferredUnitId,
+        linkedUnitId: finalLinkedUnitId,
+        linkedUnitTrackingCode: finalLinkedSti,
+        transferredToStock: isTransferred,
+        transferredUnitId: finalLinkedUnitId,
         destinationSectorSuggested: 'RMA',
+        resolutionReason: formStatus === 'Resolvido' ? (formResolutionReason.trim() || editingItem?.resolutionReason || 'Resolvido') : undefined,
+        resolvedAt: formStatus === 'Resolvido' ? (editingItem?.resolvedAt || new Date().toISOString()) : null,
         createdAt: editingItem ? editingItem.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -958,6 +1089,16 @@ export default function PendingItems({
 
   // Open Transfer Modal with rich triage fields matching RmaEntry
   const handleOpenTransferModal = (item: PendingItem) => {
+    if (isPendingItemAlreadyInStock(item, units)) {
+      const linked = getLinkedStockUnit(item, units);
+      const identifier = linked?.orderNumber 
+        ? `pedido "${linked.orderNumber}"` 
+        : (linked?.trackingCode ? `código "${normalizeStiCode(linked.trackingCode)}"` : 'estoque');
+      setActionError(`Este produto já está cadastrado no estoque vinculado ao ${identifier}. Não é permitido liberar novamente.`);
+      setTimeout(() => setActionError(null), 5000);
+      return;
+    }
+
     setItemToTransfer(item);
     setTransferSku(item.sku || '');
     setTransferProductName(item.productName || '');
@@ -996,6 +1137,11 @@ export default function PendingItems({
   // Execute Transfer to Stock with complete triage data
   const handleExecuteTransfer = async () => {
     if (!itemToTransfer) return;
+
+    if (isPendingItemAlreadyInStock(itemToTransfer, units)) {
+      setTransferError('Este produto já está cadastrado no estoque vinculado ao pedido. Não é possível liberar novamente para o estoque.');
+      return;
+    }
 
     if (transferDestination === 'Openbox') {
       const cleanSti = normalizeStiCode(transferSti);
@@ -1578,14 +1724,17 @@ export default function PendingItems({
         /* GRID VIEW */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="pendencias-grid">
           {filteredItems.map((item) => {
-            const isResolved = item.status === 'Resolvido' || item.transferredToStock;
+            const isResolved = item.status === 'Resolvido' || item.transferredToStock || Boolean(item.resolvedAt);
             const prioInfo = getPriorityBadge(item.priority);
+            const linkedUnit = getLinkedStockUnit(item, units);
+            const alreadyInStock = isPendingItemAlreadyInStock(item, units);
+
             return (
               <div
                 key={item.id}
                 className={`pending-card rounded-2xl p-4 flex flex-col justify-between transition-all group ${
                   isResolved
-                    ? 'bg-slate-950/60 border border-slate-800/60 opacity-60 hover:opacity-100 shadow-sm'
+                    ? 'bg-slate-950/60 border border-slate-800/60 opacity-70 hover:opacity-100 shadow-sm'
                     : `bg-slate-900 border border-slate-800 hover:border-slate-700 shadow-lg ${prioInfo.cardBorder} ${prioInfo.cardBg}`
                 }`}
                 id={`card-pendencia-${item.id}`}
@@ -1655,12 +1804,48 @@ export default function PendingItems({
                       }`}>
                         {item.sku || 'SEM SKU'}
                       </span>
-                      {(item.linkedUnitId || item.transferredToStock) && (
-                        <span className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/30 flex items-center gap-1" title="Vinculado a produto no estoque">
+
+                      {/* Clickable Stock Link Badge */}
+                      {linkedUnit ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onNavigateToStock) {
+                              onNavigateToStock(linkedUnit.id);
+                            }
+                          }}
+                          className="font-mono text-[10px] font-bold px-2 py-0.5 rounded border text-emerald-300 bg-emerald-500/15 border-emerald-500/40 hover:bg-emerald-500/30 hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm group/link hover:scale-[1.02]"
+                          title={`Vínculo com o estoque! Clique para ir até o produto/pedido no estoque (${linkedUnit.orderNumber ? `Pedido ${linkedUnit.orderNumber}` : (linkedUnit.trackingCode || 'Estoque')})`}
+                          id={`btn-go-stock-${item.id}`}
+                        >
+                          <Link2 className="w-3 h-3 text-emerald-400 group-hover/link:rotate-45 transition-transform" />
+                          <span>
+                            {linkedUnit.orderNumber 
+                              ? `Pedido: ${linkedUnit.orderNumber}` 
+                              : linkedUnit.trackingCode 
+                              ? `STI: ${normalizeStiCode(linkedUnit.trackingCode).replace(/^STI/i, '')}` 
+                              : 'No Estoque'}
+                          </span>
+                          <MoveRight className="w-3 h-3 text-emerald-400 group-hover/link:translate-x-0.5 transition-transform" />
+                        </button>
+                      ) : (item.linkedUnitId || item.transferredToStock || item.linkedUnitTrackingCode) ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onNavigateToStock) {
+                              onNavigateToStock(item.linkedUnitId || item.transferredUnitId || item.linkedUnitTrackingCode || item.orderNumber);
+                            }
+                          }}
+                          className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Clique para ir até o estoque"
+                        >
                           <LinkIcon className="w-3 h-3 text-emerald-400" />
                           <span>{item.linkedUnitTrackingCode ? `Vinculado (${item.linkedUnitTrackingCode})` : 'Vinculado ao Estoque'}</span>
-                        </span>
-                      )}
+                          <MoveRight className="w-2.5 h-2.5 text-emerald-400" />
+                        </button>
+                      ) : null}
                     </div>
                     <h4 className={`pending-card-title text-sm mt-1.5 line-clamp-2 leading-snug ${
                       isResolved ? 'text-slate-300 font-semibold' : 'text-white font-bold'
@@ -1674,13 +1859,47 @@ export default function PendingItems({
                     {item.trackingCode && (
                       <div className="flex items-center justify-between text-slate-400">
                         <span className="text-slate-500">STI / Rastreio:</span>
-                        <span className="font-mono font-semibold text-slate-300">{normalizeStiCode(item.trackingCode)}</span>
+                        {linkedUnit ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onNavigateToStock) {
+                                onNavigateToStock(linkedUnit.id);
+                              }
+                            }}
+                            className="font-mono font-semibold text-slate-300 hover:text-white hover:underline flex items-center gap-1 cursor-pointer"
+                            title="Clique para abrir este item no Estoque"
+                          >
+                            <span>{normalizeStiCode(item.trackingCode)}</span>
+                            <MoveRight className="w-3 h-3 text-slate-400 shrink-0" />
+                          </button>
+                        ) : (
+                          <span className="font-mono font-semibold text-slate-300">{normalizeStiCode(item.trackingCode)}</span>
+                        )}
                       </div>
                     )}
                     {item.orderNumber && (
                       <div className="flex items-center justify-between text-slate-400">
                         <span className="text-slate-500">Nº Pedido:</span>
-                        <span className="font-mono font-semibold text-sky-400 truncate max-w-[180px]">{item.orderNumber}</span>
+                        {linkedUnit ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onNavigateToStock) {
+                                onNavigateToStock(linkedUnit.id);
+                              }
+                            }}
+                            className="font-mono font-semibold text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 cursor-pointer truncate max-w-[190px]"
+                            title="Clique para ir até este pedido no Estoque"
+                          >
+                            <span className="truncate">{item.orderNumber}</span>
+                            <MoveRight className="w-3 h-3 text-sky-400 shrink-0" />
+                          </button>
+                        ) : (
+                          <span className="font-mono font-semibold text-sky-400 truncate max-w-[180px]">{item.orderNumber}</span>
+                        )}
                       </div>
                     )}
                     {item.serialNumber && (
@@ -1697,16 +1916,40 @@ export default function PendingItems({
                     </div>
                   </div>
 
-                  {/* Pending Reason Banner */}
+                  {/* Pending Reason Banner or Resolution Reason */}
                   {isResolved ? (
-                    <div className="pending-reason-banner-resolved bg-slate-950/60 border border-slate-800/70 p-2.5 rounded-xl mb-3">
-                      <div className="text-[10px] font-semibold uppercase text-slate-400 flex items-center gap-1 mb-0.5">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400/80" />
-                        <span>Motivo (Resolvido)</span>
+                    <div className="pending-reason-banner-resolved bg-emerald-950/40 border border-emerald-500/40 p-3 rounded-xl mb-3 shadow-sm">
+                      <div className="text-[10px] font-bold uppercase text-emerald-400 flex items-center justify-between gap-1 mb-1">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Motivo da Resolução</span>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {item.resolvedAt && (
+                            <span className="text-[9.5px] font-mono text-emerald-300/80 font-normal">
+                              {new Date(item.resolvedAt).toLocaleDateString('pt-BR')}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleInitiateResolve(item);
+                            }}
+                            className="p-1 text-emerald-400 hover:text-emerald-200 hover:bg-emerald-500/20 rounded transition-colors cursor-pointer"
+                            title="Editar motivo da resolução"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-xs text-slate-400 leading-relaxed">
-                        {item.pendingReason}
+                      <p className="text-xs text-emerald-200 font-semibold leading-relaxed">
+                        {item.resolutionReason || 'Pendência sinalizada como resolvida.'}
                       </p>
+                      <div className="mt-2 pt-2 border-t border-emerald-500/20 text-[10.5px] text-slate-400 flex items-start gap-1">
+                        <span className="text-slate-500 font-medium shrink-0">Motivo inicial:</span>
+                        <span className="text-slate-300">{item.pendingReason}</span>
+                      </div>
                     </div>
                   ) : (
                     <div className="pending-reason-banner bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl mb-3">
@@ -1792,15 +2035,32 @@ export default function PendingItems({
                 {/* Card Footer: Transfer / Resolve Actions */}
                 <div className="pending-card-footer pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-2">
                   {item.transferredToStock ? (
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 bg-slate-950/60 px-3 py-1.5 rounded-xl border border-slate-800/80 w-full justify-center">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500/80" />
-                      <span>Transferido para o Estoque</span>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onNavigateToStock) {
+                          onNavigateToStock(linkedUnit?.id || item.transferredUnitId || item.linkedUnitId || item.orderNumber);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/40 hover:bg-emerald-950/70 px-3 py-2 rounded-xl border border-emerald-500/40 w-full justify-center transition-all cursor-pointer shadow-sm group/btn"
+                      title="Item transferido para o estoque. Clique para abrir no Estoque Físico."
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>Transferido para o Estoque (Ver Item)</span>
+                      <MoveRight className="w-3.5 h-3.5 text-emerald-400 group-hover/btn:translate-x-0.5 transition-transform" />
+                    </button>
                   ) : (
                     <>
                       <select
                         value={item.status}
-                        onChange={(e) => onUpdateStatus(item.id, e.target.value as any)}
+                        onChange={(e) => {
+                          const val = e.target.value as PendingStatusType;
+                          if (val === 'Resolvido') {
+                            handleInitiateResolve(item);
+                          } else {
+                            onUpdateStatus(item.id, val);
+                          }
+                        }}
                         className="pending-status-select bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer"
                         title="Alterar status da pendência"
                       >
@@ -1812,15 +2072,33 @@ export default function PendingItems({
                         <option value="Cancelado">Cancelado</option>
                       </select>
 
-                      <button
-                        onClick={() => handleOpenTransferModal(item)}
-                        className="pending-transfer-btn flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-900/20 hover:scale-[1.02]"
-                        title="Liberar item e enviar para o estoque físico"
-                        id={`btn-transfer-${item.id}`}
-                      >
-                        <span>Liberar p/ Estoque</span>
-                        <MoveRight className="w-3.5 h-3.5" />
-                      </button>
+                      {alreadyInStock ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onNavigateToStock) {
+                              onNavigateToStock(linkedUnit?.id || item.linkedUnitId || item.transferredUnitId || item.orderNumber);
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-950/90 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/50 hover:border-emerald-400 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm group/btn"
+                          title="Este produto já possui unidade cadastrada no estoque vinculada ao pedido. Não é possível liberar novamente. Clique para visualizar o produto no estoque."
+                          id={`btn-already-stock-${item.id}`}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="truncate">Já no Estoque (Ver Item)</span>
+                          <MoveRight className="w-3 h-3 text-emerald-400 shrink-0 group-hover/btn:translate-x-0.5 transition-transform" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenTransferModal(item)}
+                          className="pending-transfer-btn flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-900/20 hover:scale-[1.02]"
+                          title="Liberar item e enviar para o estoque físico"
+                          id={`btn-transfer-${item.id}`}
+                        >
+                          <span>Liberar p/ Estoque</span>
+                          <MoveRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -1849,14 +2127,17 @@ export default function PendingItems({
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {filteredItems.map((item) => {
-                  const isResolved = item.status === 'Resolvido' || item.transferredToStock;
+                  const isResolved = item.status === 'Resolvido' || item.transferredToStock || Boolean(item.resolvedAt);
                   const prioInfo = getPriorityBadge(item.priority);
+                  const linkedUnit = getLinkedStockUnit(item, units);
+                  const alreadyInStock = isPendingItemAlreadyInStock(item, units);
+
                   return (
                     <tr 
                       key={item.id} 
                       className={`transition-colors pendencias-table-row ${
                         isResolved 
-                          ? 'bg-slate-950/40 opacity-60 hover:opacity-100 hover:bg-slate-800/30 is-resolved-row' 
+                          ? 'bg-slate-950/40 opacity-70 hover:opacity-100 hover:bg-slate-800/30 is-resolved-row' 
                           : item.priority === 'Urgente'
                           ? 'bg-rose-950/15 hover:bg-rose-950/25 border-l-2 border-l-rose-500 is-urgent-row'
                           : item.priority === 'Alta'
@@ -1870,12 +2151,39 @@ export default function PendingItems({
                           <Hash className="w-3 h-3 text-sky-400" />
                           <span>{item.registrationNumber || '-'}</span>
                         </span>
-                        {(item.linkedUnitId || item.transferredToStock) && (
-                          <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
+                        {linkedUnit ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onNavigateToStock) {
+                                onNavigateToStock(linkedUnit.id);
+                              }
+                            }}
+                            className="text-[10px] text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/30 font-semibold flex items-center gap-1 mt-0.5 cursor-pointer transition-all group/tbllink"
+                            title={`Ir para o produto no estoque (${linkedUnit.orderNumber ? `Pedido ${linkedUnit.orderNumber}` : (linkedUnit.trackingCode || 'Estoque')})`}
+                          >
+                            <Link2 className="w-2.5 h-2.5 group-hover/tbllink:rotate-45 transition-transform" />
+                            <span>{linkedUnit.orderNumber ? `Ped: ${linkedUnit.orderNumber}` : linkedUnit.trackingCode ? `STI: ${normalizeStiCode(linkedUnit.trackingCode).replace(/^STI/i, '')}` : 'No Estoque'}</span>
+                            <MoveRight className="w-2.5 h-2.5 group-hover/tbllink:translate-x-0.5 transition-transform" />
+                          </button>
+                        ) : (item.linkedUnitId || item.transferredToStock || item.linkedUnitTrackingCode) ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onNavigateToStock) {
+                                onNavigateToStock(item.linkedUnitId || item.transferredUnitId || item.linkedUnitTrackingCode || item.orderNumber);
+                              }
+                            }}
+                            className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 mt-0.5 cursor-pointer"
+                            title="Ir para o estoque"
+                          >
                             <LinkIcon className="w-2.5 h-2.5" />
                             <span>{item.linkedUnitTrackingCode ? `Vinculado (${item.linkedUnitTrackingCode})` : 'No Estoque'}</span>
-                          </div>
-                        )}
+                            <MoveRight className="w-2.5 h-2.5" />
+                          </button>
+                        ) : null}
                       </td>
 
                       {/* Status */}
@@ -1909,14 +2217,48 @@ export default function PendingItems({
                       {/* STI / Serial / Pedido */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {item.trackingCode && (
-                          <div className="font-mono text-slate-300 font-semibold text-xs">
-                            STI: {normalizeStiCode(item.trackingCode).replace(/^STI/i, '')}
-                          </div>
+                          linkedUnit ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onNavigateToStock) {
+                                  onNavigateToStock(linkedUnit.id);
+                                }
+                              }}
+                              className="font-mono text-slate-300 hover:text-white hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer"
+                              title="Clique para ir até este item no Estoque"
+                            >
+                              <span>STI: {normalizeStiCode(item.trackingCode).replace(/^STI/i, '')}</span>
+                              <MoveRight className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            </button>
+                          ) : (
+                            <div className="font-mono text-slate-300 font-semibold text-xs">
+                              STI: {normalizeStiCode(item.trackingCode).replace(/^STI/i, '')}
+                            </div>
+                          )
                         )}
                         {item.orderNumber && (
-                          <div className="font-mono text-sky-400 text-[11px] truncate max-w-[150px]">
-                            Ped: {item.orderNumber}
-                          </div>
+                          linkedUnit ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onNavigateToStock) {
+                                  onNavigateToStock(linkedUnit.id);
+                                }
+                              }}
+                              className="font-mono text-sky-400 hover:text-sky-300 hover:underline text-[11px] truncate max-w-[150px] inline-flex items-center gap-1 cursor-pointer"
+                              title="Clique para ir até este pedido no Estoque"
+                            >
+                              <span>Ped: {item.orderNumber}</span>
+                              <MoveRight className="w-2.5 h-2.5 text-sky-400 shrink-0" />
+                            </button>
+                          ) : (
+                            <div className="font-mono text-sky-400 text-[11px] truncate max-w-[150px]">
+                              Ped: {item.orderNumber}
+                            </div>
+                          )
                         )}
                         {item.serialNumber && (
                           <div className="font-mono text-slate-400 text-[11px] truncate max-w-[150px]">
@@ -1944,16 +2286,42 @@ export default function PendingItems({
                         </span>
                       </td>
 
-                      {/* Pending Reason & Return Info */}
+                      {/* Pending Reason & Resolution Info */}
                       <td className="py-3.5 px-4 max-w-[280px]">
+                        {isResolved && item.resolutionReason ? (
+                          <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-lg p-1.5 mb-1.5">
+                            <div className="text-[9.5px] uppercase font-bold text-emerald-400 flex items-center justify-between gap-1">
+                              <span className="flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span>Resolução:</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleInitiateResolve(item);
+                                }}
+                                className="text-emerald-400 hover:text-emerald-200 p-0.5 rounded cursor-pointer"
+                                title="Editar motivo da resolução"
+                              >
+                                <Pencil className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                            <div className="text-xs text-emerald-200 font-semibold line-clamp-2 mt-0.5" title={item.resolutionReason}>
+                              {item.resolutionReason}
+                            </div>
+                          </div>
+                        ) : null}
+
                         <div 
                           className={`text-xs truncate font-bold pendencias-reason-title ${
                             isResolved 
-                              ? 'text-slate-500 dark:text-slate-400 font-medium' 
+                              ? 'text-slate-500 dark:text-slate-400 font-normal' 
                               : 'text-amber-800 dark:text-amber-300 font-bold'
                           }`} 
                           title={item.pendingReason}
                         >
+                          {isResolved && <span className="text-slate-500 font-medium">Orig: </span>}
                           {item.pendingReason}
                         </div>
                         {item.customerReason && (
@@ -2012,7 +2380,23 @@ export default function PendingItems({
                       {/* Actions */}
                       <td className="py-3.5 px-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {!item.transferredToStock && (
+                          {alreadyInStock ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onNavigateToStock) {
+                                  onNavigateToStock(linkedUnit?.id || item.linkedUnitId || item.transferredUnitId || item.orderNumber);
+                                }
+                              }}
+                              className="px-2 py-1 bg-slate-950 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/50 hover:border-emerald-400 rounded-lg text-xs font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                              title="Produto já cadastrado no estoque vinculado ao pedido. Clique para abrir no Estoque."
+                              id={`btn-tbl-already-stock-${item.id}`}
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>No Estoque</span>
+                              <MoveRight className="w-2.5 h-2.5" />
+                            </button>
+                          ) : !item.transferredToStock && (
                             <button
                               onClick={() => handleOpenTransferModal(item)}
                               className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-sm"
@@ -2020,6 +2404,17 @@ export default function PendingItems({
                             >
                               <span>Liberar</span>
                               <MoveRight className="w-3 h-3" />
+                            </button>
+                          )}
+                          {!isResolved && (
+                            <button
+                              type="button"
+                              onClick={() => handleInitiateResolve(item)}
+                              className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
+                              title="Sinalizar como Resolvido"
+                              id={`btn-tbl-resolve-${item.id}`}
+                            >
+                              <CheckSquare className="w-3.5 h-3.5" />
                             </button>
                           )}
                           <button
@@ -2672,17 +3067,19 @@ export default function PendingItems({
               {/* Row 7: Status da Pendência */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Status Inicial
+                  {editingItem ? 'Status da Pendência' : 'Status Inicial'}
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(['Pendente', 'Em Análise', 'Aguardando Peça', 'Aguardando NF'] as PendingStatusType[]).map((st) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                  {(['Pendente', 'Em Análise', 'Aguardando Peça', 'Aguardando NF', 'Resolvido', 'Cancelado'] as PendingStatusType[]).map((st) => (
                     <button
                       type="button"
                       key={st}
                       onClick={() => setFormStatus(st)}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
+                      className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
                         formStatus === st
-                          ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-md'
+                          ? st === 'Resolvido'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-extrabold'
+                            : 'bg-sky-500 text-slate-950 border-sky-400 shadow-md'
                           : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
                       }`}
                     >
@@ -2690,6 +3087,27 @@ export default function PendingItems({
                     </button>
                   ))}
                 </div>
+
+                {/* Se o status selecionado for 'Resolvido', exibe o campo com o Motivo da Resolução */}
+                {formStatus === 'Resolvido' && (
+                  <div className="mt-3 p-3.5 bg-emerald-950/30 border border-emerald-500/40 rounded-xl space-y-2 animate-in fade-in" id="form-resolution-reason-panel">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>Motivo da Resolução *</span>
+                      </label>
+                      <span className="text-[10px] text-slate-400">Inserir manualmente</span>
+                    </div>
+                    <textarea
+                      value={formResolutionReason}
+                      onChange={(e) => setFormResolutionReason(e.target.value)}
+                      rows={3}
+                      placeholder="Insira manualmente o motivo ou justificativa detalhada da resolução..."
+                      className="w-full bg-slate-950 border border-emerald-500/50 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 resize-none transition-colors"
+                      required={formStatus === 'Resolvido'}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Row 8: Fotos / Anexos de Imagens */}
@@ -2919,28 +3337,34 @@ export default function PendingItems({
               )}
 
               {/* Se for edição de item já com vínculo ao estoque, exibe banner informativo */}
-              {editingItem && (editingItem.linkedUnitId || editingItem.linkedUnitTrackingCode) && (
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>
-                      Esta pendência já está vinculada à unidade <strong className="font-mono text-white">{editingItem.linkedUnitTrackingCode || 'no Estoque'}</strong> no Estoque RMA.
-                    </span>
+              {editingItem && (() => {
+                const linked = getLinkedStockUnit(editingItem, units);
+                const isLinked = Boolean(linked || editingItem.linkedUnitId || editingItem.linkedUnitTrackingCode);
+                if (!isLinked) return null;
+                return (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>
+                        Esta pendência já está vinculada à unidade <strong className="font-mono text-white">{linked?.orderNumber ? `Pedido ${linked.orderNumber}` : (linked?.trackingCode || editingItem.linkedUnitTrackingCode || 'no Estoque')}</strong> no Estoque RMA.
+                      </span>
+                    </div>
+                    {onNavigateToStock && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFormModalOpen(false);
+                          onNavigateToStock(linked?.id || editingItem.linkedUnitId || editingItem.orderNumber);
+                        }}
+                        className="px-2.5 py-1 bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold rounded-lg text-[11px] transition-colors cursor-pointer shrink-0 inline-flex items-center gap-1"
+                      >
+                        <span>Ver no Estoque</span>
+                        <MoveRight className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
-                  {onNavigateToStock && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsFormModalOpen(false);
-                        onNavigateToStock(editingItem.linkedUnitId);
-                      }}
-                      className="px-2.5 py-1 bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold rounded-lg text-[11px] transition-colors cursor-pointer shrink-0"
-                    >
-                      Ver no Estoque
-                    </button>
-                  )}
-                </div>
-              )}
+                );
+              })()}
 
               {/* Modal Footer Buttons */}
               <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-end gap-2.5 sticky bottom-0 bg-slate-900 z-10">
@@ -3762,6 +4186,157 @@ export default function PendingItems({
                   <>
                     <Check className="w-4 h-4 stroke-[3]" />
                     <span>Confirmar e Transferir para o Estoque</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESOLUTION MODAL */}
+      {resolvingItem && (
+        <div 
+          className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-150 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSavingResolution) {
+              setResolvingItem(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-slate-900 border border-emerald-500/40 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+            id="modal-resolve-pending-item"
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Sinalizar Pendência como Resolvida</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Preencha o motivo ou justificativa para registrar a conclusão desta pendência.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResolvingItem(null)}
+                disabled={isSavingResolution}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Error banner if any */}
+            {resolutionError && (
+              <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl text-xs text-rose-200 flex items-start gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{resolutionError}</span>
+              </div>
+            )}
+
+            {/* Product Summary Card */}
+            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/25">
+                  {resolvingItem.registrationNumber || 'PENDÊNCIA'}
+                </span>
+                <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  SKU: {resolvingItem.sku || 'SEM SKU'}
+                </span>
+                {resolvingItem.platform && (
+                  <span className="text-[11px] font-semibold text-slate-300">
+                    {resolvingItem.platform}
+                  </span>
+                )}
+              </div>
+
+              <div className="font-semibold text-white truncate" title={resolvingItem.productName}>
+                {resolvingItem.productName}
+              </div>
+
+              {/* Order and STI if present */}
+              {(resolvingItem.orderNumber || resolvingItem.trackingCode) && (
+                <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-900">
+                  {resolvingItem.orderNumber && (
+                    <span className="text-sky-400 font-semibold">
+                      Ped: {resolvingItem.orderNumber}
+                    </span>
+                  )}
+                  {resolvingItem.trackingCode && (
+                    <span className="text-slate-300">
+                      STI: {normalizeStiCode(resolvingItem.trackingCode)}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Original Pending Reason */}
+              <div className="pt-1.5 border-t border-slate-900 text-slate-400 text-[11px]">
+                <span className="font-medium text-amber-400/90">Motivo inicial da pendência: </span>
+                <span className="text-slate-300">{resolvingItem.pendingReason}</span>
+              </div>
+
+              {/* Stock link status if already linked */}
+              {isPendingItemAlreadyInStock(resolvingItem, units) && (
+                <div className="pt-1.5 border-t border-slate-900 text-emerald-400 text-[11px] flex items-center gap-1.5 font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Item com vínculo registrado no Estoque Físico</span>
+                </div>
+              )}
+            </div>
+
+            {/* Form: Motivo da Resolução */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-200">
+                Motivo / Justificativa da Resolução <span className="text-rose-400">*</span>
+              </label>
+              <textarea
+                value={resolutionReasonText}
+                onChange={(e) => {
+                  setResolutionReasonText(e.target.value);
+                  if (resolutionError) setResolutionError(null);
+                }}
+                rows={4}
+                placeholder="Insira manualmente o motivo ou justificativa detalhada da resolução..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors resize-none"
+                autoFocus
+              />
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setResolvingItem(null)}
+                disabled={isSavingResolution}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmResolve}
+                disabled={isSavingResolution || !resolutionReasonText.trim()}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-emerald-900/30 disabled:opacity-50 flex items-center gap-1.5"
+                id="btn-confirm-resolve"
+              >
+                {isSavingResolution ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Salvando...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirmar e Resolver</span>
                   </>
                 )}
               </button>

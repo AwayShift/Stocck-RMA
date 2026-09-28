@@ -571,6 +571,7 @@ ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_to_stock BOOLEAN DEFAULT FALSE;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_unit_id TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS destination_sector_suggested TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolution_reason TEXT;
 CREATE INDEX IF NOT EXISTS idx_pending_items_reg ON pending_items(registration_number);
 CREATE INDEX IF NOT EXISTS idx_triage_units_pending_reg ON triage_units(pending_registration_number);
 
@@ -1542,6 +1543,13 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
     rawNotes = rawNotes.replace(/\[PACKAGE_STATUS:.*?\]\s*/g, '').trim();
     rawNotes = rawNotes ? `${rawNotes}\n${psMeta}` : psMeta;
   }
+  if (p.resolutionReason) {
+    const resMeta = `[RESOLUTION_REASON:${p.resolutionReason}]`;
+    rawNotes = rawNotes.replace(/\[RESOLUTION_REASON:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${resMeta}` : resMeta;
+  } else {
+    rawNotes = rawNotes.replace(/\[RESOLUTION_REASON:.*?\]\s*/g, '').trim();
+  }
 
   const payload: any = {
     id: cleanId,
@@ -1572,6 +1580,9 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
     payload.transferred_to_stock = Boolean(p.transferredToStock);
     payload.transferred_unit_id = unitIdToLink || null;
     payload.destination_sector_suggested = p.destinationSectorSuggested || 'RMA';
+    if (p.resolutionReason) {
+      payload.resolution_reason = p.resolutionReason;
+    }
   }
 
   return payload;
@@ -1620,6 +1631,12 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     if (match && match[1]) packageStatus = match[1].trim();
   }
 
+  let resolutionReason: string | undefined = r.resolution_reason || r.resolutionReason;
+  if (!resolutionReason && decompressedNotes.includes('[RESOLUTION_REASON:')) {
+    const match = decompressedNotes.match(/\[RESOLUTION_REASON:(.*?)\]/);
+    if (match && match[1]) resolutionReason = match[1].trim();
+  }
+
   const cleanNotes = decompressedNotes
     .replace(/\[REG_NUM:.*?\]\s*/g, '')
     .replace(/\[LINKED_UNIT:.*?\]\s*/g, '')
@@ -1627,6 +1644,7 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     .replace(/\[CUSTOMER_REASON:.*?\]\s*/g, '')
     .replace(/\[DEVICE_STATUS:.*?\]\s*/g, '')
     .replace(/\[PACKAGE_STATUS:.*?\]\s*/g, '')
+    .replace(/\[RESOLUTION_REASON:.*?\]\s*/g, '')
     .trim();
 
   return {
@@ -1655,7 +1673,8 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     destinationSectorSuggested: r.destination_sector_suggested || r.destinationSectorSuggested || 'RMA',
     registrationNumber: regNum,
     linkedUnitId: linkedUnitId,
-    linkedUnitTrackingCode: linkedUnitTrackingCode
+    linkedUnitTrackingCode: linkedUnitTrackingCode,
+    resolutionReason: resolutionReason || undefined
   };
 };
 

@@ -78,6 +78,7 @@ import DatabaseSwitcherModal from './components/DatabaseSwitcherModal';
 import { checkAndRunScheduledBackups } from './lib/backupService';
 import { getSupabaseClient } from './lib/supabase';
 import { subscribeToSupabaseAuth, signOutSupabase } from './lib/supabaseAuth';
+import { normalizeStiCode } from './utils/stiFormatter';
 import { ThemeMode, getSavedTheme, applyTheme } from './lib/theme';
 import { initSystemIntegrationsSync } from './lib/integrationsConfigService';
 
@@ -510,14 +511,17 @@ export default function App() {
     setPendingItems(prev => prev.filter(p => p.id !== cleanId));
   };
 
-  const handleUpdatePendingStatus = async (id: string, status: PendingStatusType) => {
-    await updatePendingItemStatus(id, status);
+  const handleUpdatePendingStatus = async (id: string, status: PendingStatusType, resolutionReason?: string) => {
+    await updatePendingItemStatus(id, status, resolutionReason);
     const now = new Date().toISOString();
     setPendingItems(prev => prev.map(p => p.id === id ? { 
       ...p, 
       status, 
       updatedAt: now,
-      ...(status === 'Resolvido' ? { resolvedAt: now } : {})
+      ...(status === 'Resolvido' ? { 
+        resolvedAt: now,
+        ...(resolutionReason !== undefined ? { resolutionReason } : {})
+      } : {})
     } : p));
   };
 
@@ -528,11 +532,15 @@ export default function App() {
   ) => {
     const createdUnit = await transferPendingItemToStock(item, destination, details);
     const now = new Date().toISOString();
+    const resolutionReason = `Liberado e transferido para o estoque (${destination})`;
     setPendingItems(prev => prev.map(p => p.id === item.id ? { 
       ...p, 
       status: 'Resolvido', 
       transferredToStock: true, 
       transferredUnitId: createdUnit.id, 
+      linkedUnitId: createdUnit.id,
+      linkedUnitTrackingCode: createdUnit.trackingCode,
+      resolutionReason,
       resolvedAt: now 
     } : p));
     setTriageUnits(prev => [createdUnit, ...prev]);
@@ -1032,7 +1040,19 @@ export default function App() {
                 userRole={userRole}
                 onNavigateToStock={(unitId?: string) => {
                   if (unitId) {
-                    const match = triageUnits.find(u => u.id === unitId || u.trackingCode === unitId);
+                    const clean = unitId.trim().toLowerCase();
+                    const cleanSti = normalizeStiCode(unitId).toLowerCase();
+                    const match = triageUnits.find(u => 
+                      u.id === unitId || 
+                      (u.trackingCode && (
+                        u.trackingCode.toLowerCase() === clean ||
+                        normalizeStiCode(u.trackingCode).toLowerCase() === cleanSti
+                      )) ||
+                      (u.pendingRegistrationNumber && u.pendingRegistrationNumber.toLowerCase() === clean) ||
+                      (u.pendingItemId && u.pendingItemId === unitId) ||
+                      (u.orderNumber && u.orderNumber.trim().toLowerCase() === clean) ||
+                      (u.serialNumber && u.serialNumber.trim().toLowerCase() === clean)
+                    );
                     if (match) {
                       setSelectedTriageUnit(match);
                     }

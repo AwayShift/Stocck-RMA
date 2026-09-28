@@ -73,6 +73,7 @@ export interface PendingItem {
   registrationNumber?: string; // Número de registro único da pendência (Ex: REG-00001)
   linkedUnitId?: string; // ID da unidade de triagem/estoque físico vinculada
   linkedUnitTrackingCode?: string; // Código STI / Rastreio da unidade vinculada
+  resolutionReason?: string; // Motivo/justificativa da resolução da pendência
 }
 
 export interface TriageUnit {

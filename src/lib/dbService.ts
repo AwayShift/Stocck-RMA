@@ -520,6 +520,7 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
   if (item.linkedUnitTrackingCode !== undefined) payload.linkedUnitTrackingCode = item.linkedUnitTrackingCode;
   if (item.destinationSectorSuggested !== undefined) payload.destinationSectorSuggested = item.destinationSectorSuggested;
   if (item.priority !== undefined) payload.priority = item.priority;
+  if (item.resolutionReason !== undefined) payload.resolutionReason = item.resolutionReason;
 
   updateLocalCacheItem('pending_items', payload);
 
@@ -611,7 +612,11 @@ export const deletePendingItem = async (id: string, sku?: string, name?: string)
   }
 };
 
-export const updatePendingItemStatus = async (id: string, status: PendingStatusType): Promise<void> => {
+export const updatePendingItemStatus = async (
+  id: string, 
+  status: PendingStatusType, 
+  resolutionReason?: string
+): Promise<void> => {
   const now = new Date().toISOString();
   const supabase = getSupabaseClient();
   if (supabase) {
@@ -621,10 +626,32 @@ export const updatePendingItemStatus = async (id: string, status: PendingStatusT
     };
     if (status === 'Resolvido') {
       updateData.resolved_at = now;
+      if (resolutionReason && resolutionReason.trim()) {
+        const cleanReason = resolutionReason.trim();
+        updateData.resolution_reason = cleanReason;
+        try {
+          const { data } = await supabase.from('pending_items').select('detailed_notes').eq('id', id).single();
+          let rawNotes = data?.detailed_notes || '';
+          const resMeta = `[RESOLUTION_REASON:${cleanReason}]`;
+          rawNotes = rawNotes.replace(/\[RESOLUTION_REASON:.*?\]\s*/g, '').trim();
+          rawNotes = rawNotes ? `${rawNotes}\n${resMeta}` : resMeta;
+          updateData.detailed_notes = rawNotes;
+        } catch {}
+      }
     }
-    await supabase.from('pending_items').update(updateData).eq('id', id);
+
+    let { error } = await supabase.from('pending_items').update(updateData).eq('id', id);
+    if (error && (error.message?.includes('resolution_reason') || error.code === 'PGRST204' || error.code === '42703')) {
+      // Retry without separate resolution_reason column (note is already updated with [RESOLUTION_REASON:...])
+      delete updateData.resolution_reason;
+      await supabase.from('pending_items').update(updateData).eq('id', id);
+    }
+
     recordDbOperation('write', 1);
-    createAuditLog('UPDATE_PENDING_STATUS', `Alterou status da pendência ID ${id} para: ${status}`);
+    createAuditLog(
+      'UPDATE_PENDING_STATUS', 
+      `Alterou status da pendência ID ${id} para: ${status}${resolutionReason ? ` (Motivo: ${resolutionReason})` : ''}`
+    );
   }
 };
 
@@ -724,6 +751,7 @@ export const transferPendingItemToStock = async (
     linkedUnitId: newTriageId,
     linkedUnitTrackingCode: finalTracking,
     destinationSectorSuggested: destinationSector,
+    resolutionReason: `Liberado e transferido para o estoque (${destinationSector})`,
     resolvedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
