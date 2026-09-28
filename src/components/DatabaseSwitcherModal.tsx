@@ -57,6 +57,7 @@ import {
   calculateCloudinaryMetricsFromDatabase,
   getLocalCachedCloudinaryMetrics,
   persistSystemIntegrationsToCloud,
+  fetchRemoteSystemIntegrations,
   getLocalSupabaseCalibration,
   setLocalSupabaseCalibration,
   SupabaseCalibration
@@ -185,9 +186,11 @@ export default function DatabaseSwitcherModal({
   const testSupabaseMetrics = async (tokenOverride?: string, calibrationOverride?: SupabaseCalibration | null) => {
     setIsLoadingUsage(true);
     try {
-      const tokenToUse = tokenOverride !== undefined ? tokenOverride : customTokenInput;
+      const activePat = tokenOverride !== undefined 
+        ? tokenOverride 
+        : (customTokenInput.trim() || getSupabaseManagementToken());
       const calToUse = calibrationOverride !== undefined ? calibrationOverride : getLocalSupabaseCalibration();
-      const usage = await fetchOfficialSupabaseUsage(projectRef, tokenToUse || undefined, calToUse);
+      const usage = await fetchOfficialSupabaseUsage(projectRef, activePat || undefined, calToUse);
       setSupabaseUsage(usage);
     } catch (err: any) {
       console.error('Erro ao consultar métricas oficiais do Supabase:', err);
@@ -199,10 +202,18 @@ export default function DatabaseSwitcherModal({
   const handleSaveCustomToken = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = customTokenInput.trim();
+    if (!clean) return;
     saveSupabaseManagementToken(clean);
     setTokenSaveSuccess(true);
     setTimeout(() => setTokenSaveSuccess(false), 3000);
     testSupabaseMetrics(clean);
+  };
+
+  const handleClearCustomToken = async () => {
+    saveSupabaseManagementToken('');
+    setCustomTokenInput('');
+    setTokenSaveSuccess(false);
+    testSupabaseMetrics('');
   };
 
   const handleSaveCalibration = async (e?: React.FormEvent) => {
@@ -260,9 +271,25 @@ export default function DatabaseSwitcherModal({
       setCloudNameInput(currentCloudinary.cloudName);
       setUploadPresetInput(currentCloudinary.uploadPreset);
 
+      // Reload active PAT from multi-tier storage
+      const activePat = getSupabaseManagementToken();
+      setCustomTokenInput(activePat);
+
       testDatabaseConnection();
       refreshCloudinaryMetrics();
-      testSupabaseMetrics();
+
+      // Ensure fresh token from cloud if available
+      fetchRemoteSystemIntegrations().then((remotePayload) => {
+        if (remotePayload?.supabasePat && remotePayload.supabasePat.trim()) {
+          const freshPat = remotePayload.supabasePat.trim();
+          setCustomTokenInput(freshPat);
+          testSupabaseMetrics(freshPat);
+        } else {
+          testSupabaseMetrics(activePat);
+        }
+      }).catch(() => {
+        testSupabaseMetrics(activePat);
+      });
     }
   }, [isOpen]);
 
@@ -283,7 +310,12 @@ export default function DatabaseSwitcherModal({
     }
 
     setDbSaveError(null);
-    const newConfig = { url: cleanUrl, anonKey: cleanAnonKey };
+    const currentConfig = getSupabaseConfig();
+    const newConfig: SupabaseConfig = { 
+      url: cleanUrl, 
+      anonKey: cleanAnonKey,
+      personalAccessToken: currentConfig.personalAccessToken || getSupabaseManagementToken()
+    };
     saveSupabaseConfig(newConfig);
     setSupaConfig(newConfig);
     setDbSaveSuccess(true);
@@ -731,27 +763,54 @@ export default function DatabaseSwitcherModal({
 
             {/* Token Input Drawer */}
             {showTokenInput && (
-              <form onSubmit={handleSaveCustomToken} className="p-3.5 bg-slate-950/90 border border-amber-900/40 rounded-xl space-y-3 animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                    <Key className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Personal Access Token (PAT) do Supabase</span>
-                  </h4>
+              <form onSubmit={handleSaveCustomToken} className="p-4 bg-slate-950/95 border border-amber-900/50 rounded-xl space-y-3.5 animate-in fade-in shadow-xl">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-400">
+                      <Key className="w-3.5 h-3.5" />
+                    </div>
+                    <h4 className="text-xs font-bold text-amber-300">
+                      Personal Access Token (PAT) do Supabase
+                    </h4>
+                  </div>
                   <a
                     href="https://supabase.com/dashboard/account/tokens"
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
+                    className="text-[11px] text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 font-medium"
                   >
-                    <span>Gerar Token no Supabase</span>
+                    <span>Gerar Novo Token no Supabase</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
 
+                {/* Expiration & Persistence Guidance Notice */}
+                <div className="p-3 bg-amber-950/30 border border-amber-700/40 rounded-lg space-y-1.5 text-amber-200">
+                  <div className="flex items-start gap-2">
+                    <HelpCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs leading-relaxed">
+                      <strong className="text-white block mb-0.5">Por que o token pode falhar após algum tempo?</strong>
+                      <p className="text-[11px] text-amber-200/90 leading-normal">
+                        No painel do Supabase, todo Personal Access Token possui um campo de <strong>Expiração (Expiration)</strong>. Se ele foi gerado com prazo curto (como <em>1 dia</em> ou <em>7 dias</em>), o próprio Supabase revoga o token ao fim do período (gerando erro 401).
+                      </p>
+                      <p className="text-[11px] text-amber-200/90 leading-normal mt-1">
+                        <strong>Dica:</strong> Ao gerar o token no Supabase, selecione a validade máxima (ex: <em>1 ano</em> ou <em>sem expiração</em>). O Stocck RMA agora armazena sua chave com tripla camada de redundância (memória local, sessão e nuvem central).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                    Token PAT (sbp_...)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+                      Chave PAT (sbp_...)
+                    </label>
+                    {customTokenInput.trim() && (
+                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded">
+                        Chave salva em cache e nuvem
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <input
                       type={showTokenSecret ? 'text' : 'password'}
@@ -763,7 +822,7 @@ export default function DatabaseSwitcherModal({
                     <button
                       type="button"
                       onClick={() => setShowTokenSecret(!showTokenSecret)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 cursor-pointer"
                       title={showTokenSecret ? 'Ocultar' : 'Mostrar'}
                     >
                       {showTokenSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -774,26 +833,39 @@ export default function DatabaseSwitcherModal({
                 {tokenSaveSuccess && (
                   <div className="p-2 bg-[#1b3326] border border-[#2e5d42] rounded-lg text-xs text-[#3ecf8e] flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-[#3ecf8e] shrink-0" />
-                    <span>Token salvo e testado com sucesso!</span>
+                    <span>Token salvo, replicado e testado com sucesso!</span>
                   </div>
                 )}
 
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowTokenInput(false)}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                  >
-                    Fechar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!customTokenInput.trim() || isLoadingUsage}
-                    className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                  >
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    <span>Salvar e Testar Token</span>
-                  </button>
+                <div className="flex items-center justify-between pt-1">
+                  {customTokenInput.trim() ? (
+                    <button
+                      type="button"
+                      onClick={handleClearCustomToken}
+                      className="px-2.5 py-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-900/40"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Remover Chave</span>
+                    </button>
+                  ) : <div />}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowTokenInput(false)}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!customTokenInput.trim() || isLoadingUsage}
+                      className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      <span>Salvar e Testar Token</span>
+                    </button>
+                  </div>
                 </div>
               </form>
             )}

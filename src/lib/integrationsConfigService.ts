@@ -256,12 +256,14 @@ export const fetchRemoteSystemIntegrations = async (): Promise<RemoteIntegration
     if (data && data.data) {
       const payload = data.data as RemoteIntegrationsPayload;
 
-      // 1. Sync Supabase PAT if remote exists and local is empty or different
+      // 1. Sync Supabase PAT if remote exists
       if (payload.supabasePat && typeof payload.supabasePat === 'string' && payload.supabasePat.trim()) {
-        const localPat = localStorage.getItem('stocckrma_supabase_pat') || '';
-        if (!localPat || localPat.trim() !== payload.supabasePat.trim()) {
-          localStorage.setItem('stocckrma_supabase_pat', payload.supabasePat.trim());
-          window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: payload.supabasePat.trim() } }));
+        const remotePat = payload.supabasePat.trim();
+        const localPat = (localStorage.getItem('stocckrma_supabase_pat') || '').trim();
+        if (!localPat || localPat !== remotePat) {
+          localStorage.setItem('stocckrma_supabase_pat', remotePat);
+          try { sessionStorage.setItem('stocckrma_supabase_pat', remotePat); } catch {}
+          window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: remotePat } }));
         }
       }
 
@@ -333,12 +335,17 @@ const executePersistToCloud = async (
       // Continue with empty payload if query fails
     }
 
-    const currentLocalPat = localStorage.getItem('stocckrma_supabase_pat') || '';
+    const currentLocalPat = (localStorage.getItem('stocckrma_supabase_pat') || '').trim();
     const currentLocalCloudinary = getCloudinaryConfig();
 
-    const mergedPat = updates.supabasePat !== undefined 
-      ? updates.supabasePat.trim() 
-      : (currentPayload.supabasePat || currentLocalPat).trim();
+    // Safe merge: Never erase an existing valid PAT with an empty or whitespace string
+    let mergedPat = (currentPayload.supabasePat || currentLocalPat || '').trim();
+    if (updates.supabasePat !== undefined) {
+      const cleanInput = updates.supabasePat.trim();
+      if (cleanInput) {
+        mergedPat = cleanInput;
+      }
+    }
 
     const mergedCloudinary: CloudinaryConfig = {
       cloudName: (updates.cloudinaryConfig?.cloudName !== undefined ? updates.cloudinaryConfig.cloudName : (currentPayload.cloudinaryConfig?.cloudName || currentLocalCloudinary.cloudName || '')).trim(),
@@ -417,8 +424,11 @@ export const persistSystemIntegrationsToCloud = async (
   // 1. Immediately save to LocalStorage so current device is 100% instant
   if (updates.supabasePat !== undefined) {
     const cleanPat = updates.supabasePat.trim();
-    localStorage.setItem('stocckrma_supabase_pat', cleanPat);
-    window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: cleanPat } }));
+    if (cleanPat) {
+      localStorage.setItem('stocckrma_supabase_pat', cleanPat);
+      try { sessionStorage.setItem('stocckrma_supabase_pat', cleanPat); } catch {}
+      window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: cleanPat } }));
+    }
   }
   if (updates.cloudinaryConfig) {
     saveCloudinaryConfig(updates.cloudinaryConfig);
@@ -466,15 +476,27 @@ export const initSystemIntegrationsSync = async (userEmail?: string): Promise<vo
       const remote = await fetchRemoteSystemIntegrations();
 
       // 2. If cloud didn't have PAT or Cloudinary yet, but local does, auto-seed the cloud
-      const localPat = localStorage.getItem('stocckrma_supabase_pat') || '';
+      const localPat = (localStorage.getItem('stocckrma_supabase_pat') || '').trim();
       const localCloud = getCloudinaryConfig();
 
-      if ((localPat && (!remote || !remote.supabasePat)) || (localCloud.cloudName && (!remote || !remote.cloudinaryConfig?.cloudName))) {
-        await persistSystemIntegrationsToCloud({
-          supabasePat: localPat,
-          cloudinaryConfig: localCloud,
-          userEmail
-        });
+      const seedPayload: {
+        supabasePat?: string;
+        cloudinaryConfig?: Partial<CloudinaryConfig>;
+        userEmail?: string;
+      } = { userEmail };
+
+      let hasSeeding = false;
+      if (localPat && (!remote || !remote.supabasePat)) {
+        seedPayload.supabasePat = localPat;
+        hasSeeding = true;
+      }
+      if (localCloud.cloudName && (!remote || !remote.cloudinaryConfig?.cloudName)) {
+        seedPayload.cloudinaryConfig = localCloud;
+        hasSeeding = true;
+      }
+
+      if (hasSeeding) {
+        await persistSystemIntegrationsToCloud(seedPayload);
       }
 
       // 3. Listen for real-time remote updates from other devices / browsers
@@ -490,11 +512,13 @@ export const initSystemIntegrationsSync = async (userEmail?: string): Promise<vo
             }, (payload: any) => {
               if (payload.new && payload.new.data) {
                 const data = payload.new.data as RemoteIntegrationsPayload;
-                if (data.supabasePat) {
-                  const current = localStorage.getItem('stocckrma_supabase_pat');
-                  if (current !== data.supabasePat) {
-                    localStorage.setItem('stocckrma_supabase_pat', data.supabasePat);
-                    window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: data.supabasePat } }));
+                if (data.supabasePat && typeof data.supabasePat === 'string' && data.supabasePat.trim()) {
+                  const remotePat = data.supabasePat.trim();
+                  const current = (localStorage.getItem('stocckrma_supabase_pat') || '').trim();
+                  if (!current || current !== remotePat) {
+                    localStorage.setItem('stocckrma_supabase_pat', remotePat);
+                    try { sessionStorage.setItem('stocckrma_supabase_pat', remotePat); } catch {}
+                    window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: remotePat } }));
                   }
                 }
                 if (data.cloudinaryConfig?.cloudName) {

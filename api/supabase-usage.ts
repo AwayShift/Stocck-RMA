@@ -80,13 +80,17 @@ export default async function handler(req: any, res: any) {
     // 3. Test token against Supabase Management API
     const projectTestRes = await fetch(`https://api.supabase.com/v1/projects/${ref}`, { headers });
     
+    const isExplicitToken = Boolean(body.token || query.token);
     if (projectTestRes.status === 401 || projectTestRes.status === 403) {
       return res.status(401).json({
         success: false,
         tokenValid: false,
-        error: 'O Token do Supabase é inválido ou expirou (HTTP 401 Unauthorized). Verifique o Personal Access Token (PAT) configurado na Vercel.',
+        error: isExplicitToken 
+          ? 'O Personal Access Token (PAT) informado é inválido ou expirou no Supabase (HTTP 401 Unauthorized). Gere um novo token no painel do Supabase com permissão All Projects.'
+          : 'O Token do Supabase configurado na Vercel (SUPABASE_MANAGEMENT_TOKEN) é inválido ou expirou (HTTP 401 Unauthorized). Verifique o Personal Access Token na Vercel ou insira a Chave PAT no botão acima.',
         httpStatus: projectTestRes.status,
         projectRef: ref,
+        tokenSource: isExplicitToken ? 'manual_input' : 'vercel_environment',
         hasTokenInEnv: true
       });
     }

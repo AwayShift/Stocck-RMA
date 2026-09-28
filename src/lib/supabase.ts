@@ -26,12 +26,34 @@ export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
   personalAccessToken: ((import.meta as any).env?.VITE_SUPABASE_MANAGEMENT_TOKEN as string) || ''
 };
 
+// In-memory runtime cache to guarantee resilience even if browser storage is blocked/sandboxed
+let inMemorySupabasePat: string = '';
+
 export const getSupabaseManagementToken = (): string => {
   try {
+    if (inMemorySupabasePat && inMemorySupabasePat.trim()) {
+      return inMemorySupabasePat.trim();
+    }
     const savedPat = localStorage.getItem(STORAGE_SUPABASE_PAT_KEY);
-    if (savedPat) return savedPat.trim();
+    if (savedPat && savedPat.trim()) {
+      inMemorySupabasePat = savedPat.trim();
+      return inMemorySupabasePat;
+    }
+    const sessionPat = sessionStorage.getItem(STORAGE_SUPABASE_PAT_KEY);
+    if (sessionPat && sessionPat.trim()) {
+      inMemorySupabasePat = sessionPat.trim();
+      return inMemorySupabasePat;
+    }
     const config = getSupabaseConfig();
-    if (config.personalAccessToken) return config.personalAccessToken.trim();
+    if (config.personalAccessToken && config.personalAccessToken.trim()) {
+      inMemorySupabasePat = config.personalAccessToken.trim();
+      return inMemorySupabasePat;
+    }
+    const envToken = ((import.meta as any).env?.VITE_SUPABASE_MANAGEMENT_TOKEN as string) || '';
+    if (envToken && envToken.trim()) {
+      inMemorySupabasePat = envToken.trim();
+      return inMemorySupabasePat;
+    }
   } catch (err) {
     console.error('Error loading Supabase PAT:', err);
   }
@@ -41,8 +63,38 @@ export const getSupabaseManagementToken = (): string => {
 export const saveSupabaseManagementToken = (token: string): void => {
   try {
     const clean = token.trim();
-    localStorage.setItem(STORAGE_SUPABASE_PAT_KEY, clean);
-    window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: clean } }));
+    inMemorySupabasePat = clean;
+
+    if (clean) {
+      localStorage.setItem(STORAGE_SUPABASE_PAT_KEY, clean);
+      try {
+        sessionStorage.setItem(STORAGE_SUPABASE_PAT_KEY, clean);
+      } catch {}
+      
+      // Also save in SupabaseConfig so it is retained across all components
+      const config = getSupabaseConfig();
+      config.personalAccessToken = clean;
+      saveSupabaseConfig(config);
+      
+      window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: clean } }));
+
+      // Persist to central cloud database immediately
+      import('./integrationsConfigService').then(({ persistSystemIntegrationsToCloud }) => {
+        persistSystemIntegrationsToCloud({ supabasePat: clean }).catch(() => {});
+      }).catch(() => {});
+    } else {
+      // Explicit removal
+      localStorage.removeItem(STORAGE_SUPABASE_PAT_KEY);
+      try {
+        sessionStorage.removeItem(STORAGE_SUPABASE_PAT_KEY);
+      } catch {}
+      const config = getSupabaseConfig();
+      if (config.personalAccessToken) {
+        delete config.personalAccessToken;
+        saveSupabaseConfig(config);
+      }
+      window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: '' } }));
+    }
   } catch (err) {
     console.error('Error saving Supabase PAT:', err);
   }
@@ -163,70 +215,7 @@ export const fetchOfficialSupabaseUsage = async (
     fetchError = err?.message || 'Falha ao conectar com o endpoint de métricas (/api/supabase-usage)';
   }
 
-  // 2. Direct client-side Management API fallback if server route is unavailable and token is available
-  if ((!resultJson || !resultJson.success) && token && projectRef) {
-    try {
-      const directRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
 
-      if (directRes.ok) {
-        const projectData = await directRes.json();
-        resultJson = {
-          success: true,
-          tokenValid: true,
-          tokenSource: 'manual_input',
-          project: projectData,
-          dbSizeBytes: 0,
-          egressBytes: activeCalibration?.egressGb ? Math.round(activeCalibration.egressGb * 1024 * 1024 * 1024) : 0,
-          authUsersCount: 1,
-          storageBytes: 0,
-          tables: []
-        };
-      } else if (directRes.status === 401 || directRes.status === 403) {
-        return {
-          isOfficial: false,
-          tokenValid: false,
-          projectRef,
-          error: 'O Token do Supabase configurado é inválido ou expirou (HTTP 401/403). Verifique o Personal Access Token.',
-          egressGb: '0 GB',
-          egressRawBytes: 0,
-          egressLimitGb: '5 GB',
-          egressPercent: 0,
-          databaseSizeGb: '0 GB',
-          databaseSizeRawBytes: 0,
-          databaseSizeLimitGb: '0.5 GB',
-          databaseSizePercent: 0,
-          logIngestionGb: '0 GB',
-          logIngestionRawBytes: 0,
-          logIngestionLimitGb: '1 GB',
-          logIngestionPercent: 0,
-          logQueryGb: '0 GB',
-          logQueryLimitGb: '100 GB',
-          logQueryPercent: 0,
-          storageSizeGb: '0 GB',
-          storageSizeRawBytes: 0,
-          storageLimitGb: '1 GB',
-          storagePercent: 0,
-          mau: 0,
-          mauLimit: 50000,
-          mauPercent: 0,
-          cachedEgressGb: '0 GB',
-          realtimePeakConnections: 0,
-          realtimePeakLimit: 200,
-          realtimeMessages: 0,
-          realtimeMessagesLimit: '2M',
-          edgeFunctionInvocations: 0,
-          edgeFunctionLimit: '500K',
-          ssoUsers: 0,
-          imageTransformations: 0
-        };
-      }
-    } catch {}
-  }
 
   // If both failed or token was reported invalid
   if (!resultJson || !resultJson.success) {
