@@ -658,11 +658,11 @@ export default function BaseCatalog({
                             {product.imageUrl ? (
                               <div className="relative group/thumb">
                                 <img 
-                                  src={getOptimizedThumbnailUrl(product.imageUrl, 80, 80)} 
+                                  src={getOptimizedThumbnailUrl(product.imageUrl, 120, 120)} 
                                   alt={product.name} 
                                   loading="lazy"
                                   decoding="async"
-                                  className="w-10 h-10 object-cover rounded-lg border border-slate-800 group-hover/item:border-sky-500 bg-slate-950 flex-shrink-0 transition-colors" 
+                                  className="w-10 h-10 object-contain p-0.5 rounded-lg border border-slate-700 group-hover/item:border-sky-500 bg-white dark:bg-slate-900 flex-shrink-0 transition-colors" 
                                 />
                               </div>
                             ) : (
@@ -760,16 +760,16 @@ export default function BaseCatalog({
                         {/* Image Thumbnail Header */}
                         <div 
                           onClick={() => setViewingProduct(product)}
-                          className="relative aspect-[4/3] w-full photo-container-clean !bg-white overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-200 dark:border-slate-800 group-hover:border-sky-500/30 transition-colors p-2.5"
+                          className="relative aspect-[4/3] w-full photo-container-clean !bg-white overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-200 dark:border-slate-800 group-hover:border-sky-500/30 transition-colors p-3"
                           style={{ backgroundColor: '#ffffff' }}
                         >
                           {displayPhoto ? (
                             <img 
-                              src={getOptimizedThumbnailUrl(displayPhoto, 280, 210)} 
+                              src={getOptimizedThumbnailUrl(displayPhoto, 400, 400)} 
                               alt={product.name} 
                               loading="lazy"
                               decoding="async"
-                              className="w-full h-full object-contain transition-transform duration-300 ease-out group-hover:scale-110"
+                              className="w-full h-full object-contain transition-transform duration-300 ease-out group-hover:scale-105"
                               referrerPolicy="no-referrer"
                             />
                           ) : (

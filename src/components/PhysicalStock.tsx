@@ -2343,7 +2343,7 @@ export default function PhysicalStock({
                     >
                       {mainPhoto ? (
                         <img 
-                          src={getOptimizedThumbnailUrl(mainPhoto, 280, 210)} 
+                          src={getOptimizedThumbnailUrl(mainPhoto, 400, 400)} 
                           alt={getResolvedUnitProductName(unit, products)} 
                           loading="lazy"
                           decoding="async"

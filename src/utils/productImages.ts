@@ -142,24 +142,34 @@ export function getUnitResolvedPhotos(
 
 /**
  * Returns an ultra-lightweight thumbnail URL for list/table rendering.
- * Automatically leverages Cloudinary CDN transformations (w_*, h_*, c_fill, q_auto, f_auto)
- * to save megabytes of bandwidth and render instantaneously without downloading raw 3MB files.
+ * Automatically leverages Cloudinary CDN transformations (w_*, h_*, c_fit, q_auto, f_auto)
+ * to save megabytes of bandwidth and render instantaneously without downloading raw 3MB files,
+ * while STRICTLY preserving 100% of the product without cropping any edges (no c_fill).
  */
 export function getOptimizedThumbnailUrl(
   url: string | null | undefined,
-  width: number = 120,
-  height: number = 120
+  width: number = 300,
+  height: number = 300
 ): string {
   if (!url) return '';
   if (typeof url !== 'string') return '';
 
   // Cloudinary dynamic URL transformation
   if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
-    // If it already has transformation, return as is or rewrite
-    if (url.includes('/upload/w_') || url.includes('/upload/c_')) {
+    // Dimension sized for crisp rendering on high-DPI screens without cropping
+    const targetSize = Math.max(width, height, 400);
+    const transform = `upload/c_fit,w_${targetSize},h_${targetSize},q_auto,f_auto/`;
+
+    // If URL already contains a legacy c_fill or crop transformation, replace it with non-cropping c_fit
+    if (url.includes('/upload/c_fill') || url.includes('/upload/c_crop') || url.includes('/upload/c_scale')) {
+      return url.replace(/\/upload\/c_[^/]+\//, `/${transform}`);
+    }
+
+    // If it already has non-cropping c_fit or c_limit, return as is
+    if (url.includes('/upload/c_fit') || url.includes('/upload/c_limit') || url.includes('/upload/c_pad')) {
       return url;
     }
-    const transform = `upload/c_fill,w_${width},h_${height},q_auto,f_auto/`;
+
     return url.replace('/upload/', `/${transform}`);
   }
 
