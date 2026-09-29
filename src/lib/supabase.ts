@@ -1103,6 +1103,28 @@ export const setHasPendingExtendedCols = (supported: boolean): void => {
   } catch {}
 };
 
+const STORAGE_FEAT_PENDING_RESOLUTION_REASON_COL = 'stocckrma_feat_pending_resolution_reason_col';
+let memoryHasPendingResolutionReasonCol: boolean | null = null;
+
+export const getHasPendingResolutionReasonCol = (): boolean => {
+  if (memoryHasPendingResolutionReasonCol !== null) return memoryHasPendingResolutionReasonCol;
+  try {
+    const val = localStorage.getItem(STORAGE_FEAT_PENDING_RESOLUTION_REASON_COL);
+    if (val === 'true') memoryHasPendingResolutionReasonCol = true;
+    else memoryHasPendingResolutionReasonCol = false;
+  } catch {
+    memoryHasPendingResolutionReasonCol = false;
+  }
+  return memoryHasPendingResolutionReasonCol;
+};
+
+export const setHasPendingResolutionReasonCol = (supported: boolean): void => {
+  memoryHasPendingResolutionReasonCol = supported;
+  try {
+    localStorage.setItem(STORAGE_FEAT_PENDING_RESOLUTION_REASON_COL, supported ? 'true' : 'false');
+  } catch {}
+};
+
 const STORAGE_FEAT_TRIAGE_CREATED_BY_COL = 'stocckrma_feat_triage_created_by_col';
 let memoryHasTriageCreatedByCol: boolean | null = null;
 
@@ -1580,7 +1602,7 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
     payload.transferred_to_stock = Boolean(p.transferredToStock);
     payload.transferred_unit_id = unitIdToLink || null;
     payload.destination_sector_suggested = p.destinationSectorSuggested || 'RMA';
-    if (p.resolutionReason) {
+    if (p.resolutionReason && getHasPendingResolutionReasonCol()) {
       payload.resolution_reason = p.resolutionReason;
     }
   }

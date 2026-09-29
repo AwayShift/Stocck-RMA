@@ -37,6 +37,8 @@ import {
   getHasPendingExtendedCols,
   getHasPendingRegistrationCol,
   setHasPendingRegistrationCol,
+  getHasPendingResolutionReasonCol,
+  setHasPendingResolutionReasonCol,
   getHasTriagePendingCols,
   setHasTriagePendingCols,
   getHasTriageTransferCols,
@@ -546,9 +548,13 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
         error.message?.includes('resolved_at') ||
         error.message?.includes('transferred_') ||
         error.message?.includes('destination_sector_suggested') ||
-        error.message?.includes('created_by')
+        error.message?.includes('created_by') ||
+        error.message?.includes('resolution_reason')
       ) {
         setHasPendingExtendedCols(false);
+        if (error.message?.includes('resolution_reason')) {
+          setHasPendingResolutionReasonCol(false);
+        }
       }
 
       // Safe guaranteed fallback with base columns.
@@ -617,40 +623,85 @@ export const updatePendingItemStatus = async (
   status: PendingStatusType, 
   resolutionReason?: string
 ): Promise<void> => {
+  const cleanId = (id || '').trim();
+  if (!cleanId) return;
+
   const now = new Date().toISOString();
+  const cachedPending = getCachedPendingItems();
+  const existingItem = cachedPending.find(p => p.id === cleanId);
+
+  // 1. Immediately update in-memory cache and localStorage with instant cross-tab sync (0ms)
+  if (existingItem) {
+    const updatedItem: PendingItem = {
+      ...existingItem,
+      status,
+      updatedAt: now,
+      ...(status === 'Resolvido' ? {
+        resolvedAt: now,
+        resolutionReason: resolutionReason?.trim() || existingItem.resolutionReason
+      } : {})
+    };
+    updateLocalCacheItem('pending_items', updatedItem);
+  }
+
+  // 2. Persist to Supabase with resilient schema fallback
   const supabase = getSupabaseClient();
   if (supabase) {
+    let rawNotes = existingItem?.detailedNotes || '';
+    if (status === 'Resolvido' && resolutionReason && resolutionReason.trim()) {
+      const cleanReason = resolutionReason.trim();
+      const resMeta = `[RESOLUTION_REASON:${cleanReason}]`;
+      rawNotes = rawNotes.replace(/\[RESOLUTION_REASON:.*?\]\s*/g, '').trim();
+      rawNotes = rawNotes ? `${rawNotes}\n${resMeta}` : resMeta;
+    }
+
     const updateData: any = {
       status,
       updated_at: now
     };
+
+    if (rawNotes) {
+      updateData.detailed_notes = rawNotes;
+    }
+
     if (status === 'Resolvido') {
-      updateData.resolved_at = now;
-      if (resolutionReason && resolutionReason.trim()) {
-        const cleanReason = resolutionReason.trim();
-        updateData.resolution_reason = cleanReason;
-        try {
-          const { data } = await supabase.from('pending_items').select('detailed_notes').eq('id', id).single();
-          let rawNotes = data?.detailed_notes || '';
-          const resMeta = `[RESOLUTION_REASON:${cleanReason}]`;
-          rawNotes = rawNotes.replace(/\[RESOLUTION_REASON:.*?\]\s*/g, '').trim();
-          rawNotes = rawNotes ? `${rawNotes}\n${resMeta}` : resMeta;
-          updateData.detailed_notes = rawNotes;
-        } catch {}
+      if (getHasPendingExtendedCols() !== false) {
+        updateData.resolved_at = now;
+      }
+      if (resolutionReason && resolutionReason.trim() && getHasPendingResolutionReasonCol()) {
+        updateData.resolution_reason = resolutionReason.trim();
       }
     }
 
-    let { error } = await supabase.from('pending_items').update(updateData).eq('id', id);
-    if (error && (error.message?.includes('resolution_reason') || error.code === 'PGRST204' || error.code === '42703')) {
-      // Retry without separate resolution_reason column (note is already updated with [RESOLUTION_REASON:...])
-      delete updateData.resolution_reason;
-      await supabase.from('pending_items').update(updateData).eq('id', id);
+    let { error } = await supabase.from('pending_items').update(updateData).eq('id', cleanId);
+    if (error) {
+      console.warn('Supabase update pending_items status warning, executing safe fallback:', error);
+      if (error.message?.includes('resolution_reason')) {
+        setHasPendingResolutionReasonCol(false);
+        delete updateData.resolution_reason;
+      }
+      if (
+        error.message?.includes('resolved_at') || 
+        error.code === 'PGRST204' || 
+        error.code === '42703'
+      ) {
+        setHasPendingExtendedCols(false);
+        delete updateData.resolved_at;
+        delete updateData.resolution_reason;
+      }
+      const retryRes = await supabase.from('pending_items').update(updateData).eq('id', cleanId);
+      if (retryRes.error) {
+        // Safe minimal fallback: only update status and detailed_notes
+        const minimalUpdate: any = { status };
+        if (rawNotes) minimalUpdate.detailed_notes = rawNotes;
+        await supabase.from('pending_items').update(minimalUpdate).eq('id', cleanId);
+      }
     }
 
     recordDbOperation('write', 1);
     createAuditLog(
       'UPDATE_PENDING_STATUS', 
-      `Alterou status da pendência ID ${id} para: ${status}${resolutionReason ? ` (Motivo: ${resolutionReason})` : ''}`
+      `Alterou status da pendência ID ${cleanId} para: ${status}${resolutionReason ? ` (Motivo: ${resolutionReason})` : ''}`
     );
   }
 };
