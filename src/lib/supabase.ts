@@ -1220,9 +1220,12 @@ export const getTriageColumns = (): string => {
 
 export const getPendingColumns = (): string => {
   if (getHasPendingExtendedCols() === false) {
+    if (getHasPendingRegistrationCol() !== false) {
+      return 'id, registration_number, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, status, priority, created_by, created_at, updated_at';
+    }
     return 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, status, priority, created_by, created_at, updated_at';
   }
-  return 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
+  return 'id, registration_number, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, linked_unit_id, linked_unit_tracking_code, resolution_reason, created_at, updated_at, resolved_at';
 };
 
 export const mapTriageUnitToSupabase = (u: TriageUnit) => {
@@ -1623,14 +1626,14 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     if (match && match[1]) regNum = match[1].trim();
   }
 
-  let linkedUnitId: string | undefined = r.transferred_unit_id || r.transferredUnitId;
+  let linkedUnitId: string | undefined = r.linked_unit_id || r.linkedUnitId || r.transferred_unit_id || r.transferredUnitId;
   if (!linkedUnitId && decompressedNotes.includes('[LINKED_UNIT:')) {
     const match = decompressedNotes.match(/\[LINKED_UNIT:(.*?)\]/);
     if (match && match[1]) linkedUnitId = match[1].trim();
   }
 
-  let linkedUnitTrackingCode: string | undefined = undefined;
-  if (decompressedNotes.includes('[LINKED_STI:')) {
+  let linkedUnitTrackingCode: string | undefined = r.linked_unit_tracking_code || r.linkedUnitTrackingCode;
+  if (!linkedUnitTrackingCode && decompressedNotes.includes('[LINKED_STI:')) {
     const match = decompressedNotes.match(/\[LINKED_STI:(.*?)\]/);
     if (match && match[1]) linkedUnitTrackingCode = match[1].trim();
   }

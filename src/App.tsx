@@ -336,7 +336,7 @@ export default function App() {
       if (Array.isArray(prodList) && prodList.length > 0) setProducts(prodList);
       if (Array.isArray(triageList) && triageList.length > 0) setTriageUnits(triageList);
       if (Array.isArray(inflowList) && inflowList.length > 0) setDailyInflows(inflowList);
-      if (Array.isArray(pendingList) && pendingList.length > 0) setPendingItems(pendingList);
+      if (Array.isArray(pendingList)) setPendingItems(pendingList);
     } catch (e) {
       // Silent background delta sync
     }
@@ -371,7 +371,23 @@ export default function App() {
       } else if (event.collection === 'daily_inflows') {
         setDailyInflows(getCachedDailyInflows());
       } else if (event.collection === 'pending_items') {
-        setPendingItems(getCachedPendingItems());
+        if (event.action === 'remove' && event.id) {
+          setPendingItems(prev => prev.filter(p => p.id !== event.id && p.registrationNumber !== event.id));
+        } else if (event.action === 'update' && event.item) {
+          setPendingItems(prev => {
+            const idx = prev.findIndex(p => p.id === event.item.id || (p.registrationNumber && event.item.registrationNumber && p.registrationNumber === event.item.registrationNumber));
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = event.item;
+              return next;
+            }
+            return [event.item, ...prev];
+          });
+        } else if (event.action === 'full' && Array.isArray(event.items)) {
+          setPendingItems(event.items);
+        } else {
+          setPendingItems([...getCachedPendingItems()]);
+        }
       }
     });
 
@@ -382,7 +398,7 @@ export default function App() {
         if (e.key.includes('product')) setProducts(getCachedBaseProducts());
         if (e.key.includes('triage')) setTriageUnits(getCachedTriageUnits());
         if (e.key.includes('inflow')) setDailyInflows(getCachedDailyInflows());
-        if (e.key.includes('pending')) setPendingItems(getCachedPendingItems());
+        if (e.key.includes('pending')) setPendingItems([...getCachedPendingItems()]);
       }
     };
     window.addEventListener('storage', handleStorage);
@@ -397,12 +413,18 @@ export default function App() {
     };
   }, [user?.id]);
 
-  // 2. Light delta sync on internal tab switch with 60s cooldown (avoid spamming queries during fast navigation)
+  // 2. Immediate sync on opening 'pending' tab, throttled delta sync on others
   useEffect(() => {
     if (!user) return;
-    const now = Date.now();
-    if (now - lastDeltaSyncTimeRef.current >= 60000) {
-      refreshIncrementalData();
+    if (activeTab === 'pending') {
+      syncPendingItemsIncrementally(true).then((items) => {
+        if (Array.isArray(items)) setPendingItems(items);
+      }).catch(() => {});
+    } else {
+      const now = Date.now();
+      if (now - lastDeltaSyncTimeRef.current >= 60000) {
+        refreshIncrementalData();
+      }
     }
   }, [activeTab, refreshIncrementalData, user]);
 
@@ -506,9 +528,10 @@ export default function App() {
   const handleDeletePendingItem = async (id: string) => {
     const cleanId = (id || '').trim();
     if (!cleanId) return;
-    const target = pendingItems.find(p => p.id === cleanId);
-    await deletePendingItem(cleanId, target?.sku, target?.productName);
-    setPendingItems(prev => prev.filter(p => p.id !== cleanId));
+    const target = pendingItems.find(p => p.id === cleanId || p.registrationNumber === cleanId);
+    const idToDelete = target?.id || cleanId;
+    setPendingItems(prev => prev.filter(p => p.id !== cleanId && p.id !== idToDelete && p.registrationNumber !== cleanId));
+    await deletePendingItem(idToDelete, target?.sku, target?.productName);
   };
 
   const handleUpdatePendingStatus = async (id: string, status: PendingStatusType, resolutionReason?: string) => {
@@ -1038,6 +1061,10 @@ export default function App() {
                   setActiveTab('rma');
                 }}
                 userRole={userRole}
+                onRefreshPending={async () => {
+                  const list = await syncPendingItemsIncrementally(true);
+                  if (Array.isArray(list)) setPendingItems(list);
+                }}
                 onNavigateToStock={(unitId?: string) => {
                   if (unitId) {
                     const clean = unitId.trim().toLowerCase();

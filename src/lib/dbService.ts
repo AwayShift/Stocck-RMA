@@ -441,14 +441,15 @@ export const subscribePendingItems = (
         if (errorCallback) errorCallback(err);
       });
 
-    const channel = supabase.channel('realtime_pending_items')
+    const channelId = `realtime_pending_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const channel = supabase.channel(channelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_items' }, (payload) => {
         const updatedList = handleRealtimePendingItemEvent(payload.eventType, payload);
         callback(updatedList);
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          syncPendingItemsIncrementally().then(callback).catch(() => {});
+          syncPendingItemsIncrementally(true).then(callback).catch(() => {});
         }
       });
     return () => {
@@ -608,10 +609,13 @@ export const deletePendingItem = async (id: string, sku?: string, name?: string)
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    const { error } = await supabase.from('pending_items').delete().eq('id', cleanId);
+    const { error } = await supabase.from('pending_items').delete().or(`id.eq.${cleanId},registration_number.eq.${cleanId}`);
     if (error) {
-      console.error('Supabase delete pending_items error:', error);
-      throw new Error(`Falha ao excluir item em pendência no Supabase: ${error.message}`);
+      const fallback = await supabase.from('pending_items').delete().eq('id', cleanId);
+      if (fallback.error) {
+        console.error('Supabase delete pending_items error:', fallback.error);
+        throw new Error(`Falha ao excluir item em pendência no Supabase: ${fallback.error.message}`);
+      }
     }
     recordDbOperation('delete', 1);
     createAuditLog('DELETE_PENDING_ITEM', `Excluiu item em pendência SKU: ${sku || cleanId} ${name ? `- ${name}` : ''}`);

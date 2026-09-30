@@ -150,7 +150,10 @@ if (crossTabBus) {
         persistToStorage(CACHE_KEY_DAILY_INFLOWS, list);
       } else if (msg.collection === 'pending_items') {
         const list = [...(memoryPendingItems || loadFromStorage<PendingItem>(CACHE_KEY_PENDING_ITEMS) || [])];
-        const idx = list.findIndex(p => p.id === msg.item.id);
+        const idx = list.findIndex(
+          p => p.id === msg.item.id || 
+            (p.registrationNumber && msg.item.registrationNumber && p.registrationNumber === msg.item.registrationNumber)
+        );
         if (idx >= 0) list[idx] = msg.item;
         else list.unshift(msg.item);
         memoryPendingItems = list;
@@ -170,9 +173,25 @@ if (crossTabBus) {
         memoryDailyInflows = list;
         persistToStorage(CACHE_KEY_DAILY_INFLOWS, list);
       } else if (msg.collection === 'pending_items') {
-        const list = (memoryPendingItems || loadFromStorage<PendingItem>(CACHE_KEY_PENDING_ITEMS) || []).filter(p => p.id !== msg.id);
+        const list = (memoryPendingItems || loadFromStorage<PendingItem>(CACHE_KEY_PENDING_ITEMS) || []).filter(
+          p => p.id !== msg.id && p.registrationNumber !== msg.id
+        );
         memoryPendingItems = list;
         persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
+      }
+    } else if (msg.action === 'full' && Array.isArray(msg.items)) {
+      if (msg.collection === 'pending_items') {
+        memoryPendingItems = msg.items;
+        persistToStorage(CACHE_KEY_PENDING_ITEMS, msg.items);
+      } else if (msg.collection === 'products') {
+        memoryProducts = msg.items;
+        persistToStorage(CACHE_KEY_PRODUCTS, msg.items);
+      } else if (msg.collection === 'triage_units') {
+        memoryTriageUnits = msg.items;
+        persistToStorage(CACHE_KEY_TRIAGE_UNITS, msg.items);
+      } else if (msg.collection === 'daily_inflows') {
+        memoryDailyInflows = msg.items;
+        persistToStorage(CACHE_KEY_DAILY_INFLOWS, msg.items);
       }
     }
 
@@ -640,14 +659,14 @@ export const syncPendingItemsIncrementally = async (
   if (!supabase) return getCachedPendingItems();
 
   const currentCached = getCachedPendingItems();
-  const lastSync = syncMeta.lastSyncPendingItems;
   const queryStartTime = new Date().toISOString();
 
-  if (forceFull || currentCached.length === 0 || !lastSync) {
+  try {
     let { data, error } = await supabase
       .from('pending_items')
       .select(getPendingColumns())
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(500);
 
     if (error) {
       setHasPendingExtendedCols(false);
@@ -655,7 +674,8 @@ export const syncPendingItemsIncrementally = async (
       const safeFallback = await supabase
         .from('pending_items')
         .select(getPendingColumns())
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(500);
       if (!safeFallback.error && safeFallback.data) {
         data = safeFallback.data;
         error = null;
@@ -663,98 +683,59 @@ export const syncPendingItemsIncrementally = async (
         const starFallback = await supabase
           .from('pending_items')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(500);
         data = starFallback.data;
         error = starFallback.error;
       }
     }
 
     if (error) {
-      console.error('Error fetching full pending items:', error);
+      console.error('Error fetching pending items from Supabase:', error);
       return currentCached;
     }
 
-    if (data) {
-      const mapped = data.map(mapSupabaseToPendingItem);
-      memoryPendingItems = mapped;
-      persistToStorage(CACHE_KEY_PENDING_ITEMS, mapped);
+    if (data && Array.isArray(data)) {
+      const serverItems = data.map(mapSupabaseToPendingItem);
+      
+      let merged: PendingItem[];
+      if (serverItems.length < 500) {
+        // We retrieved 100% of all pending items from PostgreSQL!
+        // Any item in currentCached that is not in serverItems has been deleted in Supabase.
+        merged = serverItems;
+      } else {
+        // If there are 500+ items, retain older cached items beyond the 500 window
+        const serverIds = new Set(serverItems.map(p => p.id));
+        const oldestServerCreatedAt = serverItems[serverItems.length - 1]?.createdAt || '';
+        const olderCached = currentCached.filter(p => {
+          if (!p || !p.id) return false;
+          if (serverIds.has(p.id)) return false;
+          const pCreatedAt = p.createdAt || '';
+          return pCreatedAt && pCreatedAt < oldestServerCreatedAt;
+        });
+        merged = [...serverItems, ...olderCached];
+      }
+
+      merged.sort((a, b) => {
+        const tA = new Date(a.createdAt || 0).getTime() || 0;
+        const tB = new Date(b.createdAt || 0).getTime() || 0;
+        return tB - tA;
+      });
+
+      memoryPendingItems = merged;
+      persistToStorage(CACHE_KEY_PENDING_ITEMS, merged);
       syncMeta.lastSyncPendingItems = queryStartTime;
       saveMetadata();
-      return mapped;
+
+      // Broadcast full sync to other open tabs in the same browser
+      broadcastCrossTabMutation('pending_items', 'full', { items: merged });
+
+      return merged;
     }
+
     return currentCached;
-  }
-
-  try {
-    const safeSyncTimestamp = lastSync
-      ? new Date(Math.max(0, new Date(lastSync).getTime() - SYNC_SAFETY_BUFFER_MS)).toISOString()
-      : null;
-
-    let incomingData: any[] = [];
-
-    if (safeSyncTimestamp) {
-      const updatedRes = await supabase
-        .from('pending_items')
-        .select(getPendingColumns())
-        .or(`updated_at.gt.${safeSyncTimestamp},created_at.gt.${safeSyncTimestamp}`)
-        .order('updated_at', { ascending: false })
-        .limit(500);
-
-      if (updatedRes.data && Array.isArray(updatedRes.data)) {
-        incomingData.push(...updatedRes.data);
-      } else if (updatedRes.error) {
-        setHasPendingExtendedCols(false);
-        const safeFallback = await supabase
-          .from('pending_items')
-          .select(getPendingColumns())
-          .gt('updated_at', safeSyncTimestamp || lastSync)
-          .order('updated_at', { ascending: false })
-          .limit(500);
-        if (safeFallback.data && Array.isArray(safeFallback.data)) {
-          incomingData.push(...safeFallback.data);
-        }
-      }
-    } else {
-      const initialRes = await supabase
-        .from('pending_items')
-        .select(getPendingColumns())
-        .order('created_at', { ascending: false })
-        .limit(100);
-      if (initialRes.data && Array.isArray(initialRes.data)) {
-        incomingData.push(...initialRes.data);
-      }
-    }
-
-    const itemMap = new Map<string, PendingItem>();
-
-    // 1. Always retain all cached pending items (never drop due to unpaginated checks)
-    currentCached.forEach(p => {
-      if (p && p.id) {
-        itemMap.set(p.id, p);
-      }
-    });
-
-    // 2. Merge all new, recent, and updated pending items
-    incomingData.forEach(r => {
-      if (r && r.id) {
-        const item = mapSupabaseToPendingItem(r);
-        itemMap.set(item.id, item);
-      }
-    });
-
-    const merged = Array.from(itemMap.values()).sort((a, b) => {
-      const tA = new Date(a.createdAt || 0).getTime() || 0;
-      const tB = new Date(b.createdAt || 0).getTime() || 0;
-      return tB - tA;
-    });
-
-    memoryPendingItems = merged;
-    persistToStorage(CACHE_KEY_PENDING_ITEMS, merged);
-    syncMeta.lastSyncPendingItems = queryStartTime;
-    saveMetadata();
-    return merged;
   } catch (err) {
-    console.warn('Incremental sync exception for pending items:', err);
+    console.warn('Sync exception for pending items:', err);
     return currentCached;
   }
 };
@@ -881,17 +862,31 @@ export const handleRealtimePendingItemEvent = (
   const list = [...current];
 
   if (eventType === 'DELETE') {
-    const oldId = payload.old?.id;
-    const filtered = list.filter(p => p.id !== oldId);
+    const oldId = payload.old?.id || payload.old?.registration_number;
+    let filtered = list;
+    if (oldId) {
+      filtered = list.filter(p => p.id !== oldId && p.registrationNumber !== oldId);
+    }
     memoryPendingItems = filtered;
     persistToStorage(CACHE_KEY_PENDING_ITEMS, filtered);
     if (oldId) broadcastCrossTabMutation('pending_items', 'remove', { id: oldId });
+
+    // If payload.old is empty or missing ID (e.g. Supabase RLS without full replica identity),
+    // trigger immediate authoritative sync to reconcile the active queue
+    if (!oldId) {
+      setTimeout(() => {
+        syncPendingItemsIncrementally(true).catch(() => {});
+      }, 50);
+    }
     return filtered;
   }
 
   if (eventType === 'INSERT' || eventType === 'UPDATE') {
     const newItem = mapSupabaseToPendingItem(payload.new);
-    const existingIndex = list.findIndex(p => p.id === newItem.id);
+    const existingIndex = list.findIndex(
+      p => p.id === newItem.id || 
+        (p.registrationNumber && newItem.registrationNumber && p.registrationNumber === newItem.registrationNumber)
+    );
     if (existingIndex >= 0) {
       list[existingIndex] = newItem;
     } else {
@@ -976,7 +971,7 @@ export const removeLocalCacheItem = (
     memoryDailyInflows = list;
     persistToStorage(CACHE_KEY_DAILY_INFLOWS, list);
   } else if (collectionName === 'pending_items') {
-    const list = getCachedPendingItems().filter(p => p.id !== cleanId);
+    const list = getCachedPendingItems().filter(p => p.id !== cleanId && p.registrationNumber !== cleanId);
     memoryPendingItems = list;
     persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
   }

@@ -43,7 +43,8 @@ import {
   Barcode,
   Link2,
   Calendar,
-  Sparkles
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 import { 
   PendingItem, 
@@ -57,6 +58,7 @@ import {
 import { ImageZoomModal } from './ImageZoomModal';
 import { PlatformSelector } from './PlatformSelector';
 import { uploadFileToStorage, saveTriageUnit } from '../lib/dbService';
+import { syncPendingItemsIncrementally } from '../lib/syncCacheService';
 import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
 import { 
   generatePendingRegistrationNumber, 
@@ -103,6 +105,7 @@ interface PendingItemsProps {
   userRole?: string | null;
   onNavigateToStock?: (unitId?: string) => void;
   enableSpreadsheetExport?: boolean;
+  onRefreshPending?: () => Promise<void>;
 }
 
 const PRESET_REASONS = [
@@ -218,7 +221,8 @@ export default function PendingItems({
   onNavigateToRmaWithPending,
   userRole,
   onNavigateToStock,
-  enableSpreadsheetExport = true
+  enableSpreadsheetExport = true,
+  onRefreshPending
 }: PendingItemsProps) {
   // Filters & State
   const [searchTerm, setSearchTerm] = useState('');
@@ -226,6 +230,25 @@ export default function PendingItems({
   const [platformFilter, setPlatformFilter] = useState<string>('Todas');
   const [priorityFilter, setPriorityFilter] = useState<'Todas' | PendingPriorityType>('Todas');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (onRefreshPending) {
+        await onRefreshPending();
+      } else {
+        await syncPendingItemsIncrementally(true);
+      }
+      setActionSuccess('Pendências sincronizadas com sucesso!');
+      setTimeout(() => setActionSuccess(null), 3500);
+    } catch (err: any) {
+      setActionError('Erro ao sincronizar pendências.');
+      setTimeout(() => setActionError(null), 3500);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   
   // Option to hide or show already resolved pendencies (stored in localStorage)
   const [hideResolved, setHideResolved] = useState<boolean>(() => {
@@ -1417,6 +1440,17 @@ export default function PendingItems({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50"
+              title="Sincronizar pendências imediatamente com o banco de dados e outras abas"
+              id="btn-sync-pendencias"
+            >
+              <RefreshCw className={`w-4 h-4 text-sky-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Sincronizando...' : 'Sincronizar'}</span>
+            </button>
+
             {enableSpreadsheetExport && (
               <button
                 onClick={handleExportExcel}
