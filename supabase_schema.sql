@@ -78,8 +78,24 @@ CREATE TABLE IF NOT EXISTS pending_items (
   transferred_to_stock BOOLEAN DEFAULT false,
   transferred_unit_id TEXT,
   destination_sector_suggested TEXT,
-  registration_number TEXT
+  registration_number TEXT,
+  linked_unit_id TEXT,
+  linked_unit_tracking_code TEXT,
+  resolution_reason TEXT,
+  customer_reason TEXT,
+  device_status TEXT,
+  package_status TEXT,
+  accessories TEXT
 );
+
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS registration_number TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS linked_unit_id TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS linked_unit_tracking_code TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolution_reason TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS customer_reason TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS device_status TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS package_status TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS accessories TEXT;
 
 CREATE TABLE IF NOT EXISTS cases (
   id TEXT PRIMARY KEY,

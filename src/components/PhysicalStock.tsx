@@ -4285,25 +4285,29 @@ export default function PhysicalStock({
 
                 {/* Claims and Accessories details */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-5 bg-slate-950/60 rounded-xl border border-slate-800/60 space-y-2.5">
+                  <div className={`p-5 bg-slate-950/60 rounded-xl border border-slate-800/60 space-y-2.5 ${
+                    !currentUnit.accessoriesInclusion || !currentUnit.accessoriesInclusion.trim() ? 'md:col-span-2' : ''
+                  }`}>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                       <AlertTriangle className="w-4 h-4 text-amber-400" />
-                      Motivo da Devolução (Cliente)
+                      Motivo da Devolução / Entrada
                     </h4>
                     <p className="text-sm text-slate-200 leading-relaxed italic bg-slate-900/60 p-3.5 rounded-lg border border-slate-800/40">
                       "{currentUnit.customerReason || 'Sem motivo registrado.'}"
                     </p>
                   </div>
 
-                  <div className="p-5 bg-slate-950/60 rounded-xl border border-slate-800/60 space-y-2.5">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
-                      <Info className="w-4 h-4 text-sky-400" />
-                      Lista de Acessórios Recebidos
-                    </h4>
-                    <p className="text-sm text-slate-200 leading-relaxed bg-slate-900/60 p-3.5 rounded-lg border border-slate-800/40">
-                      {currentUnit.accessoriesInclusion || 'Nenhum acessório declarado.'}
-                    </p>
-                  </div>
+                  {currentUnit.accessoriesInclusion && currentUnit.accessoriesInclusion.trim() !== '' && (
+                    <div className="p-5 bg-slate-950/60 rounded-xl border border-slate-800/60 space-y-2.5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                        <Info className="w-4 h-4 text-sky-400" />
+                        Lista de Acessórios Recebidos
+                      </h4>
+                      <p className="text-sm text-slate-200 leading-relaxed bg-slate-900/60 p-3.5 rounded-lg border border-slate-800/40">
+                        {currentUnit.accessoriesInclusion}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Technical Report / Observations HTML Render */}

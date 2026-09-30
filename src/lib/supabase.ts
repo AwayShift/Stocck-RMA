@@ -775,10 +775,14 @@ ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS created_by JSONB;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_to_stock BOOLEAN DEFAULT FALSE;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS transferred_unit_id TEXT;
-ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS destination_sector_suggested TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS registration_number TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS linked_unit_id TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS linked_unit_tracking_code TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS resolution_reason TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS customer_reason TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS device_status TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS package_status TEXT;
+ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS accessories TEXT;
 ALTER TABLE pending_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_pending_items_sku ON pending_items(sku);
@@ -1221,11 +1225,11 @@ export const getTriageColumns = (): string => {
 export const getPendingColumns = (): string => {
   if (getHasPendingExtendedCols() === false) {
     if (getHasPendingRegistrationCol() !== false) {
-      return 'id, registration_number, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, status, priority, created_by, created_at, updated_at';
+      return 'id, registration_number, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, status, priority, destination_sector_suggested, transferred_to_stock, transferred_unit_id, resolved_at, created_by, created_at, updated_at';
     }
-    return 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, status, priority, created_by, created_at, updated_at';
+    return 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, status, priority, destination_sector_suggested, transferred_to_stock, transferred_unit_id, resolved_at, created_by, created_at, updated_at';
   }
-  return 'id, registration_number, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, linked_unit_id, linked_unit_tracking_code, resolution_reason, created_at, updated_at, resolved_at';
+  return 'id, registration_number, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, linked_unit_id, linked_unit_tracking_code, created_at, updated_at, resolved_at';
 };
 
 export const mapTriageUnitToSupabase = (u: TriageUnit) => {
@@ -1575,6 +1579,13 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
   } else {
     rawNotes = rawNotes.replace(/\[RESOLUTION_REASON:.*?\]\s*/g, '').trim();
   }
+  if (p.accessories) {
+    const accMeta = `[ACCESSORIES:${p.accessories}]`;
+    rawNotes = rawNotes.replace(/\[ACCESSORIES:.*?\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${accMeta}` : accMeta;
+  } else {
+    rawNotes = rawNotes.replace(/\[ACCESSORIES:.*?\]\s*/g, '').trim();
+  }
 
   const payload: any = {
     id: cleanId,
@@ -1662,6 +1673,12 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     if (match && match[1]) resolutionReason = match[1].trim();
   }
 
+  let accessories: string | undefined = r.accessories;
+  if (!accessories && decompressedNotes.includes('[ACCESSORIES:')) {
+    const match = decompressedNotes.match(/\[ACCESSORIES:(.*?)\]/);
+    if (match && match[1]) accessories = match[1].trim();
+  }
+
   const cleanNotes = decompressedNotes
     .replace(/\[REG_NUM:.*?\]\s*/g, '')
     .replace(/\[LINKED_UNIT:.*?\]\s*/g, '')
@@ -1669,6 +1686,7 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     .replace(/\[CUSTOMER_REASON:.*?\]\s*/g, '')
     .replace(/\[DEVICE_STATUS:.*?\]\s*/g, '')
     .replace(/\[PACKAGE_STATUS:.*?\]\s*/g, '')
+    .replace(/\[ACCESSORIES:.*?\]\s*/g, '')
     .replace(/\[RESOLUTION_REASON:.*?\]\s*/g, '')
     .trim();
 
@@ -1699,7 +1717,8 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
     registrationNumber: regNum,
     linkedUnitId: linkedUnitId,
     linkedUnitTrackingCode: linkedUnitTrackingCode,
-    resolutionReason: resolutionReason || undefined
+    resolutionReason: resolutionReason || undefined,
+    accessories: accessories || undefined
   };
 };
 

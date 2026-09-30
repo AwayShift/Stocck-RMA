@@ -214,9 +214,28 @@ export default function RmaEntry({
     if (item.serialNumber) {
       setSerials([item.serialNumber]);
     }
-    if (item.customerReason) {
-      setCustomerReason(item.customerReason);
+    
+    // Set customer reason with the motive that was generated upon creating the pendency
+    const pendingGeneratedReason = item.pendingReason 
+      ? (item.customerReason && item.customerReason !== item.pendingReason 
+          ? `${item.pendingReason} - ${item.customerReason}` 
+          : item.pendingReason)
+      : (item.customerReason || '');
+    if (pendingGeneratedReason) {
+      setCustomerReason(pendingGeneratedReason);
     }
+
+    // Leave accessories list ONLY if accessories were inserted when creating the pendency
+    if (item.accessories && item.accessories.trim()) {
+      setAccessoriesInclusion(item.accessories.trim());
+    } else {
+      setAccessoriesInclusion('');
+    }
+
+    if (item.detailedNotes || item.pendingReason) {
+      setNotes(`<p><strong>Cadastrado no RMA via Pendências:</strong></p><p>Registro: ${item.registrationNumber || '-'}</p><p>Motivo: ${item.pendingReason || ''}</p>${item.detailedNotes ? `<p>${item.detailedNotes}</p>` : ''}`);
+    }
+
     if (item.deviceStatus) {
       const isStd = ['Novo', 'Usado', 'Danificado'].includes(item.deviceStatus);
       if (isStd) {

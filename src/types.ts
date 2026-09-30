@@ -74,6 +74,7 @@ export interface PendingItem {
   linkedUnitId?: string; // ID da unidade de triagem/estoque físico vinculada
   linkedUnitTrackingCode?: string; // Código STI / Rastreio da unidade vinculada
   resolutionReason?: string; // Motivo/justificativa da resolução da pendência
+  accessories?: string; // Acessórios inclusos informados na criação da pendência
 }
 
 export interface TriageUnit {

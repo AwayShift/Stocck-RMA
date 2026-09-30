@@ -443,9 +443,21 @@ export const subscribePendingItems = (
 
     const channelId = `realtime_pending_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const channel = supabase.channel(channelId)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_items' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_items' }, async (payload) => {
         const updatedList = handleRealtimePendingItemEvent(payload.eventType, payload);
         callback(updatedList);
+
+        // Immediate authoritative reconciliation on DELETE or payload changes to guarantee multi-user sync
+        if (payload.eventType === 'DELETE' || !payload.new || !payload.old) {
+          try {
+            const fresh = await syncPendingItemsIncrementally(true);
+            if (Array.isArray(fresh)) {
+              callback(fresh);
+            }
+          } catch (e) {
+            console.warn('Realtime pending items reconciliation exception:', e);
+          }
+        }
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
@@ -777,13 +789,22 @@ export const transferPendingItemToStock = async (
     baseProductSku: finalSku,
     baseProductVoltage: finalVoltage,
     platform: finalPlatform,
-    customerReason: triageDetails?.customerReason || `Liberado de Pendências: ${pendingItem.pendingReason}. ${pendingItem.detailedNotes || ''}`.trim(),
+    customerReason: triageDetails?.customerReason || (
+      pendingItem.pendingReason 
+        ? (pendingItem.customerReason && pendingItem.customerReason !== pendingItem.pendingReason 
+            ? `${pendingItem.pendingReason} - ${pendingItem.customerReason}` 
+            : pendingItem.pendingReason)
+        : (pendingItem.customerReason || 'Liberado de Pendências')
+    ),
     deviceStatus: (triageDetails?.deviceStatus as any) || 'Usado',
     packageStatus: (triageDetails?.packageStatus as any) || 'Danificada',
-    accessoriesInclusion: triageDetails?.accessoriesInclusion || 'Item liberado após resolução de pendência.',
+    accessoriesInclusion: (triageDetails?.accessoriesInclusion !== undefined 
+      ? triageDetails.accessoriesInclusion 
+      : (pendingItem.accessories || '')
+    ).trim(),
     destinationSector: destinationSector,
     initialEntryDate: pendingItem.createdAt || new Date().toISOString(),
-    notes: triageDetails?.notes || `<p><strong>Item Liberado da Aba de Pendências:</strong></p><p>Motivo original: ${pendingItem.pendingReason}</p><p>${pendingItem.detailedNotes || ''}</p>`,
+    notes: triageDetails?.notes || `<p><strong>Item Liberado da Aba de Pendências:</strong></p><p>Motivo: ${pendingItem.pendingReason}</p>${pendingItem.detailedNotes ? `<p>${pendingItem.detailedNotes}</p>` : ''}`,
     photosProduct: triageDetails?.photosProduct && triageDetails.photosProduct.length > 0 ? triageDetails.photosProduct : (pendingItem.photos || []),
     photosBox: triageDetails?.photosBox || [],
     photosAccessories: triageDetails?.photosAccessories || [],

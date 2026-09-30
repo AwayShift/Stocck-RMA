@@ -737,7 +737,7 @@ export default function PendingItems({
     setFormPhotos(item.photos || []);
     setFormAlsoCreateStockEntry(false);
     setFormStockDestination('RMA');
-    setFormStockAccessories('');
+    setFormStockAccessories(item.accessories || '');
     setFormStockExcludeDailyCount(false);
     setFormError(null);
     setShowSkuDropdown(false);
@@ -1013,13 +1013,15 @@ export default function PendingItems({
           baseProductSku: finalSku,
           baseProductVoltage: finalVoltage,
           platform: formPlatform as PlatformType,
-          customerReason: formCustomerReason.trim() || `Liberado de Pendências: ${finalReason}`,
+          customerReason: formCustomerReason.trim() 
+            ? `${finalReason} - ${formCustomerReason.trim()}`
+            : finalReason,
           deviceStatus: finalDeviceStatus as any,
           packageStatus: finalPackageStatus as any,
-          accessoriesInclusion: formStockAccessories.trim() || 'Item cadastrado com entrada via Pendências',
+          accessoriesInclusion: formStockAccessories.trim(),
           destinationSector: 'RMA',
           initialEntryDate: new Date().toISOString(),
-          notes: `<p><strong>Entrada direta vinculada à Pendência:</strong></p><p>Registro: ${regNumber}</p><p>Motivo: ${finalReason}</p><p>${formDetailedNotes.trim()}</p>`,
+          notes: `<p><strong>Entrada direta vinculada à Pendência:</strong></p><p>Registro: ${regNumber}</p><p>Motivo: ${finalReason}</p>${formDetailedNotes.trim() ? `<p>${formDetailedNotes.trim()}</p>` : ''}`,
           photosProduct: formPhotos && formPhotos.length > 0 ? formPhotos : [],
           photosBox: [],
           photosAccessories: [],
@@ -1062,6 +1064,7 @@ export default function PendingItems({
         customerReason: formCustomerReason.trim(),
         deviceStatus: finalDeviceStatus,
         packageStatus: finalPackageStatus,
+        accessories: formStockAccessories.trim() || undefined,
         detailedNotes: formDetailedNotes.trim(),
         status: formStatus,
         photos: formPhotos,
@@ -1132,8 +1135,13 @@ export default function PendingItems({
     setTransferOrderNumber(item.orderNumber || '');
     setTransferDestination(item.destinationSectorSuggested || 'Openbox');
 
-    // Automatically pull customer reason and device/package status from the initial pending registration
-    setTransferCustomerReason(item.customerReason || '');
+    // Automatically pull motive that was generated upon pending creation
+    const pendingGeneratedReason = item.pendingReason 
+      ? (item.customerReason && item.customerReason !== item.pendingReason 
+          ? `${item.pendingReason} - ${item.customerReason}` 
+          : item.pendingReason)
+      : (item.customerReason || '');
+    setTransferCustomerReason(pendingGeneratedReason);
 
     const initialDevStatus = item.deviceStatus || 'Usado';
     const isStandardDev = ['Novo', 'Usado', 'Danificado'].includes(initialDevStatus);
@@ -1145,8 +1153,9 @@ export default function PendingItems({
     setTransferPackageStatus(isStandardPkg ? initialPkgStatus : 'Descrever');
     setTransferCustomPackageStatus(isStandardPkg ? '' : initialPkgStatus);
 
-    setTransferAccessories('');
-    setTransferNotes(`<p><strong>Liberado da Aba de Pendências:</strong></p><p>Motivo original: ${item.pendingReason}</p><p>${item.detailedNotes || ''}</p>`);
+    // Pre-populate accessories ONLY if accessories were inserted when creating the pendency
+    setTransferAccessories(item.accessories || '');
+    setTransferNotes(`<p><strong>Liberado da Aba de Pendências:</strong></p><p>Motivo: ${item.pendingReason}</p>${item.detailedNotes ? `<p>${item.detailedNotes}</p>` : ''}`);
     setTransferPhotosProduct(item.photos ? [...item.photos] : []);
     setTransferPhotosBox([]);
     setTransferPhotosAccessories([]);
@@ -1245,7 +1254,7 @@ export default function PendingItems({
         serialNumber: transferSerialNumber.trim(),
         trackingCode: transferDestination === 'Openbox' ? normalizeStiCode(transferSti) : '',
         orderNumber: transferOrderNumber.trim(),
-        customerReason: transferCustomerReason.trim() || 'Entrada de Estoque',
+        customerReason: transferCustomerReason.trim() || itemToTransfer.pendingReason || 'Liberado de Pendências',
         deviceStatus: finalDeviceStatus,
         packageStatus: finalPackageStatus,
         accessoriesInclusion: transferAccessories.trim(),
@@ -3036,6 +3045,26 @@ export default function PendingItems({
                   placeholder="Insira detalhes adicionais sobre o produto, estado das peças, testes realizados ou tratativas com clientes/fornecedor..."
                   rows={3}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors resize-none"
+                />
+              </div>
+
+              {/* Row: Acessórios Inclusos (Opcional - Deixe vazio se não houver) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Acessórios Inclusos (Opcional)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Deixe em branco se não houver acessórios
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={formStockAccessories}
+                  onChange={(e) => setFormStockAccessories(e.target.value)}
+                  placeholder="Ex: Fonte de alimentação, cabos, controle remoto..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
 

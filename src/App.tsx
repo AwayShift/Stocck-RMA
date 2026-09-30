@@ -62,7 +62,8 @@ import {
   syncTriageUnitsIncrementally,
   syncDailyInflowsIncrementally,
   syncPendingItemsIncrementally,
-  subscribeCrossTabSync
+  subscribeCrossTabSync,
+  removeLocalCacheItem
 } from './lib/syncCacheService';
 
 import Dashboard from './components/Dashboard';
@@ -435,7 +436,12 @@ export default function App() {
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible') {
         // When user refocuses the tab after working elsewhere, check for changes
-        refreshIncrementalData();
+        refreshIncrementalData(true);
+        if (activeTab === 'pending') {
+          syncPendingItemsIncrementally(true).then((items) => {
+            if (Array.isArray(items)) setPendingItems(items);
+          }).catch(() => {});
+        }
       }
     };
 
@@ -530,8 +536,12 @@ export default function App() {
     if (!cleanId) return;
     const target = pendingItems.find(p => p.id === cleanId || p.registrationNumber === cleanId);
     const idToDelete = target?.id || cleanId;
-    setPendingItems(prev => prev.filter(p => p.id !== cleanId && p.id !== idToDelete && p.registrationNumber !== cleanId));
+    const regToDelete = target?.registrationNumber;
+    setPendingItems(prev => prev.filter(p => p.id !== cleanId && p.id !== idToDelete && (!regToDelete || p.registrationNumber !== regToDelete)));
     await deletePendingItem(idToDelete, target?.sku, target?.productName);
+    if (regToDelete && regToDelete !== idToDelete) {
+      removeLocalCacheItem('pending_items', regToDelete);
+    }
   };
 
   const handleUpdatePendingStatus = async (id: string, status: PendingStatusType, resolutionReason?: string) => {
