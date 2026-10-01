@@ -132,3 +132,54 @@ export function normalizeOrderNumberForPlatform(rawOrderNumber: string, platform
 
   return clean;
 }
+
+/**
+ * Normaliza número de pedido para comparação flexível entre pendências e estoque físico.
+ * Remove prefixos como #, Ped, Pedido:, espaços e pontuações irrelevantes.
+ */
+export function normalizeOrderComparable(orderStr?: string | null): string {
+  if (!orderStr) return '';
+  return orderStr
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/^[#\s]+/, '')
+    .replace(/^ped(ido)?\s*[:#-]?\s*/i, '')
+    .replace(/\s+/g, '');
+}
+
+/**
+ * Compara dois números de pedido de forma resiliente a variações de formatação:
+ * - Prefixos com # ou Ped:
+ * - Espaços ou hífens extras
+ * - Variações de maiúsculas/minúsculas
+ * - Números longos puramente numéricos (Mercado Livre, etc.)
+ */
+export function areOrdersMatching(orderA?: string | null, orderB?: string | null): boolean {
+  if (!orderA || !orderB) return false;
+  const rawA = orderA.toString().trim();
+  const rawB = orderB.toString().trim();
+  if (!rawA || !rawB) return false;
+  if (rawA === rawB) return true;
+  
+  const normA = normalizeOrderComparable(rawA);
+  const normB = normalizeOrderComparable(rawB);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+
+  // Comparação de dígitos para pedidos puramente numéricos longos (ex: 2000001234)
+  const digitsA = normA.replace(/\D/g, '');
+  const digitsB = normB.replace(/\D/g, '');
+  if (digitsA.length >= 6 && digitsB.length >= 6) {
+    if (digitsA === digitsB) return true;
+    if (digitsA.endsWith(digitsB) || digitsB.endsWith(digitsA)) return true;
+  }
+
+  // Comparação sem hífens para Amazon / Kabum
+  const noHyphenA = normA.replace(/[-_]/g, '');
+  const noHyphenB = normB.replace(/[-_]/g, '');
+  if (noHyphenA && noHyphenB && noHyphenA === noHyphenB) return true;
+
+  return false;
+}
+

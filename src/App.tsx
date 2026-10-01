@@ -80,6 +80,7 @@ import { checkAndRunScheduledBackups } from './lib/backupService';
 import { getSupabaseClient } from './lib/supabase';
 import { subscribeToSupabaseAuth, signOutSupabase } from './lib/supabaseAuth';
 import { normalizeStiCode } from './utils/stiFormatter';
+import { areOrdersMatching } from './utils/orderPlatformHelper';
 import { ThemeMode, getSavedTheme, applyTheme } from './lib/theme';
 import { initSystemIntegrationsSync } from './lib/integrationsConfigService';
 
@@ -123,16 +124,18 @@ export default function App() {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDbSwitcherModalOpen, setIsDbSwitcherModalOpen] = useState<boolean>(false);
 
-  // Shared filters when navigating from Dashboard to Stock
+  // Shared filters when navigating from Dashboard or Pending to Stock
   const [initialStockFilters, setInitialStockFilters] = useState<{
     platform?: PlatformType | null;
     sector?: DestinationSectorType | null;
+    searchTerm?: string | null;
   } | null>(null);
 
-  const handleNavigateToStockWithFilters = (platform?: PlatformType | null, sector?: DestinationSectorType | null) => {
+  const handleNavigateToStockWithFilters = (platform?: PlatformType | null, sector?: DestinationSectorType | null, searchTerm?: string | null) => {
     setInitialStockFilters({
       platform: platform || null,
-      sector: sector || null
+      sector: sector || null,
+      searchTerm: searchTerm || null
     });
     setActiveTab('stock');
   };
@@ -729,7 +732,12 @@ export default function App() {
 
   // Navigate to detailed unit specs from Dashboard
   const handleViewUnitDetails = (unit: TriageUnit) => {
-    setSelectedTriageUnit(unit);
+    setSelectedTriageUnit({ ...unit });
+    setInitialStockFilters({
+      platform: null,
+      sector: unit.status === 'Baixado' ? 'Baixado' : (unit.destinationSector || 'Principal'),
+      searchTerm: null
+    });
     setActiveTab('stock');
   };
 
@@ -1053,6 +1061,7 @@ export default function App() {
                 isLight={isLight}
                 initialPlatformFilter={initialStockFilters?.platform}
                 initialSectorFilter={initialStockFilters?.sector}
+                initialSearchTerm={initialStockFilters?.searchTerm}
               />
             )}
 
@@ -1077,21 +1086,41 @@ export default function App() {
                 }}
                 onNavigateToStock={(unitId?: string) => {
                   if (unitId) {
-                    const clean = unitId.trim().toLowerCase();
-                    const cleanSti = normalizeStiCode(unitId).toLowerCase();
+                    const raw = unitId.trim();
+                    const clean = raw.toLowerCase();
+                    const cleanSti = normalizeStiCode(raw).toLowerCase();
+                    const cleanOrder = raw.replace(/^[#]/, '').toLowerCase();
                     const match = triageUnits.find(u => 
-                      u.id === unitId || 
+                      u.id === raw || 
+                      areOrdersMatching(u.orderNumber, raw) ||
+                      (u.orderNumber && (
+                        u.orderNumber.trim().toLowerCase() === clean ||
+                        u.orderNumber.trim().toLowerCase() === cleanOrder ||
+                        u.orderNumber.trim().toLowerCase().replace(/^[#]/, '') === cleanOrder
+                      )) ||
                       (u.trackingCode && (
                         u.trackingCode.toLowerCase() === clean ||
                         normalizeStiCode(u.trackingCode).toLowerCase() === cleanSti
                       )) ||
                       (u.pendingRegistrationNumber && u.pendingRegistrationNumber.toLowerCase() === clean) ||
-                      (u.pendingItemId && u.pendingItemId === unitId) ||
-                      (u.orderNumber && u.orderNumber.trim().toLowerCase() === clean) ||
+                      (u.pendingItemId && u.pendingItemId === raw) ||
                       (u.serialNumber && u.serialNumber.trim().toLowerCase() === clean)
                     );
+
                     if (match) {
-                      setSelectedTriageUnit(match);
+                      setSelectedTriageUnit({ ...match });
+                      setInitialStockFilters({
+                        platform: null,
+                        sector: match.status === 'Baixado' ? 'Baixado' : (match.destinationSector || 'Principal'),
+                        searchTerm: null
+                      });
+                    } else {
+                      setSelectedTriageUnit(null);
+                      setInitialStockFilters({
+                        platform: null,
+                        sector: null,
+                        searchTerm: raw.replace(/^[#]/, '').trim()
+                      });
                     }
                   }
                   setActiveTab('stock');
@@ -1110,7 +1139,12 @@ export default function App() {
                 onDeleteDailyInflow={handleDeleteDailyInflow}
                 onSaveTriage={handleSaveTriage}
                 onNavigateToStockUnit={(unit) => {
-                  setSelectedTriageUnit(unit);
+                  setSelectedTriageUnit({ ...unit });
+                  setInitialStockFilters({
+                    platform: null,
+                    sector: unit.status === 'Baixado' ? 'Baixado' : (unit.destinationSector || 'Principal'),
+                    searchTerm: null
+                  });
                   setActiveTab('stock');
                 }}
                 userRole={userRole}

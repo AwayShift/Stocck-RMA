@@ -4763,16 +4763,31 @@ html.light #btn-confirm-move-openbox {
   color: #ffffff !important;
 }
 
-html.light #btn-confirm-move-openbox:hover:not(:disabled) {
-  background-color: #b45309 !important;
+/* ==========================================================================
+   Stock Target Order Signaling & Pulsing Animation
+   ========================================================================== */
+
+@keyframes targetOrderHaloPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.95), 0 0 35px rgba(56, 189, 248, 0.75), 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+    transform: scale(1.025);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(56, 189, 248, 0.5), 0 0 55px rgba(14, 165, 233, 0.9), 0 25px 30px -5px rgba(0, 0, 0, 0.5);
+    transform: scale(1.035);
+  }
 }
 
+.highlighted-order-card {
+  animation: targetOrderHaloPulse 1.25s ease-in-out infinite !important;
+  z-index: 30 !important;
+  position: relative !important;
+  border-color: #38bdf8 !important;
+}
 
-
-
-
-
-
-
-
+html.light .highlighted-order-card {
+  animation: targetOrderHaloPulse 1.25s ease-in-out infinite !important;
+  border-color: #0284c7 !important;
+  background-color: #f0f9ff !important;
+}
 

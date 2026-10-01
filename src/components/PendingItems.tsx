@@ -66,7 +66,7 @@ import {
   ensurePendingRegistrationNumber 
 } from '../utils/pendingRegistrationHelper';
 import { findBaseProduct, getResolvedUnitProductName } from '../utils/productImages';
-import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform } from '../utils/orderPlatformHelper';
+import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform, areOrdersMatching } from '../utils/orderPlatformHelper';
 
 interface PendingItemsProps {
   items: PendingItem[];
@@ -174,8 +174,15 @@ export const getLinkedStockUnit = (item: PendingItem, stockUnits: TriageUnit[]):
 
   // 6. By orderNumber (Nº de Pedido)
   if (item.orderNumber && item.orderNumber.trim()) {
-    const cleanOrder = item.orderNumber.trim().toLowerCase();
-    const foundByOrder = stockUnits.find(u => u.orderNumber && u.orderNumber.trim().toLowerCase() === cleanOrder);
+    const rawOrder = item.orderNumber.trim();
+    const cleanOrder = rawOrder.toLowerCase();
+    const foundByOrder = stockUnits.find(u => 
+      u.orderNumber && (
+        areOrdersMatching(u.orderNumber, rawOrder) ||
+        u.orderNumber.trim().toLowerCase() === cleanOrder ||
+        u.orderNumber.replace(/^[#\s]+/, '').toLowerCase() === cleanOrder.replace(/^[#\s]+/, '')
+      )
+    );
     if (foundByOrder) return foundByOrder;
   }
 
@@ -1866,8 +1873,10 @@ export default function PendingItems({
                           <span>
                             {linkedUnit.orderNumber 
                               ? `Pedido: ${linkedUnit.orderNumber}` 
-                              : linkedUnit.trackingCode 
+                              : (linkedUnit.destinationSector === 'Openbox' && linkedUnit.trackingCode)
                               ? `STI: ${normalizeStiCode(linkedUnit.trackingCode).replace(/^STI/i, '')}` 
+                              : (linkedUnit.pendingRegistrationNumber || (linkedUnit.trackingCode ? linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim() : ''))
+                              ? `Reg: ${linkedUnit.pendingRegistrationNumber || linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim()}`
                               : 'No Estoque'}
                           </span>
                           <MoveRight className="w-3 h-3 text-emerald-400 group-hover/link:translate-x-0.5 transition-transform" />
@@ -1925,24 +1934,20 @@ export default function PendingItems({
                     {item.orderNumber && (
                       <div className="flex items-center justify-between text-slate-400">
                         <span className="text-slate-500">Nº Pedido:</span>
-                        {linkedUnit ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (onNavigateToStock) {
-                                onNavigateToStock(linkedUnit.id);
-                              }
-                            }}
-                            className="font-mono font-semibold text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 cursor-pointer truncate max-w-[190px]"
-                            title="Clique para ir até este pedido no Estoque"
-                          >
-                            <span className="truncate">{item.orderNumber}</span>
-                            <MoveRight className="w-3 h-3 text-sky-400 shrink-0" />
-                          </button>
-                        ) : (
-                          <span className="font-mono font-semibold text-sky-400 truncate max-w-[180px]">{item.orderNumber}</span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onNavigateToStock) {
+                              onNavigateToStock(linkedUnit?.id || item.orderNumber);
+                            }
+                          }}
+                          className="font-mono font-semibold text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 cursor-pointer truncate max-w-[190px]"
+                          title="Clique para localizar este pedido no Estoque"
+                        >
+                          <span className="truncate">{item.orderNumber}</span>
+                          <MoveRight className="w-3 h-3 text-sky-400 shrink-0" />
+                        </button>
                       </div>
                     )}
                     {item.serialNumber && (
@@ -2207,7 +2212,7 @@ export default function PendingItems({
                             title={`Ir para o produto no estoque (${linkedUnit.orderNumber ? `Pedido ${linkedUnit.orderNumber}` : (linkedUnit.trackingCode || 'Estoque')})`}
                           >
                             <Link2 className="w-2.5 h-2.5 group-hover/tbllink:rotate-45 transition-transform" />
-                            <span>{linkedUnit.orderNumber ? `Ped: ${linkedUnit.orderNumber}` : linkedUnit.trackingCode ? `STI: ${normalizeStiCode(linkedUnit.trackingCode).replace(/^STI/i, '')}` : 'No Estoque'}</span>
+                            <span>{linkedUnit.orderNumber ? `Ped: ${linkedUnit.orderNumber}` : (linkedUnit.destinationSector === 'Openbox' && linkedUnit.trackingCode) ? `STI: ${normalizeStiCode(linkedUnit.trackingCode).replace(/^STI/i, '')}` : (linkedUnit.pendingRegistrationNumber || (linkedUnit.trackingCode ? linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim() : '')) ? `Reg: ${linkedUnit.pendingRegistrationNumber || linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim()}` : 'No Estoque'}</span>
                             <MoveRight className="w-2.5 h-2.5 group-hover/tbllink:translate-x-0.5 transition-transform" />
                           </button>
                         ) : (item.linkedUnitId || item.transferredToStock || item.linkedUnitTrackingCode) ? (
@@ -2282,26 +2287,20 @@ export default function PendingItems({
                           )
                         )}
                         {item.orderNumber && (
-                          linkedUnit ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (onNavigateToStock) {
-                                  onNavigateToStock(linkedUnit.id);
-                                }
-                              }}
-                              className="font-mono text-sky-400 hover:text-sky-300 hover:underline text-[11px] truncate max-w-[150px] inline-flex items-center gap-1 cursor-pointer"
-                              title="Clique para ir até este pedido no Estoque"
-                            >
-                              <span>Ped: {item.orderNumber}</span>
-                              <MoveRight className="w-2.5 h-2.5 text-sky-400 shrink-0" />
-                            </button>
-                          ) : (
-                            <div className="font-mono text-sky-400 text-[11px] truncate max-w-[150px]">
-                              Ped: {item.orderNumber}
-                            </div>
-                          )
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onNavigateToStock) {
+                                onNavigateToStock(linkedUnit?.id || item.orderNumber);
+                              }
+                            }}
+                            className="font-mono text-sky-400 hover:text-sky-300 hover:underline text-[11px] truncate max-w-[150px] inline-flex items-center gap-1 cursor-pointer"
+                            title="Clique para localizar este pedido no Estoque"
+                          >
+                            <span>Ped: {item.orderNumber}</span>
+                            <MoveRight className="w-2.5 h-2.5 text-sky-400 shrink-0" />
+                          </button>
                         )}
                         {item.serialNumber && (
                           <div className="font-mono text-slate-400 text-[11px] truncate max-w-[150px]">

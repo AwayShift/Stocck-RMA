@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   Search, 
@@ -79,6 +79,7 @@ interface PhysicalStockProps {
   isLight?: boolean;
   initialPlatformFilter?: PlatformType | null;
   initialSectorFilter?: DestinationSectorType | null;
+  initialSearchTerm?: string | null;
 }
 
 const stripHtml = (html?: string): string => {
@@ -102,6 +103,22 @@ export const isRealStockTransfer = (originSector?: string): boolean => {
   return ['principal', 'estoque principal', 'rma', 'openbox'].includes(s);
 };
 
+export const isUnitInSector = (unit: TriageUnit, sectorTab: string): boolean => {
+  if (sectorTab === 'Baixado') {
+    return unit.status === 'Baixado';
+  }
+  if (unit.status !== 'Estoque') return false;
+  if (sectorTab === 'Todos') return true;
+
+  const dest = (unit.destinationSector || 'Principal').trim().toLowerCase();
+  const target = sectorTab.trim().toLowerCase();
+
+  if (target === 'principal') {
+    return dest === 'principal' || dest === 'estoque' || dest === '';
+  }
+  return dest === target;
+};
+
 export default function PhysicalStock({ 
   units, 
   products = [],
@@ -117,15 +134,23 @@ export default function PhysicalStock({
   enableSpreadsheetExport = true,
   isLight = false,
   initialPlatformFilter,
-  initialSectorFilter
+  initialSectorFilter,
+  initialSearchTerm
 }: PhysicalStockProps) {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm || '');
   const [selectedBrand, setSelectedBrand] = useState<string>('Todas');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [selectedPlatform, setSelectedPlatform] = useState<string>(initialPlatformFilter || 'Todas');
   const [selectedVoltage, setSelectedVoltage] = useState<string>('Todas');
   const [selectedDate, setSelectedDate] = useState<string>(''); // YYYY-MM-DD
   const dateInputRef = useRef<HTMLInputElement>(null);
+
+  // React to initial search term changes from navigation
+  useEffect(() => {
+    if (initialSearchTerm !== undefined && initialSearchTerm !== null) {
+      setSearchTerm(initialSearchTerm);
+    }
+  }, [initialSearchTerm]);
 
   // React to initial platform filter changes from Dashboard navigation
   useEffect(() => {
@@ -159,9 +184,8 @@ export default function PhysicalStock({
   };
 
   const [activeTab, setActiveTab] = useState<'Todos' | DestinationSectorType | 'Baixado'>('Todos');
-  const [visibleCount, setVisibleCount] = useState(20);
-  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(initialSelectedUnit?.id || null);
-  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [highlightedUnitId, setHighlightedUnitId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     const saved = localStorage.getItem('rma_stock_view_mode');
     return saved === 'list' ? 'list' : 'grid';
@@ -171,6 +195,12 @@ export default function PhysicalStock({
     setViewMode(mode);
     localStorage.setItem('rma_stock_view_mode', mode);
   };
+
+  // Pagination state (visible items limit in stock list)
+  const [visibleCount, setVisibleCount] = useState<number>(20);
+
+  // Spreadsheet / Excel import modal state
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState<boolean>(false);
 
   // Multi-select state
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
@@ -251,7 +281,7 @@ export default function PhysicalStock({
   } | null>(null);
 
   // Selected unit details
-  const currentUnit = units.find(u => u.id === (selectedUnitId || initialSelectedUnit?.id));
+  const currentUnit = units.find(u => u.id === selectedUnitId);
 
   // Edit mode state for selected unit
   const [isEditingUnit, setIsEditingUnit] = useState(false);
@@ -383,19 +413,92 @@ export default function PhysicalStock({
     setIsEditPendingSelectorOpen(false);
   };
 
-  // If initialSelectedUnit changed from parent, keep local state in sync
+  // Helper to scroll to a specific unit card in the DOM (supports both grid and list view)
+  const scrollToUnit = useCallback((targetId: string) => {
+    const gridElem = document.getElementById(`stock-unit-${targetId}`);
+    const listElem = document.getElementById(`stock-unit-list-${targetId}`);
+    const targetElem = gridElem || listElem;
+    if (targetElem) {
+      targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return true;
+    }
+    return false;
+  }, []);
+
+  // When initialSelectedUnit arrives from order click, position screen on the item, open modal, and set matching sector tab
   React.useEffect(() => {
     if (initialSelectedUnit) {
-      setSelectedUnitId(initialSelectedUnit.id);
+      const targetId = initialSelectedUnit.id;
+
+      // 1. OPEN THE MODAL FOR THE CLICKED ORDER / PRODUCT AS REQUESTED BY USER!
+      setSelectedUnitId(targetId);
+      setIsEditingUnit(false);
+
+      // 2. Set the active tab to the item's sector/category tab so it displays properly in its sector
       if (initialSelectedUnit.status === 'Baixado') {
         setActiveTab('Baixado');
-      } else if (initialSelectedUnit.destinationSector) {
-        setActiveTab(initialSelectedUnit.destinationSector);
+      } else {
+        const dest = (initialSelectedUnit.destinationSector || '').trim().toLowerCase();
+        if (dest === 'openbox') {
+          setActiveTab('Openbox');
+        } else if (dest === 'rma') {
+          setActiveTab('RMA');
+        } else {
+          setActiveTab('Principal');
+        }
       }
+
+      // 3. Keep search term empty so all products of the tab/sector are displayed
+      setSearchTerm('');
+
+      // 4. Reset dropdown filters to 'Todas' so they NEVER hide anything!
+      setFilterOnlyDuplicates(false);
+      setSelectedBrand('Todas');
+      setSelectedCategory('Todas');
+      setSelectedPlatform('Todas');
+      setSelectedVoltage('Todas');
+      setSelectedDate('');
+
+      // 5. Ensure visibleCount is large enough so that the card is rendered in the DOM
+      const rawIdx = units.findIndex(u => u.id === targetId);
+      if (rawIdx >= 0) {
+        setVisibleCount(prev => Math.max(prev, rawIdx + 35));
+      }
+
+      // 6. Trigger discreet visual signaling on the card (without countdown)
+      setHighlightedUnitId(targetId);
+
+      // 7. Multi-phase attempts to ensure DOM has rendered regardless of state batching and tab change
+      const attemptScroll = () => {
+        if (!scrollToUnit(targetId)) {
+          requestAnimationFrame(() => scrollToUnit(targetId));
+        }
+      };
+
+      const t0 = setTimeout(attemptScroll, 60);
+      const t1 = setTimeout(attemptScroll, 160);
+      const t2 = setTimeout(attemptScroll, 380);
+      const t3 = setTimeout(attemptScroll, 750);
+      const t4 = setTimeout(attemptScroll, 1300);
+
+      // Remove highlight smoothly after 4 seconds
+      const tEnd = setTimeout(() => {
+        setHighlightedUnitId(null);
+      }, 4000);
+
+      return () => {
+        clearTimeout(t0);
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
+        clearTimeout(tEnd);
+      };
     }
-  }, [initialSelectedUnit]);
+  }, [initialSelectedUnit, units, scrollToUnit]);
 
   const handleCloseDetails = () => {
+    const lastTargetId = selectedUnitId;
     setSelectedUnitId(null);
     if (onClearSelectedUnit) {
       onClearSelectedUnit();
@@ -409,6 +512,14 @@ export default function PhysicalStock({
     setIsCustomEditPackageStatus(false);
     setCustomEditPackageStatusText('');
     setIsEditPendingSelectorOpen(false);
+
+    if (lastTargetId) {
+      setHighlightedUnitId(lastTargetId);
+      setTimeout(() => scrollToUnit(lastTargetId), 50);
+      setTimeout(() => scrollToUnit(lastTargetId), 200);
+      setTimeout(() => scrollToUnit(lastTargetId), 550);
+      setTimeout(() => setHighlightedUnitId(null), 3500);
+    }
   };
 
   const handleStartEdit = (unit: TriageUnit) => {
@@ -780,7 +891,7 @@ export default function PhysicalStock({
   const duplicateStiSet = React.useMemo(() => {
     const counts: Record<string, number> = {};
     units.forEach(u => {
-      if (u.status === 'Estoque' && u.trackingCode && u.trackingCode.trim()) {
+      if (u.status === 'Estoque' && u.destinationSector === 'Openbox' && u.trackingCode && u.trackingCode.trim()) {
         const key = normalizeStiCode(u.trackingCode).toLowerCase();
         counts[key] = (counts[key] || 0) + 1;
       }
@@ -808,6 +919,7 @@ export default function PhysicalStock({
   }, [units]);
 
   const isDuplicateSti = (unit: TriageUnit) => {
+    if (unit.destinationSector !== 'Openbox') return false;
     if (!unit.trackingCode || !unit.trackingCode.trim()) return false;
     return duplicateStiSet.has(normalizeStiCode(unit.trackingCode).toLowerCase());
   };
@@ -832,7 +944,7 @@ export default function PhysicalStock({
     } else if (activeTab === 'Baixado') {
       return units.filter(u => u.status === 'Baixado');
     } else {
-      return units.filter(u => u.status === 'Estoque' && u.destinationSector === activeTab);
+      return units.filter(u => isUnitInSector(u, activeTab));
     }
   }, [units, activeTab]);
 
@@ -1001,8 +1113,9 @@ export default function PhysicalStock({
         }
       }
 
-      // 4. Search filter (supports SKU, Name, STI, Serial, Platform, Notes, Reason, etc.)
+      // 4. Search filter (supports SKU, Name, STI, Serial, Order, Registration, Platform, Notes, Reason, etc.)
       const term = searchTerm.toLowerCase().trim();
+      const cleanTerm = term.replace(/^[#]/, '').trim();
       const brandName = (baseProd?.brand || '').toLowerCase();
       const categoryName = (baseProd?.category || '').toLowerCase();
       const baseProdName = (baseProd?.name || '').toLowerCase();
@@ -1016,8 +1129,14 @@ export default function PhysicalStock({
         brandName.includes(term) ||
         categoryName.includes(term) ||
         (unit.trackingCode || '').toLowerCase().includes(term) ||
+        (Boolean(cleanTerm) && (unit.trackingCode || '').toLowerCase().includes(cleanTerm)) ||
         (unit.orderNumber || '').toLowerCase().includes(term) ||
+        (Boolean(cleanTerm) && (unit.orderNumber || '').toLowerCase().includes(cleanTerm)) ||
         (unit.serialNumber || '').toLowerCase().includes(term) ||
+        (Boolean(cleanTerm) && (unit.serialNumber || '').toLowerCase().includes(cleanTerm)) ||
+        (unit.pendingRegistrationNumber || '').toLowerCase().includes(term) ||
+        (Boolean(cleanTerm) && (unit.pendingRegistrationNumber || '').toLowerCase().includes(cleanTerm)) ||
+        (unit.pendingItemId || '').toLowerCase().includes(term) ||
         (unit.platform || '').toLowerCase().includes(term) ||
         (unit.customerReason || '').toLowerCase().includes(term) ||
         (unit.destinationSector || '').toLowerCase().includes(term) ||
@@ -1030,8 +1149,7 @@ export default function PhysicalStock({
       } else if (activeTab === 'Baixado') {
         return matchesSearch && unit.status === 'Baixado';
       } else {
-        const matchesSector = unit.destinationSector === activeTab;
-        return unit.status === 'Estoque' && matchesSearch && matchesSector;
+        return isUnitInSector(unit, activeTab) && matchesSearch;
       }
     });
 
@@ -1052,14 +1170,57 @@ export default function PhysicalStock({
     });
   }, [units, filterOnlyDuplicates, selectedBrand, selectedCategory, selectedPlatform, selectedVoltage, selectedDate, searchTerm, activeTab, products]);
 
-  // Reset pagination limit when search term, filters, sector tab, date, or duplicate filter changes
+  // Reset pagination limit when search term, filters, sector tab, date, or duplicate filter changes,
+  // BUT do not cap at 20 if we are navigating to a specific target unit!
   useEffect(() => {
+    const targetId = initialSelectedUnit?.id || highlightedUnitId;
+    if (targetId) {
+      const idx = filteredUnits.findIndex(u => u.id === targetId);
+      const rawIdx = units.findIndex(u => u.id === targetId);
+      const targetIndex = Math.max(idx, rawIdx);
+      if (targetIndex >= 0) {
+        setVisibleCount(prev => Math.max(prev, targetIndex + 35));
+        return;
+      }
+    }
     setVisibleCount(20);
   }, [searchTerm, selectedBrand, selectedCategory, selectedVoltage, selectedDate, activeTab, filterOnlyDuplicates]);
+
+  // Ensure visibleCount expands whenever filteredUnits updates and contains a target unit
+  useEffect(() => {
+    const targetId = initialSelectedUnit?.id || highlightedUnitId;
+    if (!targetId) return;
+
+    const idx = filteredUnits.findIndex(u => u.id === targetId);
+    if (idx >= 0) {
+      if (idx >= visibleCount) {
+        setVisibleCount(Math.max(visibleCount, idx + 35));
+      }
+    } else {
+      const rawIdx = units.findIndex(u => u.id === targetId);
+      if (rawIdx >= 0 && rawIdx >= visibleCount) {
+        setVisibleCount(Math.max(visibleCount, rawIdx + 35));
+      }
+    }
+  }, [filteredUnits, initialSelectedUnit, highlightedUnitId, units, visibleCount]);
 
   // Slice filtered units according to current pagination limit (20 items per page)
   const displayedUnits = filteredUnits.slice(0, visibleCount);
   const hasMore = visibleCount < filteredUnits.length;
+
+  // When displayedUnits updates or renders the target item, ensure it scrolls smoothly into view
+  useEffect(() => {
+    const targetId = highlightedUnitId || initialSelectedUnit?.id;
+    if (targetId) {
+      const isRendered = displayedUnits.some(u => u.id === targetId);
+      if (isRendered) {
+        const t = setTimeout(() => {
+          scrollToUnit(targetId);
+        }, 80);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [displayedUnits, highlightedUnitId, initialSelectedUnit?.id, scrollToUnit]);
 
   // Toggle selection for a single item
   const handleToggleSelectUnit = (id: string, e?: React.MouseEvent) => {
@@ -1575,7 +1736,7 @@ export default function PhysicalStock({
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'Principal' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-slate-455 hover:text-emerald-400 hover:bg-slate-850'}`}
           >
             <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
-            Estoque Principal ({units.filter(u => u.status === 'Estoque' && u.destinationSector === 'Principal').length})
+            Estoque Principal ({units.filter(u => isUnitInSector(u, 'Principal')).length})
           </button>
           <button 
             onClick={() => setActiveTab('Openbox')}
@@ -1583,7 +1744,7 @@ export default function PhysicalStock({
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'Openbox' ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/15' : 'text-slate-455 hover:text-amber-400 hover:bg-slate-850'}`}
           >
             <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
-            Openbox ({units.filter(u => u.status === 'Estoque' && u.destinationSector === 'Openbox').length})
+            Openbox ({units.filter(u => isUnitInSector(u, 'Openbox')).length})
           </button>
           <button 
             onClick={() => setActiveTab('RMA')}
@@ -1591,7 +1752,7 @@ export default function PhysicalStock({
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'RMA' ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/15' : 'text-slate-455 hover:text-rose-400 hover:bg-slate-850'}`}
           >
             <span className="w-2 h-2 bg-rose-400 rounded-full"></span>
-            RMA ({units.filter(u => u.status === 'Estoque' && u.destinationSector === 'RMA').length})
+            RMA ({units.filter(u => isUnitInSector(u, 'RMA')).length})
           </button>
           <div className="h-6 w-[1px] bg-slate-800 self-center mx-1"></div>
           <button 
@@ -2187,14 +2348,17 @@ export default function PhysicalStock({
 
               const hasDupSti = isDuplicateSti(unit);
               const hasDupSerial = isDuplicateSerial(unit);
+              const isHighlighted = highlightedUnitId === unit.id;
 
               return (
                 <div 
                   key={unit.id}
-                  className={`group bg-slate-900 border hover:border-slate-700/80 rounded-xl p-4 flex flex-col justify-between hover:shadow-xl transition-all ${
-                    unit.status === 'Baixado'
-                      ? 'border-purple-500/30'
-                      : (hasDupSti || hasDupSerial ? 'border-amber-500/50 shadow-md shadow-amber-500/5' : 'border-slate-800')
+                  className={`group bg-slate-900 border rounded-xl p-4 flex flex-col justify-between transition-all duration-300 ${
+                    isHighlighted
+                      ? 'ring-2 ring-sky-400 border-sky-400/80 shadow-lg shadow-sky-500/20 bg-slate-900/90'
+                      : unit.status === 'Baixado'
+                      ? 'border-purple-500/30 hover:border-purple-400/50'
+                      : (hasDupSti || hasDupSerial ? 'border-amber-500/50 shadow-md shadow-amber-500/5 hover:border-amber-500' : 'border-slate-800 hover:border-slate-700/80 hover:shadow-xl')
                   }`}
                   id={`stock-unit-${unit.id}`}
                 >
@@ -2223,6 +2387,12 @@ export default function PhysicalStock({
                           <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs flex items-center gap-1 shrink-0">
                             <CheckCircle2 className="w-3 h-3" />
                             <span>Baixado</span>
+                          </span>
+                        )}
+                        {isHighlighted && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-sky-300 bg-sky-500/15 border border-sky-400/40 animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                            Pedido Selecionado
                           </span>
                         )}
                         <button
@@ -2295,32 +2465,43 @@ export default function PhysicalStock({
                           </span>
                         )}
                       </div>
-                      {unit.trackingCode && unit.trackingCode.trim() !== '' && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleCopyCode(normalizeStiCode(unit.trackingCode), `sti-${unit.id}`, e)}
-                          className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
-                            copiedCodeKey === `sti-${unit.id}`
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
-                              : hasDupSti
-                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
-                                : 'text-slate-300 hover:text-white bg-slate-950/80 hover:bg-slate-800 border border-slate-800'
-                          }`}
-                          title="Clique para copiar o Código STI"
-                        >
-                          {copiedCodeKey === `sti-${unit.id}` ? (
-                            <>
-                              <Check className="w-3 h-3 text-emerald-400" />
-                              <span>Copiado!</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>{formatStiBadge(unit.trackingCode)}</span>
-                              <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
-                            </>
-                          )}
-                        </button>
-                      )}
+                      {(() => {
+                        const isSti = unit.destinationSector === 'Openbox';
+                        const code = isSti 
+                          ? (unit.trackingCode ? normalizeStiCode(unit.trackingCode) : '') 
+                          : (unit.pendingRegistrationNumber || (unit.trackingCode ? unit.trackingCode.replace(/^#?STI\s*/i, '').trim() : ''));
+                        if (!code) return null;
+                        const display = isSti ? formatStiBadge(unit.trackingCode) : code;
+                        const copyTitle = isSti ? "Clique para copiar o Código STI" : "Clique para copiar o Nº de Registro";
+                        const copyKey = isSti ? `sti-${unit.id}` : `reg-${unit.id}`;
+
+                        return (
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyCode(code, copyKey, e)}
+                            className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
+                              copiedCodeKey === copyKey
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
+                                : (isSti && hasDupSti)
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                                  : 'text-slate-300 hover:text-white bg-slate-950/80 hover:bg-slate-800 border border-slate-800'
+                            }`}
+                            title={copyTitle}
+                          >
+                            {copiedCodeKey === copyKey ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span>Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>{display}</span>
+                                <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                              </>
+                            )}
+                          </button>
+                        );
+                      })()}
                     </div>
 
                     {/* Image / Thumbnail - click here opens unit details */}
@@ -2517,12 +2698,15 @@ export default function PhysicalStock({
 
               const hasDupSti = isDuplicateSti(unit);
               const hasDupSerial = isDuplicateSerial(unit);
+              const isHighlighted = highlightedUnitId === unit.id;
 
               return (
                 <div 
                   key={unit.id}
-                  className={`group bg-slate-900 border hover:border-slate-700/80 rounded-xl p-3 sm:p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:shadow-lg transition-all ${
-                    hasDupSti || hasDupSerial ? 'border-amber-500/50' : 'border-slate-800/80'
+                  className={`group bg-slate-900 border rounded-xl p-3 sm:p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all duration-300 ${
+                    isHighlighted
+                      ? 'ring-2 ring-sky-400 border-sky-400/80 shadow-md shadow-sky-500/15 bg-slate-900/90'
+                      : (hasDupSti || hasDupSerial ? 'border-amber-500/50 hover:border-amber-500' : 'border-slate-800/80 hover:border-slate-700/80 hover:shadow-lg')
                   }`}
                   id={`stock-unit-list-${unit.id}`}
                 >
@@ -2607,32 +2791,43 @@ export default function PhysicalStock({
                             </>
                           )}
                         </button>
-                        {unit.trackingCode && unit.trackingCode.trim() !== '' && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleCopyCode(normalizeStiCode(unit.trackingCode), `sti-list-${unit.id}`, e)}
-                            className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
-                              copiedCodeKey === `sti-list-${unit.id}`
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
-                                : hasDupSti
-                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
-                                  : 'text-slate-300 hover:text-white bg-slate-950/80 hover:bg-slate-800 border border-slate-800'
-                            }`}
-                            title="Clique para copiar o Código STI"
-                          >
-                            {copiedCodeKey === `sti-list-${unit.id}` ? (
-                              <>
-                                <Check className="w-3 h-3 text-emerald-400" />
-                                <span>Copiado!</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>{formatStiBadge(unit.trackingCode)}</span>
-                                <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
-                              </>
-                            )}
-                          </button>
-                        )}
+                        {(() => {
+                          const isSti = unit.destinationSector === 'Openbox';
+                          const code = isSti 
+                            ? (unit.trackingCode ? normalizeStiCode(unit.trackingCode) : '') 
+                            : (unit.pendingRegistrationNumber || (unit.trackingCode ? unit.trackingCode.replace(/^#?STI\s*/i, '').trim() : ''));
+                          if (!code) return null;
+                          const display = isSti ? formatStiBadge(unit.trackingCode) : code;
+                          const copyTitle = isSti ? "Clique para copiar o Código STI" : "Clique para copiar o Nº de Registro";
+                          const copyKey = isSti ? `sti-list-${unit.id}` : `reg-list-${unit.id}`;
+
+                          return (
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyCode(code, copyKey, e)}
+                              className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 transition-all cursor-pointer flex items-center gap-1 group/copy ${
+                                copiedCodeKey === copyKey
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 scale-105'
+                                  : (isSti && hasDupSti)
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                                    : 'text-slate-300 hover:text-white bg-slate-950/80 hover:bg-slate-800 border border-slate-800'
+                              }`}
+                              title={copyTitle}
+                            >
+                              {copiedCodeKey === copyKey ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span>Copiado!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>{display}</span>
+                                  <Copy className="w-2.5 h-2.5 opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+                                </>
+                              )}
+                            </button>
+                          );
+                        })()}
                         {unit.serialNumber && (
                           <button
                             type="button"
@@ -2796,6 +2991,12 @@ export default function PhysicalStock({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {isHighlighted && (
+                        <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-sky-300 bg-sky-500/15 border border-sky-400/40 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                          Pedido Selecionado
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -4039,44 +4240,61 @@ export default function PhysicalStock({
                     </button>
                   </div>
 
-                  {/* STI Tracking Code */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Código STI</span>
-                      <button
-                        type="button"
-                        onClick={(e) => handleCopyCode(currentUnit.trackingCode.replace(/^#/, ''), 'sti', e)}
-                        className={`text-[10px] flex items-center gap-1 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${
-                          copiedCodeKey === 'sti'
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                        }`}
-                        title="Copiar Código STI"
-                        id="btn-copy-sti"
-                      >
-                        {copiedCodeKey === 'sti' ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            <span className="text-[9px]">Copiado!</span>
-                          </>
+                  {/* Registration Code */}
+                  {(() => {
+                    const regCode = (currentUnit.pendingRegistrationNumber || currentUnit.trackingCode || '').replace(/^#/, '').trim();
+                    const hasCode = Boolean(regCode && regCode !== '');
+
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                            Nº de Registro
+                          </span>
+                          {hasCode && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyCode(regCode, 'reg', e)}
+                              className={`text-[10px] flex items-center gap-1 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                                copiedCodeKey === 'reg'
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                              }`}
+                              title="Copiar Nº de Registro"
+                              id="btn-copy-reg"
+                            >
+                              {copiedCodeKey === 'reg' ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span className="text-[9px]">Copiado!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span className="text-[9px]">Copiar</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                        {hasCode ? (
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyCode(regCode, 'reg', e)}
+                            className="w-full text-left font-mono text-xs sm:text-sm font-bold text-slate-200 bg-slate-900 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-800 block truncate transition-colors cursor-pointer group flex items-center justify-between"
+                            title="Clique para copiar Número de Registro"
+                          >
+                            <span className="truncate">{regCode}</span>
+                            <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60 text-slate-300 transition-opacity ml-1 shrink-0" />
+                          </button>
                         ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span className="text-[9px]">Copiar</span>
-                          </>
+                          <span className="font-mono text-xs sm:text-sm font-bold px-2.5 py-1.5 rounded-lg border block truncate text-slate-500 bg-slate-900/50 border-slate-800/60 italic">
+                            Não Informado
+                          </span>
                         )}
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => handleCopyCode(normalizeStiCode(currentUnit.trackingCode), 'sti', e)}
-                      className="w-full text-left font-mono text-xs sm:text-sm font-bold text-slate-200 bg-slate-900 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-800 block truncate transition-colors cursor-pointer group flex items-center justify-between"
-                      title="Clique para copiar Código STI"
-                    >
-                      <span className="truncate">{formatStiBadge(currentUnit.trackingCode)}</span>
-                      <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60 text-slate-300 transition-opacity ml-1 shrink-0" />
-                    </button>
-                  </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Serial Number */}
                   <div className="space-y-1.5">
