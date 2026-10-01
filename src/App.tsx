@@ -730,14 +730,17 @@ export default function App() {
     }
   };
 
+  // Tab navigation that always clears sticky filters so returning to stock tab defaults to 'Todos'
+  const handleSwitchTab = (tab: 'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement') => {
+    setSelectedTriageUnit(null);
+    setInitialStockFilters(null);
+    setActiveTab(tab);
+  };
+
   // Navigate to detailed unit specs from Dashboard
   const handleViewUnitDetails = (unit: TriageUnit) => {
     setSelectedTriageUnit({ ...unit });
-    setInitialStockFilters({
-      platform: null,
-      sector: unit.status === 'Baixado' ? 'Baixado' : (unit.destinationSector || 'Principal'),
-      searchTerm: null
-    });
+    setInitialStockFilters(null);
     setActiveTab('stock');
   };
 
@@ -795,7 +798,7 @@ export default function App() {
             {/* Desktop Navigation Tabs (Sleek Segmented Pill) */}
             <nav className="hidden xl:flex items-center gap-1 bg-slate-950/80 p-1 rounded-2xl border border-slate-800 shadow-inner" id="desktop-navigation">
               <button
-                onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
+                onClick={() => handleSwitchTab('dashboard')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'dashboard' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
@@ -806,7 +809,7 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => { setActiveTab('rma'); setSelectedTriageUnit(null); }}
+                onClick={() => handleSwitchTab('rma')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'rma' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-500/10' : 'border border-transparent text-slate-400 hover:text-rose-300 hover:bg-slate-800/60'
                 }`}
@@ -817,7 +820,7 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => { setActiveTab('catalog'); setSelectedTriageUnit(null); }}
+                onClick={() => handleSwitchTab('catalog')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'catalog' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
@@ -828,7 +831,7 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => { setActiveTab('stock'); setSelectedTriageUnit(null); }}
+                onClick={() => handleSwitchTab('stock')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'stock' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
@@ -839,7 +842,7 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => { setActiveTab('pending'); setSelectedTriageUnit(null); }}
+                onClick={() => handleSwitchTab('pending')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'pending' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
@@ -855,7 +858,7 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => { setActiveTab('movement'); setSelectedTriageUnit(null); }}
+                onClick={() => handleSwitchTab('movement')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'movement' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`}
@@ -887,7 +890,7 @@ export default function App() {
       {/* Secondary Navigation Tabs (for screens under XL) */}
       <div className="xl:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-3 sm:px-4 flex gap-1.5 shadow-inner items-center" id="mobile-navigation">
         <button
-          onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
+          onClick={() => handleSwitchTab('dashboard')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'dashboard' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
@@ -897,7 +900,7 @@ export default function App() {
         </button>
 
         <button
-          onClick={() => { setActiveTab('rma'); setSelectedTriageUnit(null); }}
+          onClick={() => handleSwitchTab('rma')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'rma' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
@@ -907,7 +910,7 @@ export default function App() {
         </button>
 
         <button
-          onClick={() => { setActiveTab('catalog'); setSelectedTriageUnit(null); }}
+          onClick={() => handleSwitchTab('catalog')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'catalog' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
@@ -917,7 +920,7 @@ export default function App() {
         </button>
 
         <button
-          onClick={() => { setActiveTab('stock'); setSelectedTriageUnit(null); }}
+          onClick={() => handleSwitchTab('stock')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'stock' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
@@ -927,7 +930,7 @@ export default function App() {
         </button>
 
         <button
-          onClick={() => { setActiveTab('pending'); setSelectedTriageUnit(null); }}
+          onClick={() => handleSwitchTab('pending')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'pending' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
@@ -942,7 +945,7 @@ export default function App() {
         </button>
 
         <button
-          onClick={() => { setActiveTab('movement'); setSelectedTriageUnit(null); }}
+          onClick={() => handleSwitchTab('movement')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'movement' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm' : 'border border-transparent text-slate-400 hover:text-white'
           }`}
@@ -1062,6 +1065,7 @@ export default function App() {
                 initialPlatformFilter={initialStockFilters?.platform}
                 initialSectorFilter={initialStockFilters?.sector}
                 initialSearchTerm={initialStockFilters?.searchTerm}
+                onClearInitialFilters={() => setInitialStockFilters(null)}
               />
             )}
 
@@ -1109,11 +1113,7 @@ export default function App() {
 
                     if (match) {
                       setSelectedTriageUnit({ ...match });
-                      setInitialStockFilters({
-                        platform: null,
-                        sector: match.status === 'Baixado' ? 'Baixado' : (match.destinationSector || 'Principal'),
-                        searchTerm: null
-                      });
+                      setInitialStockFilters(null);
                     } else {
                       setSelectedTriageUnit(null);
                       setInitialStockFilters({
@@ -1140,11 +1140,7 @@ export default function App() {
                 onSaveTriage={handleSaveTriage}
                 onNavigateToStockUnit={(unit) => {
                   setSelectedTriageUnit({ ...unit });
-                  setInitialStockFilters({
-                    platform: null,
-                    sector: unit.status === 'Baixado' ? 'Baixado' : (unit.destinationSector || 'Principal'),
-                    searchTerm: null
-                  });
+                  setInitialStockFilters(null);
                   setActiveTab('stock');
                 }}
                 userRole={userRole}

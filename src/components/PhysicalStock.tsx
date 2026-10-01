@@ -80,6 +80,7 @@ interface PhysicalStockProps {
   initialPlatformFilter?: PlatformType | null;
   initialSectorFilter?: DestinationSectorType | null;
   initialSearchTerm?: string | null;
+  onClearInitialFilters?: () => void;
 }
 
 const stripHtml = (html?: string): string => {
@@ -135,7 +136,8 @@ export default function PhysicalStock({
   isLight = false,
   initialPlatformFilter,
   initialSectorFilter,
-  initialSearchTerm
+  initialSearchTerm,
+  onClearInitialFilters
 }: PhysicalStockProps) {
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm || '');
   const [selectedBrand, setSelectedBrand] = useState<string>('Todas');
@@ -149,22 +151,31 @@ export default function PhysicalStock({
   useEffect(() => {
     if (initialSearchTerm !== undefined && initialSearchTerm !== null) {
       setSearchTerm(initialSearchTerm);
+      if (onClearInitialFilters) {
+        onClearInitialFilters();
+      }
     }
-  }, [initialSearchTerm]);
+  }, [initialSearchTerm, onClearInitialFilters]);
 
   // React to initial platform filter changes from Dashboard navigation
   useEffect(() => {
-    if (initialPlatformFilter !== undefined) {
+    if (initialPlatformFilter !== undefined && initialPlatformFilter !== null) {
       setSelectedPlatform(initialPlatformFilter || 'Todas');
+      if (onClearInitialFilters) {
+        onClearInitialFilters();
+      }
     }
-  }, [initialPlatformFilter]);
+  }, [initialPlatformFilter, onClearInitialFilters]);
 
   // React to initial sector filter changes from Dashboard navigation
   useEffect(() => {
     if (initialSectorFilter) {
       setActiveTab(initialSectorFilter);
+      if (onClearInitialFilters) {
+        onClearInitialFilters();
+      }
     }
-  }, [initialSectorFilter]);
+  }, [initialSectorFilter, onClearInitialFilters]);
 
   const getTodayIsoDate = () => {
     const now = new Date();
