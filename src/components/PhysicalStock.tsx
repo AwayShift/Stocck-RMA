@@ -115,7 +115,7 @@ export const isUnitInSector = (unit: TriageUnit, sectorTab: string): boolean => 
   const target = sectorTab.trim().toLowerCase();
 
   if (target === 'principal') {
-    return dest === 'principal' || dest === 'estoque' || dest === '';
+    return dest === 'principal' || dest === 'estoque' || dest === '' || (!['openbox', 'rma'].includes(dest));
   }
   return dest === target;
 };
@@ -473,11 +473,16 @@ export default function PhysicalStock({
       // 5. Ensure visibleCount is large enough so that the card is rendered in the DOM
       const rawIdx = units.findIndex(u => u.id === targetId);
       if (rawIdx >= 0) {
-        setVisibleCount(prev => Math.max(prev, rawIdx + 35));
+        setVisibleCount(prev => Math.max(prev, rawIdx + 50));
       }
 
       // 6. Trigger discreet visual signaling on the card (without countdown)
       setHighlightedUnitId(targetId);
+
+      // Clear the prop in parent so it does not persist when navigating away and returning!
+      if (onClearSelectedUnit) {
+        onClearSelectedUnit();
+      }
 
       // 7. Multi-phase attempts to ensure DOM has rendered regardless of state batching and tab change
       const attemptScroll = () => {
@@ -506,7 +511,15 @@ export default function PhysicalStock({
         clearTimeout(tEnd);
       };
     }
-  }, [initialSelectedUnit, units, scrollToUnit]);
+  }, [initialSelectedUnit, units, scrollToUnit, onClearSelectedUnit]);
+
+  // When PhysicalStock unmounts (user switches tab), clear any residual parent filters
+  useEffect(() => {
+    return () => {
+      if (onClearSelectedUnit) onClearSelectedUnit();
+      if (onClearInitialFilters) onClearInitialFilters();
+    };
+  }, [onClearSelectedUnit, onClearInitialFilters]);
 
   const handleCloseDetails = () => {
     const lastTargetId = selectedUnitId;
@@ -525,6 +538,10 @@ export default function PhysicalStock({
     setIsEditPendingSelectorOpen(false);
 
     if (lastTargetId) {
+      const rawIdx = units.findIndex(u => u.id === lastTargetId);
+      if (rawIdx >= 0) {
+        setVisibleCount(prev => Math.max(prev, rawIdx + 50));
+      }
       setHighlightedUnitId(lastTargetId);
       setTimeout(() => scrollToUnit(lastTargetId), 50);
       setTimeout(() => scrollToUnit(lastTargetId), 200);
@@ -1184,13 +1201,13 @@ export default function PhysicalStock({
   // Reset pagination limit when search term, filters, sector tab, date, or duplicate filter changes,
   // BUT do not cap at 20 if we are navigating to a specific target unit!
   useEffect(() => {
-    const targetId = initialSelectedUnit?.id || highlightedUnitId;
+    const targetId = initialSelectedUnit?.id || highlightedUnitId || selectedUnitId;
     if (targetId) {
       const idx = filteredUnits.findIndex(u => u.id === targetId);
       const rawIdx = units.findIndex(u => u.id === targetId);
       const targetIndex = Math.max(idx, rawIdx);
       if (targetIndex >= 0) {
-        setVisibleCount(prev => Math.max(prev, targetIndex + 35));
+        setVisibleCount(prev => Math.max(prev, targetIndex + 50));
         return;
       }
     }
@@ -1199,21 +1216,21 @@ export default function PhysicalStock({
 
   // Ensure visibleCount expands whenever filteredUnits updates and contains a target unit
   useEffect(() => {
-    const targetId = initialSelectedUnit?.id || highlightedUnitId;
+    const targetId = initialSelectedUnit?.id || highlightedUnitId || selectedUnitId;
     if (!targetId) return;
 
     const idx = filteredUnits.findIndex(u => u.id === targetId);
     if (idx >= 0) {
       if (idx >= visibleCount) {
-        setVisibleCount(Math.max(visibleCount, idx + 35));
+        setVisibleCount(Math.max(visibleCount, idx + 50));
       }
     } else {
       const rawIdx = units.findIndex(u => u.id === targetId);
       if (rawIdx >= 0 && rawIdx >= visibleCount) {
-        setVisibleCount(Math.max(visibleCount, rawIdx + 35));
+        setVisibleCount(Math.max(visibleCount, rawIdx + 50));
       }
     }
-  }, [filteredUnits, initialSelectedUnit, highlightedUnitId, units, visibleCount]);
+  }, [filteredUnits, initialSelectedUnit, highlightedUnitId, selectedUnitId, units, visibleCount]);
 
   // Slice filtered units according to current pagination limit (20 items per page)
   const displayedUnits = filteredUnits.slice(0, visibleCount);
@@ -2189,7 +2206,7 @@ export default function PhysicalStock({
                     </button>
                   </span>
                 )}
-                {activeTab !== 'Todas' && (() => {
+                {activeTab !== 'Todos' && (() => {
                   const sStyle = getSectorFilterStyle(activeTab);
                   return (
                     <span 
@@ -2200,7 +2217,7 @@ export default function PhysicalStock({
                       <span>Estoque: <strong>{sStyle.label}</strong></span>
                       <button 
                         type="button" 
-                        onClick={() => setActiveTab('Todas')} 
+                        onClick={() => setActiveTab('Todos')} 
                         className={`transition-colors cursor-pointer p-0.5 rounded ${sStyle.hoverBtnClasses}`}
                         title="Ver todos os estoques"
                       >

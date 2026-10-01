@@ -70,9 +70,10 @@ import Dashboard from './components/Dashboard';
 import BaseCatalog from './components/BaseCatalog';
 import RmaEntry from './components/RmaEntry';
 import PhysicalStock from './components/PhysicalStock';
-import PendingItems from './components/PendingItems';
+import PendingItems, { getLinkedStockUnit } from './components/PendingItems';
 import Login from './components/Login';
 import ProductMovements from './components/ProductMovements';
+import { GlobalSearchBar } from './components/GlobalSearchBar';
 import SettingsModal from './components/SettingsModal';
 import BackupModal from './components/BackupModal';
 import DatabaseSwitcherModal from './components/DatabaseSwitcherModal';
@@ -744,6 +745,42 @@ export default function App() {
     setActiveTab('stock');
   };
 
+  // Global search navigation handlers
+  const handleSelectUnitFromGlobal = (unit: TriageUnit) => {
+    setSelectedTriageUnit({ ...unit });
+    setInitialStockFilters(null);
+    setActiveTab('stock');
+  };
+
+  const handleSelectPendingFromGlobal = (item: PendingItem) => {
+    const linked = getLinkedStockUnit(item, triageUnits);
+    if (linked) {
+      setSelectedTriageUnit({ ...linked });
+      setInitialStockFilters(null);
+      setActiveTab('stock');
+      return;
+    }
+    setSelectedTriageUnit(null);
+    setInitialStockFilters(null);
+    setActiveTab('pending');
+  };
+
+  const handleSelectProductFromGlobal = (_product: BaseProduct) => {
+    setSelectedTriageUnit(null);
+    setInitialStockFilters(null);
+    setActiveTab('catalog');
+  };
+
+  const handleSearchSubmitToStock = (searchTerm: string) => {
+    setSelectedTriageUnit(null);
+    setInitialStockFilters({
+      platform: null,
+      sector: null,
+      searchTerm
+    });
+    setActiveTab('stock');
+  };
+
   // Active pending items that require priority attention (excludes 'Resolvido' and 'Baixa' priority)
   const activePendingItemsCount = useMemo(() => {
     return pendingItems.filter(p => {
@@ -780,7 +817,7 @@ export default function App() {
             
             {/* Logo and title (Clickable to access Dashboard) */}
             <button
-              onClick={() => { setActiveTab('dashboard'); setSelectedTriageUnit(null); }}
+              onClick={() => handleSwitchTab('dashboard')}
               className="flex items-center gap-2.5 text-left focus:outline-none cursor-pointer group hover:opacity-90 transition-opacity shrink-0 py-1"
               title="Ir para o Dashboard"
             >
@@ -794,6 +831,18 @@ export default function App() {
                 <p className="text-[10px] text-slate-400 tracking-wider uppercase font-bold mt-0.5">Gestão e Triagem</p>
               </div>
             </button>
+
+            {/* Global Search Bar (Instant lookup of Orders, STI, Serial, SKU, Pendencies across all tabs) */}
+            <GlobalSearchBar
+              units={triageUnits}
+              pendingItems={pendingItems}
+              products={products}
+              onSelectUnit={handleSelectUnitFromGlobal}
+              onSelectPendingItem={handleSelectPendingFromGlobal}
+              onSelectProduct={handleSelectProductFromGlobal}
+              onSearchSubmitToStock={handleSearchSubmitToStock}
+              isLight={isLight}
+            />
 
             {/* Desktop Navigation Tabs (Sleek Segmented Pill) */}
             <nav className="hidden xl:flex items-center gap-1 bg-slate-950/80 p-1 rounded-2xl border border-slate-800 shadow-inner" id="desktop-navigation">
@@ -1041,7 +1090,7 @@ export default function App() {
                 initialPendingItem={pendingItemForRma}
                 onClearInitialPendingItem={() => setPendingItemForRma(null)}
                 onSaveTriage={handleSaveTriage}
-                onNavigateToStock={() => setActiveTab('stock')}
+                onNavigateToStock={() => handleSwitchTab('stock')}
                 isLight={isLight}
                 currentUser={user ? { uid: user.id, email: user.email || '', name: userName || user.displayName || '' } : null}
               />
@@ -1089,7 +1138,7 @@ export default function App() {
                   if (Array.isArray(list)) setPendingItems(list);
                 }}
                 onNavigateToStock={(unitId?: string) => {
-                  if (unitId) {
+                  if (unitId && unitId.trim()) {
                     const raw = unitId.trim();
                     const clean = raw.toLowerCase();
                     const cleanSti = normalizeStiCode(raw).toLowerCase();
@@ -1122,8 +1171,10 @@ export default function App() {
                         searchTerm: raw.replace(/^[#]/, '').trim()
                       });
                     }
+                    setActiveTab('stock');
+                  } else {
+                    handleSwitchTab('stock');
                   }
-                  setActiveTab('stock');
                 }}
                 enableSpreadsheetExport={enableSpreadsheetExport}
               />
