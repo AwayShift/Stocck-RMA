@@ -847,7 +847,7 @@ export default function App() {
               />
 
               {/* Desktop Navigation Tabs (Sleek Segmented Pill) */}
-              <nav className="hidden xl:flex items-center gap-0.5 sm:gap-1 bg-slate-950/80 p-0.5 sm:p-1 rounded-2xl border border-slate-800 shadow-inner" id="desktop-navigation">
+              <nav className="hidden xl:flex items-center gap-0.5 sm:gap-1 bg-slate-950/80 p-0.5 sm:p-1 rounded-2xl border border-slate-800 shadow-inner relative z-10" id="desktop-navigation">
                 <button
                   onClick={() => handleSwitchTab('dashboard')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
