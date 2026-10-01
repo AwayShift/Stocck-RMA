@@ -813,110 +813,113 @@ export default function App() {
       {/* Top Main Navigation Bar */}
       <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 shadow-lg w-full" id="main-header">
         <div className="max-w-[1600px] mx-auto px-3 sm:px-6">
-          <div className="flex items-center justify-between h-16 gap-2 lg:gap-3 xl:gap-4">
+          <div className="flex items-center justify-between h-16 gap-2 sm:gap-3">
             
-            {/* Logo and title (Clickable to access Dashboard) */}
-            <button
-              onClick={() => handleSwitchTab('dashboard')}
-              className="flex items-center gap-2.5 text-left focus:outline-none cursor-pointer group hover:opacity-90 transition-opacity shrink-0 py-1"
-              title="Ir para o Dashboard"
-            >
-              <div className="w-9 h-9 bg-gradient-to-br from-sky-500 to-sky-600 rounded-xl shadow-md shadow-sky-500/20 text-white flex items-center justify-center group-hover:scale-105 transition-all duration-200">
-                <Boxes className="w-5 h-5 text-white" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-base font-extrabold tracking-tight text-white flex items-center gap-1 leading-none">
-                  Stocck <span className="text-sky-400 font-bold group-hover:text-sky-300 transition-colors">RMA</span>
-                </h1>
-                <p className="text-[10px] text-slate-400 tracking-wider uppercase font-bold mt-0.5">Gestão e Triagem</p>
-              </div>
-            </button>
-
-            {/* Global Search Bar (Instant lookup of Orders, STI, Serial, SKU, Pendencies across all tabs) */}
-            <GlobalSearchBar
-              units={triageUnits}
-              pendingItems={pendingItems}
-              products={products}
-              onSelectUnit={handleSelectUnitFromGlobal}
-              onSelectPendingItem={handleSelectPendingFromGlobal}
-              onSelectProduct={handleSelectProductFromGlobal}
-              onSearchSubmitToStock={handleSearchSubmitToStock}
-              isLight={isLight}
-            />
-
-            {/* Desktop Navigation Tabs (Sleek Segmented Pill) */}
-            <nav className="hidden xl:flex items-center gap-1 bg-slate-950/80 p-1 rounded-2xl border border-slate-800 shadow-inner" id="desktop-navigation">
+            {/* Left Header Group: Logo, Search Bar, and Desktop Navigation Tabs (Tight, balanced spacing) */}
+            <div className="flex items-center gap-2 sm:gap-3 lg:gap-3.5 min-w-0">
+              {/* Logo and title (Clickable to access Dashboard) */}
               <button
                 onClick={() => handleSwitchTab('dashboard')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'dashboard' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                id="nav-dashboard"
+                className="flex items-center gap-2 text-left focus:outline-none cursor-pointer group hover:opacity-90 transition-opacity shrink-0 py-1"
+                title="Ir para o Dashboard"
               >
-                <TrendingUp className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span>Dashboard</span>
+                <div className="w-8.5 h-8.5 bg-gradient-to-br from-sky-500 to-sky-600 rounded-xl shadow-md shadow-sky-500/20 text-white flex items-center justify-center group-hover:scale-105 transition-all duration-200">
+                  <Boxes className="w-4.5 h-4.5 text-white" />
+                </div>
+                <div className="hidden sm:block">
+                  <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white flex items-center gap-1 leading-none">
+                    Stocck <span className="text-sky-400 font-bold group-hover:text-sky-300 transition-colors">RMA</span>
+                  </h1>
+                  <p className="text-[9px] text-slate-400 tracking-wider uppercase font-bold mt-0.5">Gestão e Triagem</p>
+                </div>
               </button>
 
-              <button
-                onClick={() => handleSwitchTab('rma')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'rma' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-500/10' : 'border border-transparent text-slate-400 hover:text-rose-300 hover:bg-slate-800/60'
-                }`}
-                id="nav-rma"
-              >
-                <FolderMinus className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'rma' ? 'text-rose-400' : 'text-slate-400'}`} />
-                <span>Entrada de RMA</span>
-              </button>
+              {/* Global Search Bar (Instant lookup of Orders, STI, Serial, SKU, Pendencies across all tabs) */}
+              <GlobalSearchBar
+                units={triageUnits}
+                pendingItems={pendingItems}
+                products={products}
+                onSelectUnit={handleSelectUnitFromGlobal}
+                onSelectPendingItem={handleSelectPendingFromGlobal}
+                onSelectProduct={handleSelectProductFromGlobal}
+                onSearchSubmitToStock={handleSearchSubmitToStock}
+                isLight={isLight}
+              />
 
-              <button
-                onClick={() => handleSwitchTab('catalog')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'catalog' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                id="nav-catalog"
-              >
-                <Database className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span>Catálogo de Base</span>
-              </button>
+              {/* Desktop Navigation Tabs (Sleek Segmented Pill) */}
+              <nav className="hidden xl:flex items-center gap-0.5 sm:gap-1 bg-slate-950/80 p-0.5 sm:p-1 rounded-2xl border border-slate-800 shadow-inner" id="desktop-navigation">
+                <button
+                  onClick={() => handleSwitchTab('dashboard')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'dashboard' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                  id="nav-dashboard"
+                >
+                  <TrendingUp className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>Dashboard</span>
+                </button>
 
-              <button
-                onClick={() => handleSwitchTab('stock')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'stock' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                id="nav-stock"
-              >
-                <Package className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span>Estoque Físico</span>
-              </button>
+                <button
+                  onClick={() => handleSwitchTab('rma')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'rma' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-500/10' : 'border border-transparent text-slate-400 hover:text-rose-300 hover:bg-slate-800/60'
+                  }`}
+                  id="nav-rma"
+                >
+                  <FolderMinus className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'rma' ? 'text-rose-400' : 'text-slate-400'}`} />
+                  <span>Entrada de RMA</span>
+                </button>
 
-              <button
-                onClick={() => handleSwitchTab('pending')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'pending' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                id="nav-pending"
-              >
-                <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span>Pendências</span>
-                {activePendingItemsCount > 0 && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold ml-0.5">
-                    {activePendingItemsCount}
-                  </span>
-                )}
-              </button>
+                <button
+                  onClick={() => handleSwitchTab('catalog')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'catalog' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                  id="nav-catalog"
+                >
+                  <Database className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>Catálogo de Base</span>
+                </button>
 
-              <button
-                onClick={() => handleSwitchTab('movement')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'movement' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                id="nav-movement"
-              >
-                <Boxes className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span>Fluxo de Entradas</span>
-              </button>
-            </nav>
+                <button
+                  onClick={() => handleSwitchTab('stock')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'stock' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                  id="nav-stock"
+                >
+                  <Package className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>Estoque Físico</span>
+                </button>
+
+                <button
+                  onClick={() => handleSwitchTab('pending')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'pending' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                  id="nav-pending"
+                >
+                  <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>Pendências</span>
+                  {activePendingItemsCount > 0 && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold ml-0.5">
+                      {activePendingItemsCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => handleSwitchTab('movement')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'movement' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10' : 'border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                  id="nav-movement"
+                >
+                  <Boxes className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>Fluxo de Entradas</span>
+                </button>
+              </nav>
+            </div>
 
             {/* Unified Settings & System Control */}
             <div className="flex items-center gap-2 shrink-0">
