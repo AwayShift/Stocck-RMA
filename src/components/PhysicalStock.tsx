@@ -487,8 +487,10 @@ export default function PhysicalStock({
         setVisibleCount(prev => Math.max(prev, rawIdx + 50));
       }
 
-      // 6. Trigger discreet visual signaling on the card (without countdown)
-      setHighlightedUnitId(targetId);
+      // 6. Trigger discreet visual signaling on the card ONLY when navigating directly to stock (without opening modal)
+      if (!openModalOnInitialSelect) {
+        setHighlightedUnitId(targetId);
+      }
 
       // Clear the prop in parent so it does not persist when navigating away and returning!
       if (onClearSelectedUnit) {
@@ -509,9 +511,9 @@ export default function PhysicalStock({
       const t4 = setTimeout(attemptScroll, 1300);
 
       // Remove highlight smoothly after 4 seconds
-      const tEnd = setTimeout(() => {
+      const tEnd = !openModalOnInitialSelect ? setTimeout(() => {
         setHighlightedUnitId(null);
-      }, 4000);
+      }, 4000) : null;
 
       return () => {
         clearTimeout(t0);
@@ -519,7 +521,7 @@ export default function PhysicalStock({
         clearTimeout(t2);
         clearTimeout(t3);
         clearTimeout(t4);
-        clearTimeout(tEnd);
+        if (tEnd) clearTimeout(tEnd);
       };
     }
   }, [initialSelectedUnit, openModalOnInitialSelect, units, scrollToUnit, onClearSelectedUnit]);
@@ -533,7 +535,6 @@ export default function PhysicalStock({
   }, [onClearSelectedUnit, onClearInitialFilters]);
 
   const handleCloseDetails = () => {
-    const lastTargetId = selectedUnitId;
     setSelectedUnitId(null);
     if (onClearSelectedUnit) {
       onClearSelectedUnit();
@@ -547,18 +548,6 @@ export default function PhysicalStock({
     setIsCustomEditPackageStatus(false);
     setCustomEditPackageStatusText('');
     setIsEditPendingSelectorOpen(false);
-
-    if (lastTargetId) {
-      const rawIdx = units.findIndex(u => u.id === lastTargetId);
-      if (rawIdx >= 0) {
-        setVisibleCount(prev => Math.max(prev, rawIdx + 50));
-      }
-      setHighlightedUnitId(lastTargetId);
-      setTimeout(() => scrollToUnit(lastTargetId), 50);
-      setTimeout(() => scrollToUnit(lastTargetId), 200);
-      setTimeout(() => scrollToUnit(lastTargetId), 550);
-      setTimeout(() => setHighlightedUnitId(null), 3500);
-    }
   };
 
   const handleStartEdit = (unit: TriageUnit) => {
@@ -1210,9 +1199,9 @@ export default function PhysicalStock({
   }, [units, filterOnlyDuplicates, selectedBrand, selectedCategory, selectedPlatform, selectedVoltage, selectedDate, searchTerm, activeTab, products]);
 
   // Reset pagination limit when search term, filters, sector tab, date, or duplicate filter changes,
-  // BUT do not cap at 20 if we are navigating to a specific target unit!
+  // BUT do not cap at 20 if we are navigating to a specific target unit from another tab!
   useEffect(() => {
-    const targetId = initialSelectedUnit?.id || highlightedUnitId || selectedUnitId;
+    const targetId = initialSelectedUnit?.id;
     if (targetId) {
       const idx = filteredUnits.findIndex(u => u.id === targetId);
       const rawIdx = units.findIndex(u => u.id === targetId);
@@ -1225,9 +1214,9 @@ export default function PhysicalStock({
     setVisibleCount(20);
   }, [searchTerm, selectedBrand, selectedCategory, selectedVoltage, selectedDate, activeTab, filterOnlyDuplicates]);
 
-  // Ensure visibleCount expands whenever filteredUnits updates and contains a target unit
+  // Ensure visibleCount expands ONLY when an external initialSelectedUnit arrives from another tab
   useEffect(() => {
-    const targetId = initialSelectedUnit?.id || highlightedUnitId || selectedUnitId;
+    const targetId = initialSelectedUnit?.id;
     if (!targetId) return;
 
     const idx = filteredUnits.findIndex(u => u.id === targetId);
@@ -1241,7 +1230,7 @@ export default function PhysicalStock({
         setVisibleCount(Math.max(visibleCount, rawIdx + 50));
       }
     }
-  }, [filteredUnits, initialSelectedUnit, highlightedUnitId, selectedUnitId, units, visibleCount]);
+  }, [filteredUnits, initialSelectedUnit, units, visibleCount]);
 
   // Slice filtered units according to current pagination limit (20 items per page)
   const displayedUnits = filteredUnits.slice(0, visibleCount);
@@ -2399,6 +2388,7 @@ export default function PhysicalStock({
                       ? 'border-purple-500/30 hover:border-purple-400/50'
                       : (hasDupSti || hasDupSerial ? 'border-amber-500/50 shadow-md shadow-amber-500/5 hover:border-amber-500' : 'border-slate-800 hover:border-slate-700/80 hover:shadow-xl')
                   }`}
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: '360px' }}
                   id={`stock-unit-${unit.id}`}
                 >
                   <div className="space-y-3">
@@ -2747,6 +2737,7 @@ export default function PhysicalStock({
                       ? 'ring-2 ring-sky-400 border-sky-400/80 shadow-md shadow-sky-500/15 bg-slate-900/90'
                       : (hasDupSti || hasDupSerial ? 'border-amber-500/50 hover:border-amber-500' : 'border-slate-800/80 hover:border-slate-700/80 hover:shadow-lg')
                   }`}
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: '80px' }}
                   id={`stock-unit-list-${unit.id}`}
                 >
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
