@@ -13,7 +13,8 @@ import {
   ArrowRight, 
   ChevronRight,
   Hash,
-  Eye
+  Eye,
+  X
 } from 'lucide-react';
 import { TriageUnit, PendingItem, BaseProduct } from '../types';
 import { normalizeStiCode } from '../utils/stiFormatter';
@@ -220,6 +221,7 @@ export function GlobalSearchBar({
 
   const handleSelectUnit = (unit: TriageUnit) => {
     onSelectUnit(unit);
+    setQuery('');
     setIsOpen(false);
   };
 
@@ -229,16 +231,19 @@ export function GlobalSearchBar({
     } else {
       onSelectUnit(unit);
     }
+    setQuery('');
     setIsOpen(false);
   };
 
   const handleSelectPending = (item: PendingItem) => {
     onSelectPendingItem(item);
+    setQuery('');
     setIsOpen(false);
   };
 
   const handleSelectProduct = (product: BaseProduct) => {
     onSelectProduct(product);
+    setQuery('');
     setIsOpen(false);
   };
 
@@ -257,6 +262,7 @@ export function GlobalSearchBar({
 
     // Default: submit search query directly to PhysicalStock
     onSearchSubmitToStock(query.trim());
+    setQuery('');
     setIsOpen(false);
   };
 
@@ -317,9 +323,22 @@ export function GlobalSearchBar({
         <Search className={`w-3.5 h-3.5 shrink-0 transition-colors ${
           isLight ? 'text-slate-400 group-hover:text-sky-600' : 'text-slate-500 group-hover:text-sky-400'
         }`} />
-        <span className="truncate text-[11px] sm:text-xs font-normal">
+        <span className="truncate text-[11px] sm:text-xs font-normal flex-1">
           {query.trim() ? query : 'Buscar...'}
         </span>
+        {query.trim() && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setQuery('');
+            }}
+            className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer shrink-0"
+            title="Limpar busca"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
       </div>
 
       {/* 
@@ -345,7 +364,7 @@ export function GlobalSearchBar({
               isLight ? 'text-slate-400' : 'text-slate-400'
             }`} />
 
-            <form onSubmit={handleSubmitSearch} className="w-full h-full flex items-center">
+            <form onSubmit={handleSubmitSearch} className="w-full h-full flex items-center pr-2">
               <input
                 ref={expandedInputRef}
                 type="text"
@@ -353,7 +372,7 @@ export function GlobalSearchBar({
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleInputKeyDown}
                 placeholder="Buscar por pedido, STI, serial, SKU ou #"
-                className={`w-full h-full bg-transparent px-3 pr-4 text-xs sm:text-sm font-medium focus:outline-none ${
+                className={`w-full h-full bg-transparent px-3 pr-2 text-xs sm:text-sm font-medium focus:outline-none ${
                   isLight 
                     ? 'text-slate-900 placeholder-slate-400' 
                     : 'text-white placeholder-slate-400'
@@ -362,6 +381,19 @@ export function GlobalSearchBar({
                 autoComplete="off"
                 spellCheck="false"
               />
+              {query.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery('');
+                    expandedInputRef.current?.focus();
+                  }}
+                  className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors mr-1 cursor-pointer shrink-0"
+                  title="Limpar busca"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </form>
           </div>
 
@@ -734,6 +766,7 @@ export function GlobalSearchBar({
                                       handleGoToStockUnit(linked);
                                     } else {
                                       onSearchSubmitToStock(item.orderNumber || item.registrationNumber || item.sku || '');
+                                      setQuery('');
                                       setIsOpen(false);
                                     }
                                   }}
@@ -817,6 +850,7 @@ export function GlobalSearchBar({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onSearchSubmitToStock(product.sku);
+                                    setQuery('');
                                     setIsOpen(false);
                                   }}
                                   className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer border shadow-2xs ${
