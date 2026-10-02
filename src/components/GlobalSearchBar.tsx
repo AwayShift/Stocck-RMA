@@ -308,11 +308,11 @@ export function GlobalSearchBar({
     <div ref={containerRef} className={`relative ${isOpen ? 'z-50' : 'z-20'}`} id="global-search-wrapper">
       {/* 
         1. Idle / Collapsed Search Trigger Bar in Header
-        Compact, discreet, and smoothly expands on hover with symmetrical rounded-xl borders:
+        Fixed, stable width without expanding on hover:
       */}
       <div
         onClick={() => setIsOpen(true)}
-        className={`h-7.5 w-20 sm:w-24 md:w-28 hover:w-32 sm:hover:w-40 md:hover:w-48 px-2.5 rounded-xl border transition-all duration-300 ease-out flex items-center gap-1.5 cursor-pointer select-none group shrink-0 ${
+        className={`h-7.5 w-16 sm:w-20 md:w-24 px-2 rounded-xl border transition-colors flex items-center gap-1 cursor-pointer select-none group shrink-0 ${
           isLight
             ? 'bg-slate-100/90 border-slate-200/90 hover:bg-white hover:border-slate-300 text-slate-500 shadow-2xs'
             : 'bg-slate-950/60 border-slate-800/90 hover:bg-slate-900 hover:border-slate-700 text-slate-400 shadow-inner'
