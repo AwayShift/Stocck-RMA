@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
 import { 
   Search, 
@@ -45,6 +46,7 @@ import {
   Hash,
   Link2,
   ArrowRightLeft,
+  ArrowRight,
   Box,
   Tag
 } from 'lucide-react';
@@ -72,7 +74,9 @@ interface PhysicalStockProps {
   onCheckoutUnit: (id: string) => Promise<void>;
   onRevertCheckoutUnit?: (id: string) => Promise<void>;
   initialSelectedUnit?: TriageUnit | null;
+  openModalOnInitialSelect?: boolean;
   onClearSelectedUnit?: () => void;
+  onGoToStockDirectly?: (unit: TriageUnit) => void;
   onSaveTriage?: (unit: TriageUnit) => Promise<void>;
   enableSpreadsheetImport?: boolean;
   enableSpreadsheetExport?: boolean;
@@ -129,7 +133,9 @@ export default function PhysicalStock({
   onCheckoutUnit,
   onRevertCheckoutUnit,
   initialSelectedUnit,
+  openModalOnInitialSelect = true,
   onClearSelectedUnit,
+  onGoToStockDirectly,
   onSaveTriage,
   enableSpreadsheetImport = true,
   enableSpreadsheetExport = true,
@@ -441,9 +447,14 @@ export default function PhysicalStock({
     if (initialSelectedUnit) {
       const targetId = initialSelectedUnit.id;
 
-      // 1. OPEN THE MODAL FOR THE CLICKED ORDER / PRODUCT AS REQUESTED BY USER!
-      setSelectedUnitId(targetId);
-      setIsEditingUnit(false);
+      // 1. OPEN THE MODAL ONLY IF openModalOnInitialSelect is true!
+      if (openModalOnInitialSelect) {
+        setSelectedUnitId(targetId);
+        setIsEditingUnit(false);
+      } else {
+        setSelectedUnitId(null);
+        setIsEditingUnit(false);
+      }
 
       // 2. Set the active tab to the item's sector/category tab so it displays properly in its sector
       if (initialSelectedUnit.status === 'Baixado') {
@@ -511,7 +522,7 @@ export default function PhysicalStock({
         clearTimeout(tEnd);
       };
     }
-  }, [initialSelectedUnit, units, scrollToUnit, onClearSelectedUnit]);
+  }, [initialSelectedUnit, openModalOnInitialSelect, units, scrollToUnit, onClearSelectedUnit]);
 
   // When PhysicalStock unmounts (user switches tab), clear any residual parent filters
   useEffect(() => {
@@ -3081,7 +3092,7 @@ export default function PhysicalStock({
   </div>
 
       {/* Complete unit details / Edit Modal Sheet */}
-      {currentUnit && (
+      {currentUnit && createPortal(
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 overflow-y-auto" 
           id="stock-details-modal"
@@ -3196,6 +3207,36 @@ export default function PhysicalStock({
                   </>
                 ) : (
                   <>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        handleCloseDetails();
+                        if (onGoToStockDirectly) {
+                          onGoToStockDirectly(currentUnit);
+                        } else {
+                          setSelectedUnitId(null);
+                          if (currentUnit.status === 'Baixado') {
+                            setActiveTab('Baixado');
+                          } else {
+                            const dest = (currentUnit.destinationSector || '').trim().toLowerCase();
+                            setActiveTab(dest === 'openbox' ? 'Openbox' : dest === 'rma' ? 'RMA' : 'Principal');
+                          }
+                          setHighlightedUnitId(currentUnit.id);
+                          scrollToUnit(currentUnit.id);
+                        }
+                      }}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                        isLight
+                          ? 'bg-slate-100 hover:bg-sky-50 text-slate-700 hover:text-sky-800 border-slate-300 hover:border-sky-400 shadow-2xs'
+                          : 'bg-slate-800 hover:bg-sky-950 text-slate-200 hover:text-sky-300 border-slate-700 hover:border-sky-500/50 shadow-2xs'
+                      }`}
+                      title="Fechar detalhes e ir diretamente para a posição deste produto no Estoque Físico"
+                      id="btn-modal-go-to-stock-header"
+                    >
+                      <Package className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                      <span>Ir ao estoque</span>
+                      <ArrowRight className="w-3.5 h-3.5 opacity-70 shrink-0" />
+                    </button>
                     <button 
                       type="button"
                       onClick={() => handleStartEdit(currentUnit)}
@@ -4748,6 +4789,37 @@ export default function PhysicalStock({
                     )}
 
                     <button 
+                      type="button"
+                      onClick={() => {
+                        handleCloseDetails();
+                        if (onGoToStockDirectly) {
+                          onGoToStockDirectly(currentUnit);
+                        } else {
+                          setSelectedUnitId(null);
+                          if (currentUnit.status === 'Baixado') {
+                            setActiveTab('Baixado');
+                          } else {
+                            const dest = (currentUnit.destinationSector || '').trim().toLowerCase();
+                            setActiveTab(dest === 'openbox' ? 'Openbox' : dest === 'rma' ? 'RMA' : 'Principal');
+                          }
+                          setHighlightedUnitId(currentUnit.id);
+                          scrollToUnit(currentUnit.id);
+                        }
+                      }}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                        isLight
+                          ? 'bg-slate-100 hover:bg-sky-50 text-slate-700 hover:text-sky-800 border-slate-300 hover:border-sky-400 shadow-2xs'
+                          : 'bg-slate-800 hover:bg-sky-950 text-slate-200 hover:text-sky-300 border-slate-700 hover:border-sky-500/50 shadow-2xs'
+                      }`}
+                      title="Fechar detalhes e ir diretamente para a posição deste produto no Estoque Físico"
+                      id="btn-modal-go-to-stock-footer"
+                    >
+                      <Package className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Ir ao estoque</span>
+                      <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+                    </button>
+
+                    <button 
                       onClick={() => handleDelete(currentUnit.id)}
                       className="px-3.5 py-2 bg-slate-800 hover:bg-rose-600/20 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
                       title="Apagar ficha técnica do banco"
@@ -4781,7 +4853,8 @@ export default function PhysicalStock({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Interactive Image Zoom Lightbox Modal with Loupe Magnifier */}
@@ -4796,7 +4869,7 @@ export default function PhysicalStock({
       />
 
       {/* Sector Transfer with Photo Choice Modal (When moving to Estoque Principal) */}
-      {transferModalData && (
+      {transferModalData && createPortal(
         <div 
           className="fixed inset-0 z-[120] bg-black/85 flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={(e) => {
@@ -4941,11 +5014,12 @@ export default function PhysicalStock({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal: Move Sector to Openbox (Mandatory STI Code Requirement) */}
-      {openboxMoveModalData && (
+      {openboxMoveModalData && createPortal(
         <div 
           className="fixed inset-0 z-[120] bg-black/85 flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={(e) => {
@@ -5115,11 +5189,12 @@ export default function PhysicalStock({
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Custom Confirmation Modal */}
-      {confirmConfig && (
+      {confirmConfig && createPortal(
         <div 
           className="fixed inset-0 z-[110] bg-black/85 flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={(e) => {
@@ -5170,18 +5245,22 @@ export default function PhysicalStock({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Excel Inventory Import Modal */}
-      <ExcelImportModal 
-        isOpen={isExcelModalOpen}
-        onClose={() => setIsExcelModalOpen(false)}
-        products={products}
-        existingUnits={units}
-        onImportUnits={handleImportBatchUnits}
-        defaultSector={activeTab === 'Openbox' ? 'Openbox' : activeTab === 'RMA' ? 'RMA' : activeTab === 'Principal' ? 'Principal' : 'Openbox'}
-      />
+      {isExcelModalOpen && createPortal(
+        <ExcelImportModal 
+          isOpen={isExcelModalOpen}
+          onClose={() => setIsExcelModalOpen(false)}
+          products={products}
+          existingUnits={units}
+          onImportUnits={handleImportBatchUnits}
+          defaultSector={activeTab === 'Openbox' ? 'Openbox' : activeTab === 'RMA' ? 'RMA' : activeTab === 'Principal' ? 'Principal' : 'Openbox'}
+        />,
+        document.body
+      )}
     </div>
   );
 }

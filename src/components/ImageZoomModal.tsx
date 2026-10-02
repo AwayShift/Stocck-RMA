@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   X, 
   ZoomIn, 
@@ -141,7 +142,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
 
   if (!isOpen || !imageUrl) return null;
 
-  return (
+  return createPortal(
     <div 
       className="image-zoom-overlay fixed inset-0 z-[120] bg-black/95 flex flex-col justify-between select-none animate-in fade-in duration-150"
       id="modal-image-zoom-viewer"
@@ -317,6 +318,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -12,7 +12,8 @@ import {
   CornerDownLeft, 
   ArrowRight, 
   ChevronRight,
-  Hash
+  Hash,
+  Eye
 } from 'lucide-react';
 import { TriageUnit, PendingItem, BaseProduct } from '../types';
 import { normalizeStiCode } from '../utils/stiFormatter';
@@ -592,13 +593,18 @@ export function GlobalSearchBar({
                                   )}
                                 </div>
 
-                                <p className={`text-xs font-bold truncate transition-colors ${
-                                  isLight 
-                                    ? 'text-slate-900 group-hover:text-sky-700' 
-                                    : 'text-white group-hover:text-sky-300'
-                                }`}>
-                                  {unit.baseProductName || 'Produto sem nome'}
-                                </p>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className={`text-xs font-bold truncate transition-colors ${
+                                    isLight 
+                                      ? 'text-slate-900 group-hover:text-sky-700' 
+                                      : 'text-white group-hover:text-sky-300'
+                                  }`}>
+                                    {unit.baseProductName || 'Produto sem nome'}
+                                  </p>
+                                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-sky-500 font-semibold opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                    <Eye className="w-3 h-3" /> Ficha
+                                  </span>
+                                </div>
 
                                 <div className={`flex items-center gap-2 text-[10px] ${
                                   isLight ? 'text-slate-600' : 'text-slate-400'
@@ -613,17 +619,21 @@ export function GlobalSearchBar({
                               <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                 <button
                                   type="button"
-                                  onClick={() => handleGoToStockUnit(unit)}
-                                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleGoToStockUnit(unit);
+                                  }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer border shadow-2xs ${
                                     isLight
-                                      ? 'bg-slate-100 hover:bg-sky-50 text-slate-700 hover:text-sky-800 border-slate-300 hover:border-sky-400 shadow-2xs'
-                                      : 'bg-slate-800 hover:bg-sky-950 text-slate-300 hover:text-sky-300 border-slate-700 hover:border-sky-500/50 shadow-2xs'
+                                      ? 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-300 hover:border-sky-400'
+                                      : 'bg-sky-950/70 hover:bg-sky-900 text-sky-300 border-sky-500/40 hover:border-sky-400'
                                   }`}
                                   title="Ir diretamente ao Estoque Físico com este produto selecionado (sem abrir modal)"
+                                  id={`btn-go-to-stock-unit-${unit.id}`}
                                 >
-                                  <Package className="w-3 h-3 text-sky-400 shrink-0" />
+                                  <Package className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                                   <span>Ir ao estoque</span>
-                                  <ArrowRight className="w-3 h-3 opacity-70" />
+                                  <ArrowRight className="w-3 h-3 opacity-80 shrink-0" />
                                 </button>
                               </div>
                             </div>
@@ -710,12 +720,34 @@ export function GlobalSearchBar({
                                 </p>
                               </div>
 
-                              <div className={`shrink-0 flex items-center transition-all ${
-                                isLight 
-                                  ? 'text-slate-400 group-hover:text-amber-700' 
-                                  : 'text-slate-500 group-hover:text-amber-400'
-                              }`}>
-                                <ChevronRight className="w-4 h-4" />
+                              <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const linked = units.find(u => 
+                                      (item.registrationNumber && u.pendingRegistrationNumber === item.registrationNumber) ||
+                                      (item.id && u.pendingItemId === item.id) ||
+                                      (item.orderNumber && u.orderNumber && areOrdersMatching(u.orderNumber, item.orderNumber))
+                                    );
+                                    if (linked) {
+                                      handleGoToStockUnit(linked);
+                                    } else {
+                                      onSearchSubmitToStock(item.orderNumber || item.registrationNumber || item.sku || '');
+                                      setIsOpen(false);
+                                    }
+                                  }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer border shadow-2xs ${
+                                    isLight
+                                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 hover:border-amber-400'
+                                      : 'bg-amber-950/70 hover:bg-amber-900 text-amber-300 border-amber-500/40 hover:border-amber-400'
+                                  }`}
+                                  title="Localizar ou filtrar no Estoque Físico"
+                                >
+                                  <Package className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                  <span>Ir ao estoque</span>
+                                  <ArrowRight className="w-3 h-3 opacity-80 shrink-0" />
+                                </button>
                               </div>
                             </div>
                           );
@@ -779,12 +811,25 @@ export function GlobalSearchBar({
                                 </p>
                               </div>
 
-                              <div className={`shrink-0 flex items-center transition-all ${
-                                isLight 
-                                  ? 'text-slate-400 group-hover:text-sky-700' 
-                                  : 'text-slate-500 group-hover:text-sky-400'
-                              }`}>
-                                <ChevronRight className="w-4 h-4" />
+                              <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onSearchSubmitToStock(product.sku);
+                                    setIsOpen(false);
+                                  }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer border shadow-2xs ${
+                                    isLight
+                                      ? 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-300 hover:border-sky-400'
+                                      : 'bg-sky-950/70 hover:bg-sky-900 text-sky-300 border-sky-500/40 hover:border-sky-400'
+                                  }`}
+                                  title={`Ver produtos com SKU ${product.sku} no Estoque Físico`}
+                                >
+                                  <Package className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                                  <span>Ir ao estoque</span>
+                                  <ArrowRight className="w-3 h-3 opacity-80 shrink-0" />
+                                </button>
                               </div>
                             </div>
                           );

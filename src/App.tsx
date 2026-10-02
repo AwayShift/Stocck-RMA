@@ -120,6 +120,7 @@ export default function App() {
 
   // Cross-component communication & modals
   const [selectedTriageUnit, setSelectedTriageUnit] = useState<TriageUnit | null>(null);
+  const [openModalOnStockSelect, setOpenModalOnStockSelect] = useState<boolean>(true);
   const [pendingItemForRma, setPendingItemForRma] = useState<PendingItem | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
@@ -738,16 +739,32 @@ export default function App() {
     setActiveTab(tab);
   };
 
-  // Navigate to detailed unit specs from Dashboard
+  // View unit modal from Dashboard without navigating to stock
   const handleViewUnitDetails = (unit: TriageUnit) => {
     setSelectedTriageUnit({ ...unit });
+    setOpenModalOnStockSelect(true);
+    // Keep activeTab as 'dashboard'! Do not switch tab!
+  };
+
+  // Global search navigation handlers: clicking product opens modal ONLY, without navigating to stock
+  const handleSelectUnitFromGlobal = (unit: TriageUnit) => {
+    setSelectedTriageUnit({ ...unit });
+    setOpenModalOnStockSelect(true);
+    // Keep activeTab as is! Do not switch tab!
+  };
+
+  // Global search navigation handlers: clicking "Ir ao estoque" goes directly to stock with product selected, WITHOUT opening modal
+  const handleGoToStockUnitFromGlobal = (unit: TriageUnit) => {
+    setSelectedTriageUnit({ ...unit });
+    setOpenModalOnStockSelect(false);
     setInitialStockFilters(null);
     setActiveTab('stock');
   };
 
-  // Global search navigation handlers
-  const handleSelectUnitFromGlobal = (unit: TriageUnit) => {
+  // When inside the modal, clicking "Ir ao estoque" closes modal and navigates to stock highlighting the product
+  const handleGoToStockDirectlyFromModal = (unit: TriageUnit) => {
     setSelectedTriageUnit({ ...unit });
+    setOpenModalOnStockSelect(false);
     setInitialStockFilters(null);
     setActiveTab('stock');
   };
@@ -840,6 +857,7 @@ export default function App() {
                 pendingItems={pendingItems}
                 products={products}
                 onSelectUnit={handleSelectUnitFromGlobal}
+                onGoToStockUnit={handleGoToStockUnitFromGlobal}
                 onSelectPendingItem={handleSelectPendingFromGlobal}
                 onSelectProduct={handleSelectProductFromGlobal}
                 onSearchSubmitToStock={handleSearchSubmitToStock}
@@ -1062,6 +1080,7 @@ export default function App() {
                 onDeleteDailyInflow={handleDeleteDailyInflow}
                 pendingItemsCount={activePendingItemsCount}
                 onViewUnit={handleViewUnitDetails}
+                onGoToStockUnit={handleGoToStockUnitFromGlobal}
                 onUpdateUnit={handleSaveTriage}
                 onNavigateToStock={handleNavigateToStockWithFilters}
                 onNavigateToPending={() => setActiveTab('pending')}
@@ -1099,7 +1118,7 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'stock' && (
+            <div style={{ display: activeTab === 'stock' ? 'block' : 'none' }}>
               <PhysicalStock 
                 units={triageUnits}
                 products={products}
@@ -1109,7 +1128,9 @@ export default function App() {
                 onCheckoutUnit={handleCheckoutTriage}
                 onRevertCheckoutUnit={handleRevertCheckoutTriage}
                 initialSelectedUnit={selectedTriageUnit}
+                openModalOnInitialSelect={openModalOnStockSelect}
                 onClearSelectedUnit={() => setSelectedTriageUnit(null)}
+                onGoToStockDirectly={handleGoToStockDirectlyFromModal}
                 onSaveTriage={handleSaveTriage}
                 enableSpreadsheetImport={enableSpreadsheetImport}
                 enableSpreadsheetExport={enableSpreadsheetExport}
@@ -1119,7 +1140,7 @@ export default function App() {
                 initialSearchTerm={initialStockFilters?.searchTerm}
                 onClearInitialFilters={() => setInitialStockFilters(null)}
               />
-            )}
+            </div>
 
             {activeTab === 'pending' && (
               <PendingItems

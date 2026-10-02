@@ -38,6 +38,7 @@ interface DashboardProps {
   onDeleteDailyInflow?: (id: string) => Promise<void>;
   pendingItemsCount?: number;
   onViewUnit: (unit: TriageUnit) => void;
+  onGoToStockUnit?: (unit: TriageUnit) => void;
   onUpdateUnit?: (unit: TriageUnit) => Promise<void>;
   onNavigateToStock: (platform?: PlatformType | null, sector?: DestinationSectorType | null) => void;
   onNavigateToPending?: () => void;
@@ -57,6 +58,7 @@ export default function Dashboard({
   onDeleteDailyInflow,
   pendingItemsCount = 0,
   onViewUnit, 
+  onGoToStockUnit,
   onUpdateUnit,
   onNavigateToStock,
   onNavigateToPending,
@@ -671,7 +673,7 @@ export default function Dashboard({
                     <div 
                       key={unit.id}
                       onClick={() => onViewUnit(unit)}
-                      title={`Produto: ${unit.baseProductName}\nSKU: ${unit.baseProductSku}${unit.customerReason ? `\nMotivo: ${unit.customerReason}` : ''}`}
+                      title={`Clique para abrir a ficha do produto (sem ir ao estoque)\nProduto: ${unit.baseProductName}\nSKU: ${unit.baseProductSku}${unit.customerReason ? `\nMotivo: ${unit.customerReason}` : ''}`}
                       className="group flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-4 bg-slate-950 border border-slate-800/80 rounded-xl hover:border-slate-700 hover:bg-slate-900/50 transition-all cursor-pointer"
                       id={`activity-item-${unit.id}`}
                     >
@@ -739,6 +741,22 @@ export default function Dashboard({
                         <span className="font-mono text-xs text-slate-500 pl-2">
                           {hourStr}
                         </span>
+
+                        {onGoToStockUnit && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onGoToStockUnit(unit);
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-sky-400 hover:bg-sky-500/15 rounded-lg transition-colors cursor-pointer"
+                            title="Ir diretamente ao Estoque Físico"
+                            id={`btn-dashboard-go-to-stock-${unit.id}`}
+                          >
+                            <Package className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
                         {onUpdateUnit && (
                           <button
                             type="button"
