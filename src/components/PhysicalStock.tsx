@@ -1149,6 +1149,12 @@ export default function PhysicalStock({
       const baseProdName = (baseProd?.name || '').toLowerCase();
       const baseProdSku = (baseProd?.sku || '').toLowerCase();
 
+      // Clean notes from HTML tags and internal metadata tags ([INITIAL_ENTRY_DATE:...], [CREATED_BY:...], etc.)
+      const cleanNotesText = stripHtml(unit.notes || '')
+        .replace(/\[[A-Z_]+:.*?\]/g, '')
+        .replace(/\[EXCLUDE_DAILY_COUNT\]/g, '')
+        .toLowerCase();
+
       const matchesSearch = !term ||
         (unit.baseProductName || '').toLowerCase().includes(term) ||
         (unit.baseProductSku || '').toLowerCase().includes(term) ||
@@ -1164,12 +1170,10 @@ export default function PhysicalStock({
         (Boolean(cleanTerm) && (unit.serialNumber || '').toLowerCase().includes(cleanTerm)) ||
         (unit.pendingRegistrationNumber || '').toLowerCase().includes(term) ||
         (Boolean(cleanTerm) && (unit.pendingRegistrationNumber || '').toLowerCase().includes(cleanTerm)) ||
-        (unit.pendingItemId || '').toLowerCase().includes(term) ||
         (unit.platform || '').toLowerCase().includes(term) ||
         (unit.customerReason || '').toLowerCase().includes(term) ||
         (unit.destinationSector || '').toLowerCase().includes(term) ||
-        (unit.notes || '').toLowerCase().includes(term) ||
-        (unit.id || '').toLowerCase().includes(term);
+        cleanNotesText.includes(term);
 
       // 5. Tab sector filter
       if (activeTab === 'Todos') {
