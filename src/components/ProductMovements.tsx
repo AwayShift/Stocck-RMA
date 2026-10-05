@@ -121,21 +121,13 @@ export default function ProductMovements({
     return sorted.length > 0 ? sorted : [currentMonthStr];
   }, [units, dailyInflows, currentMonthStr]);
 
-  // Selected Month state ("YYYY-MM")
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    if (dailyInflows && dailyInflows.length > 0) {
-      const sortedInflows = [...dailyInflows].sort((a, b) => b.date.localeCompare(a.date));
-      if (sortedInflows[0]?.date) {
-        return sortedInflows[0].date.substring(0, 7);
-      }
-    }
-    return currentMonthStr;
-  });
+  // Selected Month state ("YYYY-MM") - always default to current month according to current calendar date
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
 
   // Ensure selectedMonth is valid within availableMonths
   useEffect(() => {
     if (!availableMonths.includes(selectedMonth)) {
-      setSelectedMonth(availableMonths[0] || currentMonthStr);
+      setSelectedMonth(currentMonthStr);
     }
   }, [availableMonths, selectedMonth, currentMonthStr]);
 
