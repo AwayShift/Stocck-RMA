@@ -257,13 +257,13 @@ export default function PendingItems({
     }
   };
   
-  // Option to hide or show already resolved pendencies (stored in localStorage)
+  // Option to hide or show already resolved/cancelled pendencies (stored in localStorage)
   const [hideResolved, setHideResolved] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('rma_hide_resolved_pendencies');
-      return saved !== null ? saved === 'true' : false;
+      return saved !== null ? saved === 'true' : true;
     } catch {
-      return false;
+      return true;
     }
   });
 
@@ -586,14 +586,14 @@ export default function PendingItems({
     }
   };
 
-  // Helper to determine if an item is unresolved
+  // Helper to determine if an item is unresolved (active)
   const isPendingUnresolved = (item: PendingItem) => {
-    return item.status !== 'Resolvido' && item.status !== 'Cancelado' && !item.transferredToStock;
+    return item.status !== 'Resolvido' && item.status !== 'Cancelado' && !item.transferredToStock && !item.resolvedAt;
   };
 
-  // Helper to determine if an item is resolved
+  // Helper to determine if an item is resolved or cancelled (finalized)
   const isPendingResolved = (item: PendingItem) => {
-    return item.status === 'Resolvido' || !!item.transferredToStock || !!item.resolvedAt;
+    return item.status === 'Resolvido' || item.status === 'Cancelado' || !!item.transferredToStock || !!item.resolvedAt;
   };
 
   // Filtered & Sorted Items
@@ -602,8 +602,8 @@ export default function PendingItems({
   // 3. Newest registration date appears first
   const filteredItems = useMemo(() => {
     const list = items.filter(item => {
-      // If user chose to hide resolved items, filter them out UNLESS the user explicitly selected "Resolvido" in statusFilter
-      if (hideResolved && isPendingResolved(item) && statusFilter !== 'Resolvido') {
+      // If user chose to hide resolved items, filter them out UNLESS the user explicitly selected "Resolvido" or "Cancelado" in statusFilter
+      if (hideResolved && isPendingResolved(item) && statusFilter !== 'Resolvido' && statusFilter !== 'Cancelado') {
         return false;
       }
 
@@ -1544,13 +1544,13 @@ export default function PendingItems({
             id="card-metric-resolvidos"
           >
             <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Resolvidos</span>
+              <span>Resolvidos / Cancelados</span>
               {hideResolved && (
                 <span className="text-[9px] text-slate-400 lowercase font-normal">(ocultos)</span>
               )}
             </div>
             <div className="text-xl font-extrabold text-emerald-300 mt-1">{stats.resolvidos}</div>
-            <div className="text-[10px] text-slate-400 font-medium mt-0.5">Liberados p/ estoque</div>
+            <div className="text-[10px] text-slate-400 font-medium mt-0.5">Finalizados / Ocultos</div>
           </div>
         </div>
       </div>
@@ -1605,7 +1605,7 @@ export default function PendingItems({
               onChange={(e) => {
                 const val = e.target.value as any;
                 setStatusFilter(val);
-                if (val === 'Resolvido' && hideResolved) {
+                if ((val === 'Resolvido' || val === 'Cancelado') && hideResolved) {
                   setHideResolved(false);
                 }
               }}
@@ -1638,7 +1638,7 @@ export default function PendingItems({
             </select>
           </div>
 
-          {/* Toggle Hide/Show Resolved Button */}
+          {/* Toggle Hide/Show Resolved and Cancelled Button */}
           <button
             type="button"
             onClick={handleToggleHideResolved}
@@ -1704,13 +1704,13 @@ export default function PendingItems({
         </div>
       </div>
 
-      {/* Alert banner if resolved items are hidden */}
-      {hideResolved && stats.resolvidos > 0 && statusFilter !== 'Resolvido' && (
+      {/* Alert banner if resolved or cancelled items are hidden */}
+      {hideResolved && stats.resolvidos > 0 && statusFilter !== 'Resolvido' && statusFilter !== 'Cancelado' && (
         <div className="pending-hidden-resolved-banner flex items-center justify-between px-4 py-2.5 bg-emerald-950/20 border border-emerald-500/25 rounded-xl text-xs text-emerald-300 shadow-sm animate-in fade-in" id="banner-hidden-resolved">
           <div className="flex items-center gap-2">
             <EyeOff className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>
-              <strong>{stats.resolvidos}</strong> {stats.resolvidos === 1 ? 'pendência resolvida está oculta' : 'pendências resolvidas estão ocultas'} da lista atual.
+              <strong>{stats.resolvidos}</strong> {stats.resolvidos === 1 ? 'pendência resolvida/cancelada está oculta' : 'pendências resolvidas/canceladas estão ocultas'} da lista atual.
             </span>
           </div>
           <button
@@ -1719,7 +1719,7 @@ export default function PendingItems({
             className="text-xs text-emerald-400 hover:text-emerald-200 font-bold underline cursor-pointer shrink-0 ml-2"
             id="btn-show-resolved-inline"
           >
-            Exibir resolvidas
+            Exibir todas
           </button>
         </div>
       )}
