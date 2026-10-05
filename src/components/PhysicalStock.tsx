@@ -300,6 +300,27 @@ export default function PhysicalStock({
   // Selected unit details
   const currentUnit = units.find(u => u.id === selectedUnitId);
 
+  // Resolved STI code for currentUnit (direct trackingCode or fallback from linked pending item)
+  const resolvedCurrentUnitSti = useMemo(() => {
+    if (!currentUnit) return '';
+    const rawSti = (currentUnit.trackingCode || '').trim();
+    if (rawSti) {
+      return normalizeStiCode(rawSti) || rawSti;
+    }
+    // Fallback: check if linked pending item has an STI/trackingCode
+    if (currentUnit.pendingRegistrationNumber || currentUnit.pendingItemId) {
+      const linked = pendingItems.find(p => 
+        (currentUnit.pendingItemId && p.id === currentUnit.pendingItemId) ||
+        (currentUnit.pendingRegistrationNumber && p.registrationNumber && p.registrationNumber.trim().toUpperCase() === currentUnit.pendingRegistrationNumber.trim().toUpperCase())
+      );
+      if (linked?.trackingCode && linked.trackingCode.trim()) {
+        const pSti = linked.trackingCode.trim();
+        return normalizeStiCode(pSti) || pSti;
+      }
+    }
+    return '';
+  }, [currentUnit, pendingItems]);
+
   // Edit mode state for selected unit
   const [isEditingUnit, setIsEditingUnit] = useState(false);
   const [editForm, setEditForm] = useState<TriageUnit | null>(null);
@@ -4306,7 +4327,7 @@ export default function PhysicalStock({
 
                   {/* Registration Code */}
                   {(() => {
-                    const regCode = (currentUnit.pendingRegistrationNumber || currentUnit.trackingCode || '').replace(/^#/, '').trim();
+                    const regCode = (currentUnit.pendingRegistrationNumber || '').replace(/^#/, '').trim();
                     const hasCode = Boolean(regCode && regCode !== '');
 
                     return (
@@ -4421,7 +4442,7 @@ export default function PhysicalStock({
                     )}
                   </div>
 
-                    {/* Sector */}
+                  {/* Sector */}
                   <div className="space-y-1.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Setor Físico</span>
                     <span className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border block truncate ${
@@ -4471,6 +4492,20 @@ export default function PhysicalStock({
                           title="Clique para copiar Número do Pedido"
                         >
                           <span>{currentUnit.orderNumber}</span>
+                          <Copy className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      </div>
+                    )}
+                    {Boolean(resolvedCurrentUnitSti) && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400 font-semibold text-[11px]">Código STI:</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCode(resolvedCurrentUnitSti, 'sti-sub', e)}
+                          className="font-mono text-[11px] font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 rounded transition-colors cursor-pointer group flex items-center gap-1"
+                          title="Clique para copiar Código STI"
+                        >
+                          <span>{resolvedCurrentUnitSti}</span>
                           <Copy className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
                         </button>
                       </div>
