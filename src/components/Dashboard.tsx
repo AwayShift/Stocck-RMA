@@ -137,18 +137,20 @@ export default function Dashboard({
 
   // Counters for today's sector destinations
   const sectorCountsToday = todayUnits.reduce((acc, curr) => {
-    acc[curr.destinationSector] = (acc[curr.destinationSector] || 0) + 1;
+    const sec = curr.destinationSector || 'Principal';
+    acc[sec] = (acc[sec] || 0) + 1;
     return acc;
-  }, { Principal: 0, Openbox: 0, RMA: 0 } as Record<DestinationSectorType, number>);
+  }, { Principal: 0, Openbox: 0, RMA: 0, Outros: 0 } as Record<DestinationSectorType, number>);
 
   // Global counts for inventory metrics (all units still in stock)
   const inStockUnits = units.filter(u => u.status === 'Estoque');
   const totalInStock = inStockUnits.length;
   
   const sectorCountsGlobal = inStockUnits.reduce((acc, curr) => {
-    acc[curr.destinationSector] = (acc[curr.destinationSector] || 0) + 1;
+    const sec = curr.destinationSector || 'Principal';
+    acc[sec] = (acc[sec] || 0) + 1;
     return acc;
-  }, { Principal: 0, Openbox: 0, RMA: 0 } as Record<DestinationSectorType, number>);
+  }, { Principal: 0, Openbox: 0, RMA: 0, Outros: 0 } as Record<DestinationSectorType, number>);
 
   // Platform Breakdown (Today's Entries)
   const platformCountsToday = todayUnits.reduce((acc, curr) => {
@@ -156,7 +158,7 @@ export default function Dashboard({
     return acc;
   }, {} as Record<PlatformType, number>);
 
-  const platforms: PlatformType[] = ['Mercado Livre', 'Shopee', 'Amazon', 'Amazon Ta Novo', 'Kabum'];
+  const platforms: PlatformType[] = ['Mercado Livre', 'Shopee', 'Amazon', 'Amazon Ta Novo', 'Kabum', 'Outros'];
 
   // Filtered today's units based on shared platform and sector filters
   const displayedTodayUnits = todayUnits.filter(u => {
@@ -204,6 +206,13 @@ export default function Dashboard({
         barBg: 'bg-indigo-500', 
         dotBg: 'bg-indigo-400' 
       };
+      case 'Outros': return { 
+        bg: 'bg-slate-700/20 dark:bg-slate-700/30', 
+        text: 'text-slate-800 dark:text-slate-200 font-bold', 
+        border: 'border-slate-600/40 dark:border-slate-600/50', 
+        barBg: 'bg-slate-500', 
+        dotBg: 'bg-slate-400' 
+      };
       default: return { 
         bg: 'bg-slate-500/10 dark:bg-slate-500/15', 
         text: 'text-slate-700 dark:text-slate-300 font-bold', 
@@ -248,11 +257,11 @@ export default function Dashboard({
       </div>
 
       {/* Primary KPIs Matrix */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" id="kpi-grid">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" id="kpi-grid">
         {/* KPI 1: Today Receives */}
         <div 
           onClick={handleClearFilters}
-          className={`bg-slate-900 border rounded-2xl p-6 relative overflow-hidden group transition-all shadow-lg cursor-pointer ${
+          className={`bg-slate-900 border rounded-2xl p-5 relative overflow-hidden group transition-all shadow-lg cursor-pointer ${
             !selectedPlatformFilter && !selectedSectorFilter
               ? 'border-sky-500/50 ring-1 ring-sky-500/30'
               : 'border-slate-800 hover:border-slate-700'
@@ -263,23 +272,23 @@ export default function Dashboard({
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Recebidos Hoje</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Recebidos Hoje</span>
                 {(!selectedPlatformFilter && !selectedSectorFilter) && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">Todos</span>
                 )}
               </div>
-              <h3 className="text-4xl font-black text-white mt-1.5">{totalReceivedToday}</h3>
+              <h3 className="text-3xl font-black text-white mt-1.5">{totalReceivedToday}</h3>
               {manualSurplus > 0 && (
                 <p className="text-[11px] text-emerald-400 font-semibold mt-1 flex items-center gap-1">
                   <span>{todayUnits.length} triados + {manualSurplus} manual</span>
                 </p>
               )}
             </div>
-            <div className="p-3 bg-sky-500/10 text-sky-400 rounded-xl">
-              <Layers className="w-6 h-6" />
+            <div className="p-2.5 bg-sky-500/10 text-sky-400 rounded-xl">
+              <Layers className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-5 flex items-center text-sm text-sky-400 font-bold cursor-pointer group" onClick={(e) => { e.stopPropagation(); onNavigateToStock(selectedPlatformFilter, selectedSectorFilter); }}>
+          <div className="mt-4 flex items-center text-xs text-sky-400 font-bold cursor-pointer group" onClick={(e) => { e.stopPropagation(); onNavigateToStock(selectedPlatformFilter, selectedSectorFilter); }}>
             Ver estoque atual
             <ArrowRight className="w-3.5 h-3.5 ml-1.5 group-hover:translate-x-1 transition-transform" />
           </div>
@@ -290,7 +299,7 @@ export default function Dashboard({
         <div 
           onClick={() => handleToggleSectorFilter('Principal')}
           data-selected={selectedSectorFilter === 'Principal' ? 'true' : 'false'}
-          className={`border rounded-2xl p-6 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
+          className={`border rounded-2xl p-5 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
             selectedSectorFilter === 'Principal'
               ? 'kpi-card-selected border-emerald-500 ring-2 ring-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/30 shadow-emerald-500/10'
               : 'bg-slate-900 border-emerald-500/20 hover:border-emerald-500/50 hover:shadow-emerald-500/10'
@@ -301,20 +310,20 @@ export default function Dashboard({
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Estoque Principal</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Estoque Principal</span>
                 {selectedSectorFilter === 'Principal' && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 flex items-center gap-0.5">
                     <Filter className="w-2.5 h-2.5" /> Filtrando
                   </span>
                 )}
               </div>
-              <h3 className="text-4xl font-black text-emerald-400 mt-1.5">{sectorCountsGlobal.Principal}</h3>
+              <h3 className="text-3xl font-black text-emerald-400 mt-1.5">{sectorCountsGlobal.Principal}</h3>
             </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl">
-              <Package className="w-6 h-6" />
+            <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl">
+              <Package className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-5 flex items-center justify-between text-sm text-slate-400">
+          <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
             <div>
               <span className="text-emerald-400 font-bold">+{sectorCountsToday.Principal} hoje</span>
             </div>
@@ -338,7 +347,7 @@ export default function Dashboard({
         <div 
           onClick={() => handleToggleSectorFilter('Openbox')}
           data-selected={selectedSectorFilter === 'Openbox' ? 'true' : 'false'}
-          className={`border rounded-2xl p-6 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
+          className={`border rounded-2xl p-5 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
             selectedSectorFilter === 'Openbox'
               ? 'kpi-card-selected border-amber-500 ring-2 ring-amber-500/60 bg-amber-50 dark:bg-amber-950/30 shadow-amber-500/10'
               : 'bg-slate-900 border-amber-500/25 hover:border-amber-500/50 hover:shadow-amber-500/10'
@@ -349,20 +358,20 @@ export default function Dashboard({
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Setor Openbox</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Setor Openbox</span>
                 {selectedSectorFilter === 'Openbox' && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-300 flex items-center gap-0.5">
                     <Filter className="w-2.5 h-2.5" /> Filtrando
                   </span>
                 )}
               </div>
-              <h3 className="text-4xl font-black text-amber-400 mt-1.5">{sectorCountsGlobal.Openbox}</h3>
+              <h3 className="text-3xl font-black text-amber-400 mt-1.5">{sectorCountsGlobal.Openbox}</h3>
             </div>
-            <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl">
-              <Sparkles className="w-6 h-6" />
+            <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl">
+              <Sparkles className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-5 flex items-center justify-between text-sm text-slate-400">
+          <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
             <div>
               <span className="text-amber-400 font-bold">+{sectorCountsToday.Openbox} hoje</span>
             </div>
@@ -386,7 +395,7 @@ export default function Dashboard({
         <div 
           onClick={() => handleToggleSectorFilter('RMA')}
           data-selected={selectedSectorFilter === 'RMA' ? 'true' : 'false'}
-          className={`border rounded-2xl p-6 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
+          className={`border rounded-2xl p-5 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
             selectedSectorFilter === 'RMA'
               ? 'kpi-card-selected border-rose-500 ring-2 ring-rose-500/60 bg-rose-50 dark:bg-rose-950/30 shadow-rose-500/10'
               : 'bg-slate-900 border-rose-500/20 hover:border-rose-500/50 hover:shadow-rose-500/10'
@@ -397,20 +406,20 @@ export default function Dashboard({
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-slate-400 uppercase tracking-wider">RMA</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">RMA</span>
                 {selectedSectorFilter === 'RMA' && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-300 flex items-center gap-0.5">
                     <Filter className="w-2.5 h-2.5" /> Filtrando
                   </span>
                 )}
               </div>
-              <h3 className="text-4xl font-black text-rose-400 mt-1.5">{sectorCountsGlobal.RMA}</h3>
+              <h3 className="text-3xl font-black text-rose-400 mt-1.5">{sectorCountsGlobal.RMA}</h3>
             </div>
-            <div className="p-3 bg-rose-500/10 text-rose-400 rounded-xl">
-              <AlertTriangle className="w-6 h-6" />
+            <div className="p-2.5 bg-rose-500/10 text-rose-400 rounded-xl">
+              <AlertTriangle className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-5 flex items-center justify-between text-sm text-slate-400">
+          <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
             <div>
               <span className="text-rose-400 font-bold">+{sectorCountsToday.RMA} hoje</span>
             </div>
@@ -428,6 +437,54 @@ export default function Dashboard({
             </button>
           </div>
           <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-rose-500/5 rounded-full filter blur-xl group-hover:scale-150 transition-transform"></div>
+        </div>
+
+        {/* KPI 5: Outros */}
+        <div 
+          onClick={() => handleToggleSectorFilter('Outros')}
+          data-selected={selectedSectorFilter === 'Outros' ? 'true' : 'false'}
+          className={`border rounded-2xl p-5 relative overflow-hidden group transition-all shadow-lg cursor-pointer select-none ${
+            selectedSectorFilter === 'Outros'
+              ? 'kpi-card-selected border-indigo-500 ring-2 ring-indigo-500/60 bg-indigo-50 dark:bg-indigo-950/30 shadow-indigo-500/10'
+              : 'bg-slate-900 border-indigo-500/20 hover:border-indigo-500/50 hover:shadow-indigo-500/10'
+          }`} 
+          id="kpi-outros"
+          title="Clique para filtrar por Setor Outros"
+        >
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Outros</span>
+                {selectedSectorFilter === 'Outros' && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-300 flex items-center gap-0.5">
+                    <Filter className="w-2.5 h-2.5" /> Filtrando
+                  </span>
+                )}
+              </div>
+              <h3 className="text-3xl font-black text-indigo-400 mt-1.5">{sectorCountsGlobal.Outros || 0}</h3>
+            </div>
+            <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl">
+              <Boxes className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
+            <div>
+              <span className="text-indigo-400 font-bold">+{sectorCountsToday.Outros || 0} hoje</span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateToStock(selectedPlatformFilter, 'Outros');
+              }}
+              className="text-xs font-bold text-indigo-400 hover:text-indigo-300 hover:underline flex items-center gap-1 cursor-pointer transition-colors"
+              title="Abrir no Estoque Físico com filtro de Outros"
+            >
+              <span>Ver Estoque</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/5 rounded-full filter blur-xl group-hover:scale-150 transition-transform"></div>
         </div>
       </div>
 

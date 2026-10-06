@@ -80,6 +80,16 @@ export function getPlatformFilterStyle(platform: PlatformType | string | null | 
         ringClasses: 'border-indigo-500 ring-2 ring-indigo-500/40',
         label: 'Kabum'
       };
+    case 'Outros':
+    case 'Outro':
+      return {
+        badgeClasses: 'bg-slate-700/25 border-slate-600/60 text-slate-800 dark:text-slate-200 font-bold',
+        dotClasses: 'bg-slate-400',
+        hoverBtnClasses: 'hover:text-slate-900 dark:hover:text-white hover:bg-slate-700/20',
+        selectClasses: 'border-slate-600/70 bg-slate-100 dark:bg-slate-800/40 text-slate-900 dark:text-slate-200 font-bold',
+        ringClasses: 'border-slate-500 ring-2 ring-slate-500/40',
+        label: 'Outros'
+      };
     case 'Sem Plataforma':
       return {
         badgeClasses: 'bg-purple-500/15 border-purple-500/50 text-purple-800 dark:text-purple-200 font-bold',
@@ -145,6 +155,16 @@ export function getSectorFilterStyle(sector: DestinationSectorType | 'Baixado' |
         selectClasses: 'border-rose-500/60 bg-rose-950/25 text-rose-300',
         ringClasses: 'border-rose-500 ring-2 ring-rose-500/40',
         label: 'RMA'
+      };
+    case 'Outros':
+    case 'Outro':
+      return {
+        badgeClasses: 'bg-indigo-500/15 border-indigo-500/50 text-indigo-300 dark:text-indigo-200',
+        dotClasses: 'bg-indigo-400',
+        hoverBtnClasses: 'hover:text-indigo-100 hover:bg-indigo-500/20',
+        selectClasses: 'border-indigo-500/60 bg-indigo-950/25 text-indigo-300',
+        ringClasses: 'border-indigo-500 ring-2 ring-indigo-500/40',
+        label: 'Outros'
       };
     case 'Baixado':
       return {

@@ -94,6 +94,21 @@ export const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     optionActiveLight: 'bg-indigo-100/90 border-indigo-500 text-indigo-950 font-bold',
     dotBg: 'bg-indigo-500',
   },
+  'Outros': {
+    id: 'Outros',
+    name: 'Outros',
+    shortCode: 'OUT',
+    tagline: 'Outros canais / Sem vínculo de pedido',
+    badgeBg: 'bg-slate-700',
+    badgeText: 'text-slate-200',
+    triggerStyleDark: 'bg-slate-900 border-slate-700 text-slate-300',
+    triggerStyleLight: 'bg-slate-100 border-slate-300 text-slate-800',
+    optionHoverDark: 'hover:bg-slate-800 hover:border-slate-700',
+    optionHoverLight: 'hover:bg-slate-100 hover:border-slate-300',
+    optionActiveDark: 'bg-slate-800 border-slate-600 text-slate-100 font-bold',
+    optionActiveLight: 'bg-slate-200 border-slate-400 text-slate-900 font-bold',
+    dotBg: 'bg-slate-500',
+  },
   'Outro': {
     id: 'Outro',
     name: 'Outro',
@@ -111,12 +126,13 @@ export const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
   }
 };
 
-const DEFAULT_PLATFORMS: PlatformType[] = [
+const DEFAULT_PLATFORMS: (PlatformType | 'Outros')[] = [
   'Mercado Livre',
   'Shopee',
   'Amazon',
   'Amazon Ta Novo',
-  'Kabum'
+  'Kabum',
+  'Outros'
 ];
 
 interface PlatformSelectorProps {

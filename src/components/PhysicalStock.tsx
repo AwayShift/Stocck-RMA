@@ -105,7 +105,7 @@ export const isRealStockTransfer = (originSector?: string): boolean => {
   if (!originSector) return false;
   const s = originSector.trim().toLowerCase();
   if (s === 'pendências' || s === 'pendencias' || s === 'sem setor' || s === '') return false;
-  return ['principal', 'estoque principal', 'rma', 'openbox'].includes(s);
+  return ['principal', 'estoque principal', 'rma', 'openbox', 'outros', 'outro'].includes(s);
 };
 
 export const isUnitInSector = (unit: TriageUnit, sectorTab: string): boolean => {
@@ -119,7 +119,10 @@ export const isUnitInSector = (unit: TriageUnit, sectorTab: string): boolean => 
   const target = sectorTab.trim().toLowerCase();
 
   if (target === 'principal') {
-    return dest === 'principal' || dest === 'estoque' || dest === '' || (!['openbox', 'rma'].includes(dest));
+    return dest === 'principal' || dest === 'estoque' || dest === '' || (!['openbox', 'rma', 'outros', 'outro'].includes(dest));
+  }
+  if (target === 'outros' || target === 'outro') {
+    return dest === 'outros' || dest === 'outro';
   }
   return dest === target;
 };
@@ -486,6 +489,8 @@ export default function PhysicalStock({
           setActiveTab('Openbox');
         } else if (dest === 'rma') {
           setActiveTab('RMA');
+        } else if (dest === 'outros' || dest === 'outro') {
+          setActiveTab('Outros');
         } else {
           setActiveTab('Principal');
         }
@@ -673,7 +678,7 @@ export default function PhysicalStock({
         }
       }
 
-      // Mandatory STI check for Openbox products, and clear STI if not Openbox
+      // Mandatory STI check for Openbox products, and clear STI if not Openbox (optional in Outros)
       if (updatedForm.destinationSector === 'Openbox') {
         const normSti = normalizeStiCode(updatedForm.trackingCode);
         if (!normSti) {
@@ -701,6 +706,9 @@ export default function PhysicalStock({
           return;
         }
         updatedForm.trackingCode = normSti;
+      } else if (updatedForm.destinationSector === 'Outros') {
+        const normSti = updatedForm.trackingCode ? normalizeStiCode(updatedForm.trackingCode) : '';
+        updatedForm.trackingCode = normSti || (updatedForm.trackingCode ? updatedForm.trackingCode.trim() : '');
       } else {
         updatedForm.trackingCode = '';
       }
@@ -1452,8 +1460,8 @@ export default function PhysicalStock({
         let finalPhotosBox = unit.photosBox || [];
         let finalPhotosAccessories = unit.photosAccessories || [];
 
-        // If moving to Principal with no previous photos, auto-reference base product images
-        if (newSector === 'Principal' && savedPhotosCount === 0 && baseImgs.productPhotos.length > 0) {
+        // If moving to Principal or Outros with no previous photos, auto-reference base product images
+        if ((newSector === 'Principal' || newSector === 'Outros') && savedPhotosCount === 0 && baseImgs.productPhotos.length > 0) {
           finalPhotosProduct = baseImgs.productPhotos;
         }
 
@@ -1462,8 +1470,8 @@ export default function PhysicalStock({
         const updated: TriageUnit = {
           ...unit,
           destinationSector: newSector,
-          // When moving away from Openbox to Principal or RMA, clear trackingCode
-          trackingCode: '',
+          // When moving away from Openbox, clear trackingCode unless moving to Outros with existing code
+          trackingCode: newSector === 'Outros' ? (unit.trackingCode || '') : '',
           originSector: unit.destinationSector,
           initialEntryDate: previousInitialDate,
           transferredAt: transferMoment,
@@ -1652,6 +1660,8 @@ export default function PhysicalStock({
       case 'Principal': return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
       case 'Openbox': return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
       case 'RMA': return 'bg-rose-500/10 text-rose-400 border border-rose-500/20';
+      case 'Outros': return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
+      default: return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
     }
   };
 
@@ -1662,6 +1672,7 @@ export default function PhysicalStock({
       case 'Amazon': return 'bg-blue-500/10 text-sky-800 dark:text-blue-400 border border-blue-500/30 font-medium';
       case 'Amazon Ta Novo': return 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-400 border border-emerald-500/30 font-medium';
       case 'Kabum': return 'bg-indigo-500/10 text-indigo-800 dark:text-indigo-400 border border-indigo-500/30 font-medium';
+      case 'Outros': return 'bg-slate-700/25 text-slate-800 dark:text-slate-200 border border-slate-600/60 font-bold';
       default: return 'bg-zinc-500/10 text-zinc-800 dark:text-zinc-400 border border-zinc-500/20 font-medium';
     }
   };
@@ -1802,10 +1813,18 @@ export default function PhysicalStock({
           <button 
             onClick={() => setActiveTab('RMA')}
             id="stock-tab-rma"
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'RMA' ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/15' : 'text-slate-455 hover:text-rose-400 hover:bg-slate-850'}`}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'RMA' ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/15' : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800'}`}
           >
             <span className="w-2 h-2 bg-rose-400 rounded-full"></span>
             RMA ({units.filter(u => isUnitInSector(u, 'RMA')).length})
+          </button>
+          <button 
+            onClick={() => setActiveTab('Outros')}
+            id="stock-tab-outros"
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'Outros' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/15' : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-800'}`}
+          >
+            <span className="w-2 h-2 bg-indigo-400 rounded-full"></span>
+            Outros ({units.filter(u => isUnitInSector(u, 'Outros')).length})
           </button>
           <div className="h-6 w-[1px] bg-slate-800 self-center mx-1"></div>
           <button 
@@ -2062,6 +2081,7 @@ export default function PhysicalStock({
                 <option value="Amazon">Amazon</option>
                 <option value="Amazon Ta Novo">Amazon Ta Novo</option>
                 <option value="Kabum">Kabum</option>
+                <option value="Outros">Outros</option>
                 <option value="Sem Plataforma">Sem Plataforma / Não Informada</option>
               </select>
             </div>
@@ -3143,6 +3163,8 @@ export default function PhysicalStock({
                       ? (isLight ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30')
                       : (isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector) === 'Openbox'
                       ? (isLight ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-amber-500/15 text-amber-300 border-amber-500/30')
+                      : (isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector) === 'Outros'
+                      ? (isLight ? 'bg-indigo-50 text-indigo-800 border-indigo-300' : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30')
                       : (isLight ? 'bg-rose-50 text-rose-800 border-rose-300' : 'bg-rose-500/15 text-rose-300 border-rose-500/30')
                   }`}>
                     Setor: {isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector}
@@ -3375,6 +3397,7 @@ export default function PhysicalStock({
                         <option value="Amazon">Amazon</option>
                         <option value="Amazon Ta Novo">Amazon Ta Novo</option>
                         <option value="Kabum">Kabum</option>
+                        <option value="Outros">Outros</option>
                         <option value="Outro">Outro</option>
                       </select>
                     </div>
@@ -3587,9 +3610,10 @@ export default function PhysicalStock({
                         onChange={(e) => setEditForm({ ...editForm, destinationSector: e.target.value as DestinationSectorType })} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
                       >
-                        <option value="Openbox">Openbox (Outlet / Revisados)</option>
                         <option value="Principal">Estoque Principal (Prontos / Novos)</option>
+                        <option value="Openbox">Openbox (Outlet / Revisados)</option>
                         <option value="RMA">RMA (Assistência Técnica)</option>
+                        <option value="Outros">Outros (Estoque Geral)</option>
                       </select>
                       {isRealStockTransfer(editForm.originSector) && (
                         <p className="text-[10.5px] text-amber-400/95 flex items-center gap-1.5 mt-1.5 bg-amber-500/10 border border-amber-500/25 px-2.5 py-1.5 rounded-lg">
@@ -4778,13 +4802,14 @@ export default function PhysicalStock({
                     onChange={(e) => handleMoveSector(currentUnit, e.target.value as DestinationSectorType)}
                     className="px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold focus:outline-none cursor-pointer"
                     style={{
-                      color: (editingSector || currentUnit.destinationSector) === 'Principal' ? '#10B981' : (editingSector || currentUnit.destinationSector) === 'Openbox' ? '#F59E0B' : '#EF4444'
+                      color: (editingSector || currentUnit.destinationSector) === 'Principal' ? '#10B981' : (editingSector || currentUnit.destinationSector) === 'Openbox' ? '#F59E0B' : (editingSector || currentUnit.destinationSector) === 'Outros' ? '#818CF8' : '#EF4444'
                     }}
                     id="select-change-sector"
                   >
                     <option value="Principal" style={{ color: '#10B981', backgroundColor: '#0f172a' }}>🟢 Principal (Venda Novo)</option>
                     <option value="Openbox" style={{ color: '#F59E0B', backgroundColor: '#0f172a' }}>🟠 Openbox (Outlet)</option>
                     <option value="RMA" style={{ color: '#EF4444', backgroundColor: '#0f172a' }}>🔴 RMA (Fila Técnica)</option>
+                    <option value="Outros" style={{ color: '#818CF8', backgroundColor: '#0f172a' }}>🟣 Outros (Estoque Geral)</option>
                   </select>
                 </div>
               ) : (

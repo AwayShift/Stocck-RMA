@@ -166,6 +166,7 @@ export default function RmaEntry({
 
   const handleOrderNumberChange = (raw: string) => {
     setOrderNumber(raw);
+    if (platform === 'Outros') return;
     const detection = inspectOrderNumber(raw, platform);
     if (detection) {
       setPlatform(detection.platform);
@@ -173,6 +174,7 @@ export default function RmaEntry({
   };
 
   const handleOrderNumberBlur = () => {
+    if (platform === 'Outros') return;
     const normalized = normalizeOrderNumberForPlatform(orderNumber, platform);
     if (normalized !== orderNumber) {
       setOrderNumber(normalized);
@@ -357,11 +359,11 @@ export default function RmaEntry({
     setIsCustomPackageStatus(false);
     setCustomPackageStatusText('');
 
-    if (sector !== 'Openbox') {
+    if (sector !== 'Openbox' && sector !== 'Outros') {
       setTrackingCode('');
     }
 
-    if (sector === 'Principal') {
+    if (sector === 'Principal' || sector === 'Outros') {
       setDeviceStatus('Novo');
       setPackageStatus('Perfeita');
       setAccessoriesInclusion('Todos os acessórios inclusos.');
@@ -987,8 +989,12 @@ export default function RmaEntry({
         return;
       }
     }
-    // Keep tracking code as entered by user for Openbox, or blank if another sector (STI is exclusively for controlled openbox items)
-    const finalTrackingCode = destinationSector === 'Openbox' ? normalizeStiCode(trackingCode) : '';
+    // Keep tracking code as entered by user for Openbox, or if entered in Outros (optional)
+    const finalTrackingCode = destinationSector === 'Openbox' 
+      ? normalizeStiCode(trackingCode) 
+      : destinationSector === 'Outros' && trackingCode.trim() 
+        ? normalizeStiCode(trackingCode) || trackingCode.trim() 
+        : '';
 
     // Mandatory STI check for Openbox products (strictly STI + 6 numbers)
     if (destinationSector === 'Openbox') {
@@ -1051,8 +1057,8 @@ export default function RmaEntry({
     let finalPhotosBox = [...photosBox];
     let finalPhotosAccessories = [...photosAccessories];
 
-    // For items in Estoque Principal, reuse the base product's already registered image without extra storage
-    if (destinationSector === 'Principal' && refProduct) {
+    // For items in Estoque Principal or Outros, reuse the base product's already registered image without extra storage
+    if ((destinationSector === 'Principal' || destinationSector === 'Outros') && refProduct) {
       const baseImgs = getBaseProductImages(refProduct);
       if (finalPhotosProduct.length === 0 && baseImgs.productPhotos.length > 0) {
         finalPhotosProduct = baseImgs.productPhotos;
@@ -1432,17 +1438,17 @@ export default function RmaEntry({
                   </div>
                   <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border"
                     style={{
-                      backgroundColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.1)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                      borderColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.3)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)',
-                      color: destinationSector === 'Principal' ? '#34D399' : destinationSector === 'Openbox' ? '#FBBF24' : '#F87171'
+                      backgroundColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.1)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.1)' : destinationSector === 'Outros' ? 'rgba(99,102,241,0.1)' : 'rgba(239,68,68,0.1)',
+                      borderColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.3)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.3)' : destinationSector === 'Outros' ? 'rgba(99,102,241,0.3)' : 'rgba(239,68,68,0.3)',
+                      color: destinationSector === 'Principal' ? '#34D399' : destinationSector === 'Openbox' ? '#FBBF24' : destinationSector === 'Outros' ? '#818CF8' : '#F87171'
                     }}
                   >
-                    {destinationSector === 'Principal' ? '🟢 Estoque Principal' : destinationSector === 'Openbox' ? '🟠 Openbox' : '🔴 RMA'}
+                    {destinationSector === 'Principal' ? '🟢 Estoque Principal' : destinationSector === 'Openbox' ? '🟠 Openbox' : destinationSector === 'Outros' ? '🟣 Outros' : '🔴 RMA'}
                   </span>
                 </div>
 
-                {/* 3 Quick Destination Cards */}
-                <div className="grid grid-cols-3 gap-2" id="destination-sector-cards">
+                {/* 4 Quick Destination Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" id="destination-sector-cards">
                   <button
                     type="button"
                     onClick={() => handleSelectDestinationSector('Principal')}
@@ -1490,10 +1496,26 @@ export default function RmaEntry({
                     </div>
                     {destinationSector === 'RMA' && <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectDestinationSector('Outros')}
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      destinationSector === 'Outros'
+                        ? 'bg-indigo-500/15 border-indigo-500 ring-1 ring-indigo-500/40 text-indigo-300 font-bold shadow-sm'
+                        : 'bg-slate-950/70 border-slate-800 hover:border-indigo-500/30 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 shrink-0"></span>
+                      <span className="text-xs truncate">Outros</span>
+                    </div>
+                    {destinationSector === 'Outros' && <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                  </button>
                 </div>
 
                 {/* Origin details row */}
-                <div className={`grid grid-cols-1 ${destinationSector === 'Openbox' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5 pt-1`}>
+                <div className={`grid grid-cols-1 ${(destinationSector === 'Openbox' || destinationSector === 'Outros') ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5 pt-1`}>
                   {/* Platform */}
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center min-h-[20px]">Plataforma</label>
@@ -1504,7 +1526,7 @@ export default function RmaEntry({
                     />
                   </div>
 
-                  {/* Código STI - visível apenas quando o Openbox está selecionado */}
+                  {/* Código STI - Obrigatório no Openbox, Opcional no Outros */}
                   {destinationSector === 'Openbox' && (
                     <div className="space-y-1 animate-in fade-in duration-200">
                       <label className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between text-amber-400 min-h-[20px]">
@@ -1519,7 +1541,7 @@ export default function RmaEntry({
                           const formatted = formatStiInput(e.target.value);
                           setTrackingCode(formatted);
                           if (errorMessage && isValidStiCode(formatted)) {
-                            setErrorMessage(null);
+                            setErrorMessage('');
                           }
                         }}
                         maxLength={9}
@@ -1530,11 +1552,34 @@ export default function RmaEntry({
                     </div>
                   )}
 
+                  {destinationSector === 'Outros' && (
+                    <div className="space-y-1 animate-in fade-in duration-200">
+                      <label className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between text-indigo-300 min-h-[20px]">
+                        <span>Código STI (Opcional)</span>
+                        <span className="text-[9px] font-bold px-1 py-0.5 bg-indigo-500/20 text-indigo-300 rounded leading-none">Opcional</span>
+                      </label>
+                      <input 
+                        type="text"
+                        placeholder="Ex: STI134920 (opcional)"
+                        value={trackingCode}
+                        onChange={(e) => {
+                          const formatted = formatStiInput(e.target.value);
+                          setTrackingCode(formatted);
+                        }}
+                        maxLength={9}
+                        className="w-full px-3 h-[38px] bg-slate-950 rounded-lg text-xs font-mono transition-all border border-indigo-500/40 text-indigo-200 placeholder-indigo-400/40 focus:outline-none focus:ring-1 focus:ring-indigo-400/40"
+                        id="input-tracking-code-outros"
+                      />
+                    </div>
+                  )}
+
                   {/* Order Number */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between min-h-[20px]">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Nº Pedido (Opcional)</label>
-                      {detectedOrderInfo && (
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        {platform === 'Outros' ? 'Nº Pedido (Sem vínculo)' : 'Nº Pedido (Opcional)'}
+                      </label>
+                      {detectedOrderInfo && platform !== 'Outros' && (
                         <button
                           type="button"
                           onClick={() => {
@@ -1562,7 +1607,7 @@ export default function RmaEntry({
                     </div>
                     <input 
                       type="text"
-                      placeholder="Ex: 2000018084300220"
+                      placeholder={platform === 'Outros' ? 'Sem vínculo de pedido (opcional)' : 'Ex: 2000018084300220'}
                       value={orderNumber}
                       onChange={(e) => handleOrderNumberChange(e.target.value)}
                       onBlur={handleOrderNumberBlur}

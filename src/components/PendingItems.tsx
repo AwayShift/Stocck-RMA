@@ -65,7 +65,7 @@ import {
   validateUniqueOrderNumber, 
   ensurePendingRegistrationNumber 
 } from '../utils/pendingRegistrationHelper';
-import { findBaseProduct, getResolvedUnitProductName } from '../utils/productImages';
+import { findBaseProduct, getResolvedUnitProductName, getBaseProductImages } from '../utils/productImages';
 import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform, areOrdersMatching } from '../utils/orderPlatformHelper';
 
 interface PendingItemsProps {
@@ -206,7 +206,7 @@ const PLATFORMS: (PlatformType | 'Outro')[] = [
   'Amazon',
   'Amazon Ta Novo',
   'Kabum',
-  'Outro'
+  'Outros'
 ];
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -365,6 +365,7 @@ export default function PendingItems({
 
   const handleFormOrderNumberChange = (raw: string) => {
     setFormOrderNumber(raw);
+    if (formPlatform === 'Outros' || formPlatform === 'Outro') return;
     const detection = inspectOrderNumber(raw, formPlatform);
     if (detection) {
       setFormPlatform(detection.platform);
@@ -372,6 +373,7 @@ export default function PendingItems({
   };
 
   const handleFormOrderNumberBlur = () => {
+    if (formPlatform === 'Outros' || formPlatform === 'Outro') return;
     const normalized = normalizeOrderNumberForPlatform(formOrderNumber, formPlatform);
     if (normalized !== formOrderNumber) {
       setFormOrderNumber(normalized);
@@ -384,11 +386,13 @@ export default function PendingItems({
 
   // Auto-detect platform for Transfer Modal based on order number format
   const detectedTransferOrderInfo = useMemo(() => {
+    if (transferPlatform === 'Outros' || transferPlatform === 'Outro') return null;
     return inspectOrderNumber(transferOrderNumber, transferPlatform);
   }, [transferOrderNumber, transferPlatform]);
 
   const handleTransferOrderNumberChange = (raw: string) => {
     setTransferOrderNumber(raw);
+    if (transferPlatform === 'Outros' || transferPlatform === 'Outro') return;
     const detection = inspectOrderNumber(raw, transferPlatform);
     if (detection) {
       setTransferPlatform(detection.platform);
@@ -396,6 +400,7 @@ export default function PendingItems({
   };
 
   const handleTransferOrderNumberBlur = () => {
+    if (transferPlatform === 'Outros' || transferPlatform === 'Outro') return;
     const normalized = normalizeOrderNumberForPlatform(transferOrderNumber, transferPlatform);
     if (normalized !== transferOrderNumber) {
       setTransferOrderNumber(normalized);
@@ -1252,6 +1257,24 @@ export default function PendingItems({
         ? (transferCustomPackageStatus.trim() || 'Descrever')
         : transferPackageStatus;
 
+      let finalTransferPhotosProduct = [...transferPhotosProduct];
+      let finalTransferPhotosBox = [...transferPhotosBox];
+      let finalTransferPhotosAccessories = [...transferPhotosAccessories];
+
+      // Auto-reference base product images if transferring to Principal or Outros without photos
+      if ((transferDestination === 'Principal' || transferDestination === 'Outros') && matchedProd) {
+        const baseImgs = getBaseProductImages(matchedProd);
+        if (finalTransferPhotosProduct.length === 0 && baseImgs.productPhotos.length > 0) {
+          finalTransferPhotosProduct = baseImgs.productPhotos;
+        }
+        if (finalTransferPhotosBox.length === 0 && baseImgs.boxPhotos.length > 0) {
+          finalTransferPhotosBox = baseImgs.boxPhotos;
+        }
+        if (finalTransferPhotosAccessories.length === 0 && baseImgs.accessoriesPhotos.length > 0) {
+          finalTransferPhotosAccessories = baseImgs.accessoriesPhotos;
+        }
+      }
+
       await onTransferToStock(updatedItem, transferDestination, {
         baseProductId: matchedProd?.id,
         baseProductName: finalTransferProductName,
@@ -1259,16 +1282,20 @@ export default function PendingItems({
         baseProductVoltage: finalTransferVoltage,
         platform: transferPlatform,
         serialNumber: transferSerialNumber.trim(),
-        trackingCode: transferDestination === 'Openbox' ? normalizeStiCode(transferSti) : '',
+        trackingCode: transferDestination === 'Openbox' 
+          ? normalizeStiCode(transferSti) 
+          : (transferDestination === 'Outros' && transferSti.trim() 
+              ? normalizeStiCode(transferSti) || transferSti.trim() 
+              : ''),
         orderNumber: transferOrderNumber.trim(),
         customerReason: transferCustomerReason.trim() || itemToTransfer.pendingReason || 'Liberado de Pendências',
         deviceStatus: finalDeviceStatus,
         packageStatus: finalPackageStatus,
         accessoriesInclusion: transferAccessories.trim(),
         notes: transferNotes,
-        photosProduct: transferPhotosProduct,
-        photosBox: transferPhotosBox,
-        photosAccessories: transferPhotosAccessories,
+        photosProduct: finalTransferPhotosProduct,
+        photosBox: finalTransferPhotosBox,
+        photosAccessories: finalTransferPhotosAccessories,
         excludeFromDailyCount: transferExcludeDailyCount,
         pendingRegistrationNumber: regNum,
         pendingItemId: itemToTransfer.id
@@ -3738,8 +3765,8 @@ export default function PendingItems({
                     <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                       Setor de Destino no Estoque *
                     </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(['Principal', 'Openbox', 'RMA'] as DestinationSectorType[]).map((sec) => (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {(['Principal', 'Openbox', 'RMA', 'Outros'] as DestinationSectorType[]).map((sec) => (
                         <button
                           type="button"
                           key={sec}
@@ -3753,6 +3780,8 @@ export default function PendingItems({
                                 ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-extrabold'
                                 : sec === 'Principal'
                                 ? 'bg-sky-500 text-white border-sky-400 shadow-md font-extrabold'
+                                : sec === 'Outros'
+                                ? 'bg-indigo-500 text-white border-indigo-400 shadow-md font-extrabold'
                                 : 'bg-rose-500 text-white border-rose-400 shadow-md font-extrabold'
                               : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
                           }`}
@@ -3804,6 +3833,34 @@ export default function PendingItems({
                             : 'border border-slate-300 dark:border-slate-800 focus:border-emerald-400'
                         }`}
                         id="input-transfer-sti"
+                      />
+                    </div>
+                  )}
+
+                  {/* If Outros, STI code is optional */}
+                  {transferDestination === 'Outros' && (
+                    <div className="p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-500/5 transition-all space-y-2 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                          <span>Código STI / Rastreio (Opcional)</span>
+                        </label>
+                        <span className="text-[10px] font-bold text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded-full border border-indigo-500/30">
+                          Opcional
+                        </span>
+                      </div>
+
+                      <input
+                        type="text"
+                        value={transferSti}
+                        onChange={(e) => {
+                          const formatted = formatStiInput(e.target.value);
+                          setTransferSti(formatted);
+                        }}
+                        placeholder="Ex: STI134920 (opcional)"
+                        maxLength={9}
+                        className="w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 border border-indigo-500/40 focus:outline-none focus:border-indigo-400"
+                        id="input-transfer-sti-outros"
                       />
                     </div>
                   )}

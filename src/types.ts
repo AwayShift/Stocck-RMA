@@ -21,11 +21,11 @@ export interface BaseProduct {
   updatedAt?: string;
 }
 
-export type PlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Amazon Ta Novo' | 'Kabum';
+export type PlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Amazon Ta Novo' | 'Kabum' | 'Outros';
 export type CasePlatformType = 'Mercado Livre' | 'Shopee' | 'Amazon' | 'Amazon Ta Novo';
 export type DeviceStatusType = 'Novo' | 'Usado' | 'Danificado' | string;
 export type PackageStatusType = 'Perfeita' | 'Usada' | 'Sem Caixa' | 'Danificada' | 'Sem Embalagem' | string;
-export type DestinationSectorType = 'Principal' | 'Openbox' | 'RMA';
+export type DestinationSectorType = 'Principal' | 'Openbox' | 'RMA' | 'Outros';
 
 export interface CaseTracking {
   id: string;

@@ -628,6 +628,7 @@ export default function ExcelImportModal({
                     <option value="Openbox">Openbox (Revisados / Devoluções)</option>
                     <option value="Principal">Estoque Principal (Novos / Prontos)</option>
                     <option value="RMA">RMA (Assistência Técnica / Defeitos)</option>
+                    <option value="Outros">Outros (Estoque Geral)</option>
                   </select>
                   <p className="text-[10px] text-slate-500 mt-1 excel-setup-hint">
                     Itens contendo indicações de RMA ou defeito na planilha serão direcionados automaticamente.
@@ -1084,12 +1085,15 @@ export default function ExcelImportModal({
                                     ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 sector-openbox' 
                                     : row.destinationSector === 'Principal'
                                     ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 sector-principal'
+                                    : row.destinationSector === 'Outros'
+                                    ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30 sector-outros'
                                     : 'bg-rose-500/10 text-rose-400 border-rose-500/30 sector-rma'
                                 }`}
                               >
                                 <option value="Openbox">Openbox</option>
                                 <option value="Principal">Estoque Principal</option>
                                 <option value="RMA">RMA</option>
+                                <option value="Outros">Outros</option>
                               </select>
                             </td>
                           </tr>

@@ -339,7 +339,7 @@ export default function ProductMovements({
         bucket.total++;
         if (u.destinationSector === 'Openbox') {
           bucket.openbox++;
-        } else if (u.destinationSector === 'Principal') {
+        } else if (u.destinationSector === 'Principal' || u.destinationSector === 'Outros') {
           bucket.estoque++;
         } else if (u.destinationSector === 'Descarte') {
           bucket.es++;
@@ -611,7 +611,7 @@ export default function ProductMovements({
       }
     });
 
-    const standardOrder = ['Principal', 'Openbox', 'RMA'];
+    const standardOrder = ['Principal', 'Openbox', 'RMA', 'Outros'];
     const result: Array<{ sector: string; count: number }> = [];
 
     standardOrder.forEach(s => {
@@ -638,7 +638,7 @@ export default function ProductMovements({
       counts[key] = (counts[key] || 0) + 1;
     });
 
-    const standardOrder = ['Mercado Livre', 'Shopee', 'Amazon', 'Amazon Ta Novo', 'Kabum'];
+    const standardOrder = ['Mercado Livre', 'Shopee', 'Amazon', 'Amazon Ta Novo', 'Kabum', 'Outros'];
     const result: Array<{ platform: string; count: number }> = [];
 
     standardOrder.forEach(p => {
@@ -691,7 +691,7 @@ export default function ProductMovements({
         const h = dt.getHours();
         if (h >= 0 && h < 24) {
           hours[h].total++;
-          if (u.destinationSector === 'Principal') hours[h].estoque++;
+          if (u.destinationSector === 'Principal' || u.destinationSector === 'Outros') hours[h].estoque++;
           else if (u.destinationSector === 'Openbox') hours[h].openbox++;
           else hours[h].rma++;
         }
@@ -2761,9 +2761,11 @@ export default function ProductMovements({
                             ? 'bg-emerald-500' 
                             : item.destinationSector === 'Openbox' 
                               ? 'bg-amber-500' 
-                              : item.destinationSector === 'Descarte'
-                                ? 'bg-purple-500'
-                                : 'bg-rose-500'
+                              : item.destinationSector === 'Outros'
+                                ? 'bg-indigo-500'
+                                : item.destinationSector === 'Descarte'
+                                  ? 'bg-purple-500'
+                                  : 'bg-rose-500'
                         }`}></div>
 
                         <div className="min-w-0 space-y-0.5">
@@ -2777,6 +2779,8 @@ export default function ProductMovements({
                                   ? 'text-yellow-600 dark:text-yellow-300'
                                   : item.platform === 'Shopee'
                                   ? 'text-orange-600 dark:text-orange-400'
+                                  : item.platform === 'Outros'
+                                  ? 'text-indigo-400'
                                   : 'text-slate-400'
                               }`}>
                                 • {item.platform}
@@ -2798,9 +2802,11 @@ export default function ProductMovements({
                                 ? 'text-emerald-400' 
                                 : item.destinationSector === 'Openbox' 
                                   ? 'text-amber-400' 
-                                  : item.destinationSector === 'Descarte'
-                                    ? 'text-purple-400'
-                                    : 'text-rose-400'
+                                  : item.destinationSector === 'Outros'
+                                    ? 'text-indigo-400'
+                                    : item.destinationSector === 'Descarte'
+                                      ? 'text-purple-400'
+                                      : 'text-rose-400'
                             }`}>
                               Setor: {item.destinationSector}
                             </span>
