@@ -200,7 +200,7 @@ export const isPendingItemAlreadyInStock = (item: PendingItem, stockUnits: Triag
   return Boolean(linked);
 };
 
-const PLATFORMS: (PlatformType | 'Outro')[] = [
+const PLATFORMS: PlatformType[] = [
   'Mercado Livre',
   'Shopee',
   'Amazon',
@@ -3747,7 +3747,7 @@ export default function PendingItems({
                         value={transferPlatform}
                         onChange={(p) => setTransferPlatform(p as PlatformType)}
                         id="select-transfer-platform"
-                        platforms={PLATFORMS.filter(p => p !== 'Outro') as PlatformType[]}
+                        platforms={PLATFORMS}
                       />
                     </div>
                   </div>

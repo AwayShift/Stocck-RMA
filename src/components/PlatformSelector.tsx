@@ -3,7 +3,7 @@ import { ChevronDown, Check, ShoppingBag, Sparkles, Store, Package, Layers } fro
 import { PlatformType } from '../types';
 
 export interface PlatformConfig {
-  id: PlatformType | 'Outro' | string;
+  id: PlatformType | string;
   name: string;
   shortCode: string;
   tagline: string;
@@ -126,7 +126,7 @@ export const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
   }
 };
 
-const DEFAULT_PLATFORMS: (PlatformType | 'Outros')[] = [
+const DEFAULT_PLATFORMS: PlatformType[] = [
   'Mercado Livre',
   'Shopee',
   'Amazon',
@@ -136,12 +136,12 @@ const DEFAULT_PLATFORMS: (PlatformType | 'Outros')[] = [
 ];
 
 interface PlatformSelectorProps {
-  value: PlatformType | 'Outro' | string;
+  value: PlatformType | string;
   onChange: (platform: any) => void;
   id?: string;
   className?: string;
   disabled?: boolean;
-  platforms?: (PlatformType | 'Outro' | string)[];
+  platforms?: (PlatformType | string)[];
 }
 
 export const PlatformSelector: React.FC<PlatformSelectorProps> = ({

@@ -23,6 +23,7 @@ interface TriageStats {
   rma: number;
   estoque: number;
   openbox: number;
+  outros: number;
   es: number;
   total: number;
 }
@@ -82,11 +83,11 @@ export default function ManualDailyInflowModal({
   const [rma, setRma] = useState<number>(0);
   const [estoque, setEstoque] = useState<number>(0);
   const [openbox, setOpenbox] = useState<number>(0);
+  const [outros, setOutros] = useState<number>(0);
   const [es, setEs] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
   const [existingRecordId, setExistingRecordId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Helper to extract triage stats for any date
   const getTriageStatsForDate = useCallback((targetDate: string): TriageStats | null => {
@@ -95,7 +96,7 @@ export default function ManualDailyInflowModal({
       return unitsByDayMap.get(targetDate)!;
     }
     if (allUnits && allUnits.length > 0) {
-      let rmaCount = 0, estoqueCount = 0, openboxCount = 0, esCount = 0, totalCount = 0;
+      let rmaCount = 0, estoqueCount = 0, openboxCount = 0, outrosCount = 0, esCount = 0, totalCount = 0;
       allUnits.forEach(u => {
         if (u.excludeFromDailyCount || isMigrationUnit(u)) return;
         const dStr = (u.createdAt || '').substring(0, 10);
@@ -103,12 +104,13 @@ export default function ManualDailyInflowModal({
           totalCount++;
           if (u.destinationSector === 'Openbox') openboxCount++;
           else if (u.destinationSector === 'Principal') estoqueCount++;
+          else if (u.destinationSector === 'Outros') outrosCount++;
           else if ((u.destinationSector as string) === 'Descarte') esCount++;
           else rmaCount++;
         }
       });
       if (totalCount > 0) {
-        return { rma: rmaCount, estoque: estoqueCount, openbox: openboxCount, es: esCount, total: totalCount };
+        return { rma: rmaCount, estoque: estoqueCount, openbox: openboxCount, outros: outrosCount, es: esCount, total: totalCount };
       }
     }
     return null;
@@ -136,10 +138,11 @@ export default function ManualDailyInflowModal({
 
     const tStats = getTriageStatsForDate(targetDate);
 
-    if (matchedRecord && (matchedRecord.rma > 0 || matchedRecord.estoque > 0 || matchedRecord.openbox > 0 || matchedRecord.es > 0)) {
+    if (matchedRecord && (matchedRecord.rma > 0 || matchedRecord.estoque > 0 || matchedRecord.openbox > 0 || (matchedRecord.outros || 0) > 0 || matchedRecord.es > 0)) {
       setRma(Number(matchedRecord.rma || 0));
       setEstoque(Number(matchedRecord.estoque || 0));
       setOpenbox(Number(matchedRecord.openbox || 0));
+      setOutros(Number(matchedRecord.outros || 0));
       setEs(Number(matchedRecord.es || 0));
       setNotes(matchedRecord.notes || '');
       setExistingRecordId(
@@ -150,6 +153,7 @@ export default function ManualDailyInflowModal({
       setRma(tStats.rma);
       setEstoque(tStats.estoque);
       setOpenbox(tStats.openbox);
+      setOutros(tStats.outros);
       setEs(tStats.es);
       setNotes(matchedRecord?.notes || '');
       setExistingRecordId(
@@ -159,6 +163,7 @@ export default function ManualDailyInflowModal({
       setRma(0);
       setEstoque(0);
       setOpenbox(0);
+      setOutros(0);
       setEs(0);
       setNotes('');
       setExistingRecordId(null);
@@ -175,10 +180,11 @@ export default function ManualDailyInflowModal({
 
     const tStats = getTriageStatsForDate(newDate);
 
-    if (matchedRecord && (matchedRecord.rma > 0 || matchedRecord.estoque > 0 || matchedRecord.openbox > 0 || matchedRecord.es > 0)) {
+    if (matchedRecord && (matchedRecord.rma > 0 || matchedRecord.estoque > 0 || matchedRecord.openbox > 0 || (matchedRecord.outros || 0) > 0 || matchedRecord.es > 0)) {
       setRma(Number(matchedRecord.rma || 0));
       setEstoque(Number(matchedRecord.estoque || 0));
       setOpenbox(Number(matchedRecord.openbox || 0));
+      setOutros(Number(matchedRecord.outros || 0));
       setEs(Number(matchedRecord.es || 0));
       setNotes(matchedRecord.notes || '');
       setExistingRecordId(
@@ -188,6 +194,7 @@ export default function ManualDailyInflowModal({
       setRma(tStats.rma);
       setEstoque(tStats.estoque);
       setOpenbox(tStats.openbox);
+      setOutros(tStats.outros);
       setEs(tStats.es);
       setNotes(matchedRecord?.notes || '');
       setExistingRecordId(
@@ -198,6 +205,7 @@ export default function ManualDailyInflowModal({
       setRma(0);
       setEstoque(0);
       setOpenbox(0);
+      setOutros(0);
       setEs(0);
       setNotes('');
       setExistingRecordId(null);
@@ -206,7 +214,7 @@ export default function ManualDailyInflowModal({
 
   if (!isOpen) return null;
 
-  const totalDia = Number(rma || 0) + Number(estoque || 0) + Number(openbox || 0) + Number(es || 0);
+  const totalDia = Number(rma || 0) + Number(estoque || 0) + Number(openbox || 0) + Number(outros || 0) + Number(es || 0);
   const isEditingExisting = Boolean(existingRecordId || allInflows?.some(r => r.date === date));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -228,6 +236,7 @@ export default function ManualDailyInflowModal({
         rma: Number(rma || 0),
         estoque: Number(estoque || 0),
         openbox: Number(openbox || 0),
+        outros: Number(outros || 0),
         es: Number(es || 0),
         totalDia,
         notes: (notes || '').trim(),
@@ -239,22 +248,6 @@ export default function ManualDailyInflowModal({
       alert(`Erro ao salvar lançamento diário: ${err?.message || err}`);
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!onDelete) return;
-    const targetToDelete = existingRecordId || date;
-    if (window.confirm(`Tem certeza que deseja remover o lançamento do dia ${formatBrDate(date)}?`)) {
-      setIsDeleting(true);
-      try {
-        await onDelete(targetToDelete);
-        onClose();
-      } catch (err: any) {
-        alert(`Erro ao excluir lançamento: ${err?.message || err}`);
-      } finally {
-        setIsDeleting(false);
-      }
     }
   };
 
@@ -270,7 +263,7 @@ export default function ManualDailyInflowModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 animate-fadeIn" 
       id="manual-inflow-modal"
       onClick={(e) => {
-        if (e.target === e.currentTarget && !isSaving && !isDeleting) onClose();
+        if (e.target === e.currentTarget && !isSaving) onClose();
       }}
     >
       <div 
@@ -405,6 +398,12 @@ export default function ManualDailyInflowModal({
                   <span>RMA: <strong className="text-white">{currentTriageStats.rma}</strong></span>
                   <span className="text-slate-500">•</span>
                   <span>Openbox: <strong className="text-white">{currentTriageStats.openbox}</strong></span>
+                  {currentTriageStats.outros > 0 && (
+                    <>
+                      <span className="text-slate-500">•</span>
+                      <span>Outros: <strong className="text-white">{currentTriageStats.outros}</strong></span>
+                    </>
+                  )}
                   {currentTriageStats.es > 0 && (
                     <>
                       <span className="text-slate-500">•</span>
@@ -419,6 +418,7 @@ export default function ManualDailyInflowModal({
                       setEstoque(currentTriageStats.estoque);
                       setRma(currentTriageStats.rma);
                       setOpenbox(currentTriageStats.openbox);
+                      setOutros(currentTriageStats.outros);
                       setEs(currentTriageStats.es);
                     }}
                     className="inflow-btn-substitute px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
@@ -431,6 +431,7 @@ export default function ManualDailyInflowModal({
                       setEstoque(prev => Number(prev || 0) + currentTriageStats.estoque);
                       setRma(prev => Number(prev || 0) + currentTriageStats.rma);
                       setOpenbox(prev => Number(prev || 0) + currentTriageStats.openbox);
+                      setOutros(prev => Number(prev || 0) + currentTriageStats.outros);
                       setEs(prev => Number(prev || 0) + currentTriageStats.es);
                     }}
                     className="inflow-btn-sum px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
@@ -594,8 +595,58 @@ export default function ManualDailyInflowModal({
               </div>
             </div>
 
+            {/* OUTROS */}
+            <div className="inflow-sector-card inflow-sector-outros bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="inflow-sector-label text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                  Estoque Outros
+                </label>
+                <span className="inflow-sector-badge text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded">
+                  Qtd
+                </span>
+              </div>
+              <input
+                type="number"
+                min="0"
+                value={outros === 0 ? '' : outros}
+                onChange={(e) => {
+                  const val = e.target.value.trim();
+                  if (val === '') setOutros(0);
+                  else {
+                    const parsed = parseInt(val, 10);
+                    setOutros(isNaN(parsed) ? 0 : Math.max(0, parsed));
+                  }
+                }}
+                placeholder="0"
+                className="inflow-sector-input w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xl font-black text-indigo-400 focus:outline-none focus:border-indigo-500 text-center"
+              />
+              <div className="flex items-center justify-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => adjustValue(setOutros, -1)}
+                  className="inflow-btn-stepper stepper-sub px-2 py-0.5 text-xs font-bold bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
+                >
+                  -1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => adjustValue(setOutros, 1)}
+                  className="inflow-btn-stepper stepper-add px-2 py-0.5 text-xs font-bold bg-slate-900 text-indigo-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
+                >
+                  +1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => adjustValue(setOutros, 10)}
+                  className="inflow-btn-stepper stepper-add px-2 py-0.5 text-xs font-bold bg-slate-900 text-indigo-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 cursor-pointer"
+                >
+                  +10
+                </button>
+              </div>
+            </div>
+
             {/* ES */}
-            <div className="inflow-sector-card inflow-sector-es bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3 space-y-1.5">
+            <div className="inflow-sector-card inflow-sector-es bg-slate-800/50 border border-slate-700/60 rounded-2xl p-3 space-y-1.5 col-span-2">
               <div className="flex items-center justify-between">
                 <label className="inflow-sector-label text-xs font-bold text-purple-400 uppercase tracking-wider">
                   ES (Espírito Santo)
@@ -651,7 +702,7 @@ export default function ManualDailyInflowModal({
               <Sparkles className="inflow-total-sparkle w-5 h-5 text-amber-400" />
               <div>
                 <span className="inflow-total-title text-xs font-bold text-slate-200 block">Total Consolidado do Dia</span>
-                <span className="inflow-total-sub text-[11px] text-slate-400">RMA + Estoque + Openbox + ES</span>
+                <span className="inflow-total-sub text-[11px] text-slate-400">RMA + Estoque + Openbox + Outros + ES</span>
               </div>
             </div>
             <div className="text-right">
@@ -675,52 +726,32 @@ export default function ManualDailyInflowModal({
           </div>
 
           {/* Action Buttons */}
-          <div className="inflow-footer pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
-            {isEditingExisting && onDelete ? (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting || isSaving}
-                className="inflow-btn-delete px-3.5 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {isDeleting ? (
-                  <div className="w-3.5 h-3.5 border-2 border-rose-400 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
-                <span>Excluir Dia</span>
-              </button>
-            ) : (
-              <div />
-            )}
-
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSaving || isDeleting}
-                className="inflow-btn-cancel px-4 py-2 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 font-semibold text-xs transition-all cursor-pointer disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving || isDeleting}
-                className="inflow-btn-save flex items-center gap-2 px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl font-bold text-xs shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all cursor-pointer disabled:opacity-50"
-              >
-                {isSaving ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Salvando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    <span>Salvar Lançamento</span>
-                  </>
-                )}
-              </button>
-            </div>
+          <div className="inflow-footer pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSaving}
+              className="inflow-btn-cancel px-4 py-2 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 font-semibold text-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="inflow-btn-save flex items-center gap-2 px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl font-bold text-xs shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Salvando...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Salvar Lançamento</span>
+                </>
+              )}
+            </button>
           </div>
         </form>
       </div>

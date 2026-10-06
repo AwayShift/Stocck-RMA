@@ -1032,7 +1032,7 @@ export const seedDailyInflows = async () => {
 };
 
 export const saveDailyInflow = async (record: DailyInflowRecord): Promise<DailyInflowRecord> => {
-  const total = Number(record.rma || 0) + Number(record.estoque || 0) + Number(record.openbox || 0) + Number(record.es || 0);
+  const total = Number(record.rma || 0) + Number(record.estoque || 0) + Number(record.openbox || 0) + Number(record.outros || 0) + Number(record.es || 0);
   const now = new Date().toISOString();
   
   // Normalize date string (YYYY-MM-DD)
@@ -1050,6 +1050,7 @@ export const saveDailyInflow = async (record: DailyInflowRecord): Promise<DailyI
     rma: Number(record.rma || 0),
     estoque: Number(record.estoque || 0),
     openbox: Number(record.openbox || 0),
+    outros: Number(record.outros || 0),
     es: Number(record.es || 0),
     totalDia: total,
     notes: (record.notes || '').trim(),
@@ -1079,6 +1080,13 @@ export const saveDailyInflow = async (record: DailyInflowRecord): Promise<DailyI
 
       let row = mapDailyInflowToSupabase(payload);
       let { error } = await supabase.from('daily_inflows').upsert(row);
+
+      // If Postgres returned column outros does not exist, delete row.outros and retry
+      if (error && (error.message?.includes('outros') || error.code === 'PGRST204' || error.code === '42703')) {
+        delete row.outros;
+        const retryOutros = await supabase.from('daily_inflows').upsert(row);
+        error = retryOutros.error;
+      }
 
       // 2. If Postgres threw an invalid UUID syntax error, generate a compliant UUID
       if (error && (error.message?.includes('uuid') || error.code === '22P02')) {
@@ -1120,7 +1128,7 @@ export const saveBatchDailyInflows = async (records: DailyInflowRecord[]): Promi
   // Deduplicate by date before inserting
   const byDateMap = new Map<string, DailyInflowRecord>();
   records.forEach(r => {
-    const total = Number(r.rma || 0) + Number(r.estoque || 0) + Number(r.openbox || 0) + Number(r.es || 0);
+    const total = Number(r.rma || 0) + Number(r.estoque || 0) + Number(r.openbox || 0) + Number(r.outros || 0) + Number(r.es || 0);
     const cleanDate = r.date ? r.date.substring(0, 10) : new Date().toISOString().substring(0, 10);
     const targetId = (r.id && isValidUUID(r.id.trim()))
       ? r.id.trim()
@@ -1130,6 +1138,7 @@ export const saveBatchDailyInflows = async (records: DailyInflowRecord[]): Promi
       ...r,
       id: targetId,
       date: cleanDate,
+      outros: Number(r.outros || 0),
       totalDia: total,
       createdAt: r.createdAt || now,
       updatedAt: now
@@ -1143,7 +1152,16 @@ export const saveBatchDailyInflows = async (records: DailyInflowRecord[]): Promi
   if (supabase) {
     try {
       const rows = formattedRecords.map(mapDailyInflowToSupabase);
-      const { error } = await supabase.from('daily_inflows').upsert(rows);
+      let { error } = await supabase.from('daily_inflows').upsert(rows);
+      if (error && (error.message?.includes('outros') || error.code === 'PGRST204' || error.code === '42703')) {
+        const fallbackRows = rows.map(rw => {
+          const c = { ...rw };
+          delete c.outros;
+          return c;
+        });
+        const retryBatch = await supabase.from('daily_inflows').upsert(fallbackRows);
+        error = retryBatch.error;
+      }
       if (error) {
         console.warn('Batch daily inflows upsert error:', error);
       }

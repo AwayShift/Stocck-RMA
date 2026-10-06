@@ -132,6 +132,7 @@ export async function parseInflowExcelFile(file: File): Promise<{
         const rmaIdx = headerRow.findIndex(h => h.includes('RMA') || h.includes('TRIAGEM'));
         const estoqueIdx = headerRow.findIndex(h => h.includes('ESTOQUE') || h.includes('STOCK') || h.includes('ALMOXARIFADO'));
         const openboxIdx = headerRow.findIndex(h => h.includes('OPENBOX') || h.includes('OPEN BOX') || h.includes('OPEN-BOX'));
+        const outrosIdx = headerRow.findIndex(h => h.includes('OUTRO') || h.includes('OUTROS'));
         const esIdx = headerRow.findIndex(h => h === 'ES' || h.includes('E.S.') || h.includes('ESPIRITO SANTO') || h.includes('ESPÍRITO SANTO') || h.includes('ESPECIAL') || h.includes('SUPLEMENTAR'));
         const notesIdx = headerRow.findIndex(h => h.includes('OBS') || h.includes('NOTA') || h.includes('NOTE'));
 
@@ -167,8 +168,9 @@ export async function parseInflowExcelFile(file: File): Promise<{
           const rma = Math.max(0, parseInt(row[rmaIdx], 10) || 0);
           const estoque = Math.max(0, parseInt(row[estoqueIdx], 10) || 0);
           const openbox = Math.max(0, parseInt(row[openboxIdx], 10) || 0);
+          const outros = outrosIdx !== -1 ? Math.max(0, parseInt(row[outrosIdx], 10) || 0) : 0;
           const es = esIdx !== -1 ? Math.max(0, parseInt(row[esIdx], 10) || 0) : 0;
-          const totalDia = rma + estoque + openbox + es;
+          const totalDia = rma + estoque + openbox + outros + es;
           const notes = notesIdx !== -1 ? String(row[notesIdx] || '').trim() : '';
 
           records.push({
@@ -177,6 +179,7 @@ export async function parseInflowExcelFile(file: File): Promise<{
             rma,
             estoque,
             openbox,
+            outros,
             es,
             totalDia,
             notes,
@@ -236,6 +239,7 @@ export function downloadInflowTemplate() {
       'ESTOQUE': 25,
       'RMA': 23,
       'OPENBOX': 2,
+      'OUTROS': 0,
       'ES': 0,
       'TOTAL DIA': 50,
       'TOTAL SEMANA': ''
@@ -245,6 +249,7 @@ export function downloadInflowTemplate() {
       'ESTOQUE': 15,
       'RMA': 11,
       'OPENBOX': 1,
+      'OUTROS': 0,
       'ES': 44,
       'TOTAL DIA': 71,
       'TOTAL SEMANA': ''
@@ -254,6 +259,7 @@ export function downloadInflowTemplate() {
       'ESTOQUE': 25,
       'RMA': 11,
       'OPENBOX': 5,
+      'OUTROS': 0,
       'ES': 54,
       'TOTAL DIA': 95,
       'TOTAL SEMANA': 267
@@ -263,6 +269,7 @@ export function downloadInflowTemplate() {
       'ESTOQUE': 24,
       'RMA': 15,
       'OPENBOX': 2,
+      'OUTROS': 0,
       'ES': 0,
       'TOTAL DIA': 41,
       'TOTAL SEMANA': ''
@@ -272,6 +279,7 @@ export function downloadInflowTemplate() {
       'ESTOQUE': 6,
       'RMA': 2,
       'OPENBOX': 2,
+      'OUTROS': 0,
       'ES': 0,
       'TOTAL DIA': 10,
       'TOTAL SEMANA': ''
@@ -286,6 +294,7 @@ export function downloadInflowTemplate() {
     { wch: 12 }, // ESTOQUE
     { wch: 10 }, // RMA
     { wch: 12 }, // OPENBOX
+    { wch: 10 }, // OUTROS
     { wch: 10 }, // ES
     { wch: 14 }, // TOTAL DIA
     { wch: 16 }  // TOTAL SEMANA
@@ -318,6 +327,7 @@ export function exportInflowRecordsToExcel(records: DailyInflowRecord[], filenam
         'ESTOQUE': rec.estoque,
         'RMA': rec.rma,
         'OPENBOX': rec.openbox,
+        'OUTROS': rec.outros || 0,
         'ES': rec.es,
         'TOTAL DIA': rec.totalDia,
         'TOTAL SEMANA': idx === midIdx ? week.totalWeek : '',
@@ -332,6 +342,7 @@ export function exportInflowRecordsToExcel(records: DailyInflowRecord[], filenam
     { wch: 12 },
     { wch: 10 },
     { wch: 12 },
+    { wch: 10 },
     { wch: 10 },
     { wch: 14 },
     { wch: 16 },
@@ -371,6 +382,7 @@ export function groupRecordsByWeek(
       let totalRma = 0;
       let totalEstoque = 0;
       let totalOpenbox = 0;
+      let totalOutros = 0;
       let totalEs = 0;
       let totalWeek = 0;
 
@@ -378,6 +390,7 @@ export function groupRecordsByWeek(
         totalRma += r.rma || 0;
         totalEstoque += r.estoque || 0;
         totalOpenbox += r.openbox || 0;
+        totalOutros += r.outros || 0;
         totalEs += r.es || 0;
         totalWeek += r.totalDia || 0;
       });
@@ -411,6 +424,7 @@ export function groupRecordsByWeek(
         totalRma,
         totalEstoque,
         totalOpenbox,
+        totalOutros,
         totalEs
       };
     });
@@ -456,6 +470,7 @@ export function groupRecordsByWeek(
     let totalRma = 0;
     let totalEstoque = 0;
     let totalOpenbox = 0;
+    let totalOutros = 0;
     let totalEs = 0;
     let totalWeek = 0;
 
@@ -463,6 +478,7 @@ export function groupRecordsByWeek(
       totalRma += r.rma;
       totalEstoque += r.estoque;
       totalOpenbox += r.openbox;
+      totalOutros += r.outros || 0;
       totalEs += r.es;
       totalWeek += r.totalDia;
     });
@@ -478,6 +494,7 @@ export function groupRecordsByWeek(
       totalRma,
       totalEstoque,
       totalOpenbox,
+      totalOutros,
       totalEs
     });
   });

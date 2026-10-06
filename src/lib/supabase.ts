@@ -1507,34 +1507,62 @@ export const mapDailyInflowToSupabase = (d: DailyInflowRecord) => {
     ? d.id.trim() 
     : (d.id && !d.id.startsWith('triage-auto-') && !d.id.startsWith('inflow-') ? d.id.trim() : generateUUID());
   const now = new Date().toISOString();
-  return {
+  const outrosVal = Number(d.outros || 0);
+
+  let rawNotes = d.notes || '';
+  if (outrosVal > 0) {
+    const outrosMeta = `[OUTROS:${outrosVal}]`;
+    rawNotes = rawNotes.replace(/\[OUTROS:\d+\]\s*/g, '').trim();
+    rawNotes = rawNotes ? `${rawNotes}\n${outrosMeta}` : outrosMeta;
+  } else {
+    rawNotes = rawNotes.replace(/\[OUTROS:\d+\]\s*/g, '').trim();
+  }
+
+  const row: any = {
     id: cleanId,
     date: d.date,
     rma: d.rma || 0,
     estoque: d.estoque || 0,
     openbox: d.openbox || 0,
     es: d.es || 0,
-    total_dia: d.totalDia || (Number(d.rma || 0) + Number(d.estoque || 0) + Number(d.openbox || 0) + Number(d.es || 0)),
-    notes: compressText(d.notes || ''),
+    total_dia: d.totalDia || (Number(d.rma || 0) + Number(d.estoque || 0) + Number(d.openbox || 0) + outrosVal + Number(d.es || 0)),
+    notes: compressText(rawNotes),
     source: d.source || 'manual',
     created_at: d.createdAt || now,
     updated_at: d.updatedAt || now
   };
+  if (d.outros !== undefined) {
+    row.outros = outrosVal;
+  }
+  return row;
 };
 
-export const mapSupabaseToDailyInflow = (r: any): DailyInflowRecord => ({
-  id: r.id,
-  date: r.date,
-  rma: Number(r.rma) || 0,
-  estoque: Number(r.estoque) || 0,
-  openbox: Number(r.openbox) || 0,
-  es: Number(r.es) || 0,
-  totalDia: Number(r.total_dia ?? r.totalDia) || 0,
-  notes: decompressText(r.notes || ''),
-  source: r.source || 'manual',
-  createdAt: r.created_at || r.createdAt,
-  updatedAt: r.updated_at || r.updatedAt
-});
+export const mapSupabaseToDailyInflow = (r: any): DailyInflowRecord => {
+  let outros = Number(r.outros) || 0;
+  let rawNotes = decompressText(r.notes || '');
+  const outrosMatch = rawNotes.match(/\[OUTROS:(\d+)\]/);
+  if (outrosMatch) {
+    if (!r.outros) {
+      outros = parseInt(outrosMatch[1], 10) || 0;
+    }
+    rawNotes = rawNotes.replace(/\[OUTROS:\d+\]\s*/g, '').trim();
+  }
+
+  return {
+    id: r.id,
+    date: r.date,
+    rma: Number(r.rma) || 0,
+    estoque: Number(r.estoque) || 0,
+    openbox: Number(r.openbox) || 0,
+    outros,
+    es: Number(r.es) || 0,
+    totalDia: Number(r.total_dia ?? r.totalDia) || 0,
+    notes: rawNotes,
+    source: r.source || 'manual',
+    createdAt: r.created_at || r.createdAt,
+    updatedAt: r.updated_at || r.updatedAt
+  };
+};
 
 export const mapPendingItemToSupabase = (p: PendingItem) => {
   const cleanId = (p.id && p.id.trim()) ? p.id.trim() : generateUUID();

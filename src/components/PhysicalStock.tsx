@@ -587,7 +587,7 @@ export default function PhysicalStock({
       originSector: sanitizedOriginSector,
       baseProductName: resolvedName,
       baseProductSku: resolvedSku,
-      platform: (unit.platform || '') as any,
+      platform: (((unit.platform as string) === 'Outro' ? 'Outros' : unit.platform) || '') as any,
     });
     setOriginalUnitPhotos({
       photosProduct: [...(unit.photosProduct || [])],
@@ -648,8 +648,9 @@ export default function PhysicalStock({
         updatedForm.packageStatus = (customEditPackageStatusText.trim() || 'Descrever') as any;
       }
 
-      // Ensure platform is properly set (or empty string/undefined)
-      updatedForm.platform = (editForm.platform || '') as any;
+      // Ensure platform is properly set (or empty string/undefined) and normalize legacy 'Outro' to 'Outros'
+      const rawPlatform = editForm.platform || '';
+      updatedForm.platform = (rawPlatform === 'Outro' ? 'Outros' : rawPlatform) as any;
 
       // Validate pending registration link if specified
       if (updatedForm.pendingRegistrationNumber && updatedForm.pendingRegistrationNumber.trim()) {
@@ -3386,8 +3387,8 @@ export default function PhysicalStock({
                         Plataforma de Origem
                       </label>
                       <select 
-                        value={editForm.platform || ''} 
-                        onChange={(e) => setEditForm({ ...editForm, platform: e.target.value as PlatformType })} 
+                        value={(editForm.platform as string) === 'Outro' ? 'Outros' : (editForm.platform || '')} 
+                        onChange={(e) => setEditForm({ ...editForm, platform: (e.target.value === 'Outro' ? 'Outros' : e.target.value) as PlatformType })} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
                         id="edit-unit-platform"
                       >
@@ -3398,7 +3399,6 @@ export default function PhysicalStock({
                         <option value="Amazon Ta Novo">Amazon Ta Novo</option>
                         <option value="Kabum">Kabum</option>
                         <option value="Outros">Outros</option>
-                        <option value="Outro">Outro</option>
                       </select>
                     </div>
 

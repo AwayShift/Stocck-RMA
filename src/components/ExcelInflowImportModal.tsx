@@ -89,6 +89,7 @@ export default function ExcelInflowImportModal({
   const totalRma = parsedRecords.reduce((acc, r) => acc + r.rma, 0);
   const totalEstoque = parsedRecords.reduce((acc, r) => acc + r.estoque, 0);
   const totalOpenbox = parsedRecords.reduce((acc, r) => acc + r.openbox, 0);
+  const totalOutros = parsedRecords.reduce((acc, r) => acc + (r.outros || 0), 0);
   const totalEs = parsedRecords.reduce((acc, r) => acc + r.es, 0);
 
   return (
@@ -118,7 +119,7 @@ export default function ExcelInflowImportModal({
                 </span>
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Alimente o banco de dados do Fluxo de Entradas a partir de arquivo com colunas de RMA, Estoque, Openbox e ES.
+                Alimente o banco de dados do Fluxo de Entradas a partir de arquivo com colunas de RMA, Estoque, Openbox, Outros e ES.
               </p>
             </div>
           </div>
@@ -164,6 +165,8 @@ export default function ExcelInflowImportModal({
                   <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-emerald-300 font-mono">ESTOQUE</span>
                   <span className="text-slate-600 font-bold">→</span>
                   <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-amber-300 font-mono">OPENBOX</span>
+                  <span className="text-slate-600 font-bold">→</span>
+                  <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-indigo-300 font-mono">OUTROS</span>
                   <span className="text-slate-600 font-bold">→</span>
                   <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-purple-300 font-mono">ES</span>
                 </div>
@@ -228,7 +231,7 @@ export default function ExcelInflowImportModal({
                   Arraste sua planilha aqui ou clique para selecionar
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
-                  Formatos suportados: .xlsx, .xls, .csv (com colunas DATA, RMA, ESTOQUE, OPENBOX, ES)
+                  Formatos suportados: .xlsx, .xls, .csv (com colunas DATA, RMA, ESTOQUE, OPENBOX, OUTROS, ES)
                 </p>
               </div>
             )}
@@ -280,7 +283,7 @@ export default function ExcelInflowImportModal({
               </div>
 
               {/* Summary stat cards of import */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                 <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center shadow-xs">
                   <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">RMA</span>
                   <span className="text-xl font-black text-rose-400">{totalRma}</span>
@@ -292,6 +295,10 @@ export default function ExcelInflowImportModal({
                 <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center shadow-xs">
                   <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Openbox</span>
                   <span className="text-xl font-black text-amber-400">{totalOpenbox}</span>
+                </div>
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center shadow-xs">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Outros</span>
+                  <span className="text-xl font-black text-indigo-400">{totalOutros}</span>
                 </div>
                 <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center shadow-xs">
                   <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">ES</span>
@@ -312,6 +319,7 @@ export default function ExcelInflowImportModal({
                       <th className="py-2.5 px-3 text-center text-rose-400">RMA</th>
                       <th className="py-2.5 px-3 text-center text-emerald-400">Estoque</th>
                       <th className="py-2.5 px-3 text-center text-amber-400">Openbox</th>
+                      <th className="py-2.5 px-3 text-center text-indigo-400">Outros</th>
                       <th className="py-2.5 px-3 text-center text-purple-400">ES</th>
                       <th className="py-2.5 px-3 text-center bg-slate-800/90 font-black text-emerald-400">Total Dia</th>
                       <th className="py-2.5 px-3">Observações</th>
@@ -326,6 +334,7 @@ export default function ExcelInflowImportModal({
                         <td className="py-2 px-3 text-center font-bold text-rose-400">{rec.rma}</td>
                         <td className="py-2 px-3 text-center font-bold text-emerald-400">{rec.estoque}</td>
                         <td className="py-2 px-3 text-center font-bold text-amber-400">{rec.openbox}</td>
+                        <td className="py-2 px-3 text-center font-bold text-indigo-400">{rec.outros || 0}</td>
                         <td className="py-2 px-3 text-center font-bold text-purple-400">{rec.es}</td>
                         <td className="py-2 px-3 text-center font-black bg-slate-800/30 text-white">{rec.totalDia}</td>
                         <td className="py-2 px-3 text-slate-400 truncate max-w-xs">{rec.notes || '-'}</td>

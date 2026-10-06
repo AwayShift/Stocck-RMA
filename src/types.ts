@@ -50,7 +50,7 @@ export interface PendingItem {
   serialNumber?: string; // S/N (opcional / flexível)
   trackingCode?: string; // Código STI / Rastreio / Nº de Caso
   orderNumber?: string; // Número do pedido na plataforma (opcional)
-  platform?: PlatformType | 'Outro' | string; // Plataforma Origem
+  platform?: PlatformType | string; // Plataforma Origem
   pendingReason: string; // Motivo da pendência (ex: "Sem nota fiscal", "Sem identificação", "Aguardando peças", etc.)
   customerReason?: string; // Motivo da devolução informado pelo cliente / reclamação
   deviceStatus?: DeviceStatusType | string; // Estado físico do produto (ex: Novo, Usado, Danificado...)
@@ -176,6 +176,7 @@ export interface DailyInflowRecord {
   rma: number;
   estoque: number;
   openbox: number;
+  outros?: number;
   es: number;
   totalDia: number;
   notes?: string;
@@ -194,6 +195,7 @@ export interface InflowWeekSummary {
   totalRma: number;
   totalEstoque: number;
   totalOpenbox: number;
+  totalOutros?: number;
   totalEs: number;
 }
 

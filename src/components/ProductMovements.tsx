@@ -21,7 +21,6 @@ import {
   Download,
   Upload,
   Edit2,
-  Trash2,
   BarChart3,
   Table as TableIcon,
   RotateCcw,
@@ -327,20 +326,22 @@ export default function ProductMovements({
 
   // 2. Aggregate triage units by day (shared across calendar and modal)
   const unitsByDayMap = useMemo(() => {
-    const map = new Map<string, { rma: number; estoque: number; openbox: number; es: number; total: number }>();
+    const map = new Map<string, { rma: number; estoque: number; openbox: number; outros: number; es: number; total: number }>();
     extendedUnits.forEach(u => {
       const parts = getDateParts(u.createdAt);
       if (parts) {
         const dStr = parts.dateStr;
         if (!map.has(dStr)) {
-          map.set(dStr, { rma: 0, estoque: 0, openbox: 0, es: 0, total: 0 });
+          map.set(dStr, { rma: 0, estoque: 0, openbox: 0, outros: 0, es: 0, total: 0 });
         }
         const bucket = map.get(dStr)!;
         bucket.total++;
         if (u.destinationSector === 'Openbox') {
           bucket.openbox++;
-        } else if (u.destinationSector === 'Principal' || u.destinationSector === 'Outros') {
+        } else if (u.destinationSector === 'Principal') {
           bucket.estoque++;
+        } else if (u.destinationSector === 'Outros') {
+          bucket.outros++;
         } else if (u.destinationSector === 'Descarte') {
           bucket.es++;
         } else {
@@ -376,14 +377,16 @@ export default function ProductMovements({
         const rma = Math.max(Number(rec.rma || 0), uStats.rma);
         const estoque = Math.max(Number(rec.estoque || 0), uStats.estoque);
         const openbox = Math.max(Number(rec.openbox || 0), uStats.openbox);
+        const outros = Math.max(Number(rec.outros || 0), uStats.outros);
         const es = Math.max(Number(rec.es || 0), uStats.es);
-        const totalDia = rma + estoque + openbox + es;
+        const totalDia = rma + estoque + openbox + outros + es;
 
         unifiedMap.set(dateStr, {
           ...rec,
           rma,
           estoque,
           openbox,
+          outros,
           es,
           totalDia,
           notes: rec.notes || (rec.source === 'manual' ? '' : 'Lançamento automático de Triagem')
@@ -393,12 +396,13 @@ export default function ProductMovements({
         if (rec.id?.startsWith('triage-auto-') || rec.source === 'auto') {
           // If it was auto-generated and now has 0 units, skip phantom
         } else {
-          const total = Number(rec.rma || 0) + Number(rec.estoque || 0) + Number(rec.openbox || 0) + Number(rec.es || 0);
+          const total = Number(rec.rma || 0) + Number(rec.estoque || 0) + Number(rec.openbox || 0) + Number(rec.outros || 0) + Number(rec.es || 0);
           unifiedMap.set(dateStr, {
             ...rec,
             rma: Number(rec.rma || 0),
             estoque: Number(rec.estoque || 0),
             openbox: Number(rec.openbox || 0),
+            outros: Number(rec.outros || 0),
             es: Number(rec.es || 0),
             totalDia: total
           });
@@ -415,6 +419,7 @@ export default function ProductMovements({
           rma: stats.rma,
           estoque: stats.estoque,
           openbox: stats.openbox,
+          outros: stats.outros,
           es: stats.es,
           totalDia: stats.total,
           notes: 'Lançamento automático de Triagem',
@@ -442,6 +447,7 @@ export default function ProductMovements({
     let totalRma = 0;
     let totalEstoque = 0;
     let totalOpenbox = 0;
+    let totalOutros = 0;
     let totalEs = 0;
     let totalGeral = 0;
 
@@ -449,6 +455,7 @@ export default function ProductMovements({
       totalRma += w.totalRma || 0;
       totalEstoque += w.totalEstoque || 0;
       totalOpenbox += w.totalOpenbox || 0;
+      totalOutros += w.totalOutros || 0;
       totalEs += w.totalEs || 0;
       totalGeral += w.totalWeek || 0;
     });
@@ -467,6 +474,7 @@ export default function ProductMovements({
       totalRma,
       totalEstoque,
       totalOpenbox,
+      totalOutros,
       totalEs,
       totalGeral,
       totalBusinessDays,
@@ -483,6 +491,7 @@ export default function ProductMovements({
     let totalRma = 0;
     let totalEstoque = 0;
     let totalOpenbox = 0;
+    let totalOutros = 0;
     let totalEs = 0;
     let totalGeral = 0;
 
@@ -490,6 +499,7 @@ export default function ProductMovements({
       totalRma += r.rma || 0;
       totalEstoque += r.estoque || 0;
       totalOpenbox += r.openbox || 0;
+      totalOutros += r.outros || 0;
       totalEs += r.es || 0;
       totalGeral += r.totalDia || 0;
     });
@@ -513,6 +523,7 @@ export default function ProductMovements({
       totalRma,
       totalEstoque,
       totalOpenbox,
+      totalOutros,
       totalEs,
       totalGeral,
       civilMonthBusinessDays,
@@ -682,6 +693,7 @@ export default function ProductMovements({
       estoque: 0,
       rma: 0,
       openbox: 0,
+      outros: 0,
     }));
 
     scopeUnits.forEach(u => {
@@ -691,8 +703,9 @@ export default function ProductMovements({
         const h = dt.getHours();
         if (h >= 0 && h < 24) {
           hours[h].total++;
-          if (u.destinationSector === 'Principal' || u.destinationSector === 'Outros') hours[h].estoque++;
+          if (u.destinationSector === 'Principal') hours[h].estoque++;
           else if (u.destinationSector === 'Openbox') hours[h].openbox++;
+          else if (u.destinationSector === 'Outros') hours[h].outros++;
           else hours[h].rma++;
         }
       }
@@ -1108,7 +1121,7 @@ export default function ProductMovements({
       {activeView === 'spreadsheet' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Monthly KPI Statistics */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
             <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
               isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
             }`}>
@@ -1171,6 +1184,21 @@ export default function ProductMovements({
                 <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
               </div>
               <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Reembalados / Testados</span>
+            </div>
+
+            <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/80 border-slate-800/80'
+            }`}>
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                isLight ? 'text-slate-600' : 'text-slate-400'
+              }`}>Outros</span>
+              <div className="mt-2 flex items-baseline gap-1.5">
+                <span className={`text-2xl font-black ${
+                  isLight ? 'text-indigo-600' : 'text-indigo-400'
+                }`}>{weeksGrandTotal.totalOutros}</span>
+                <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>un</span>
+              </div>
+              <span className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>Estoque Alternativo</span>
             </div>
 
             <div className={`p-4 rounded-2xl flex flex-col justify-between border transition-colors ${
@@ -1287,6 +1315,7 @@ export default function ProductMovements({
                       <th className={`py-3 px-4 text-center w-28 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>ESTOQUE</th>
                       <th className={`py-3 px-4 text-center w-24 ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>RMA</th>
                       <th className={`py-3 px-4 text-center w-28 ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>OPENBOX</th>
+                      <th className={`py-3 px-4 text-center w-24 ${isLight ? 'text-indigo-600' : 'text-indigo-400'}`}>OUTROS</th>
                       <th className={`py-3 px-4 text-center w-24 ${isLight ? 'text-purple-600' : 'text-purple-400'}`}>ES</th>
                       <th className={`py-3 px-4 text-center w-28 font-black ${
                         isLight ? 'bg-slate-200/80 text-slate-900 border-x border-slate-300' : 'bg-slate-900/90 text-white'
@@ -1312,7 +1341,7 @@ export default function ProductMovements({
                               ? 'bg-slate-100/95 border-slate-300 text-slate-800' 
                               : 'bg-slate-950/60 border-slate-800 text-slate-300'
                           }`}>
-                            <td colSpan={8} className="py-2.5 px-4">
+                            <td colSpan={9} className="py-2.5 px-4">
                               <div className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-2">
                                   <span className={`px-2.5 py-0.5 rounded font-black text-[10px] uppercase tracking-wider border ${
@@ -1404,6 +1433,13 @@ export default function ProductMovements({
                                   {record.openbox}
                                 </td>
 
+                                {/* OUTROS */}
+                                <td className={`py-3 px-4 text-center font-mono font-bold ${
+                                  isLight ? 'text-indigo-600' : 'text-indigo-400'
+                                }`}>
+                                  {record.outros ?? 0}
+                                </td>
+
                                 {/* ES */}
                                 <td className={`py-3 px-4 text-center font-mono font-bold ${
                                   isLight ? 'text-purple-600' : 'text-purple-400'
@@ -1449,17 +1485,6 @@ export default function ProductMovements({
                                     >
                                       <Edit2 className="w-3.5 h-3.5" />
                                     </button>
-                                    <button
-                                      onClick={() => handleDeleteInflowRecord(record.id)}
-                                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                        isLight 
-                                          ? 'hover:bg-slate-200 text-slate-500 hover:text-rose-600' 
-                                          : 'hover:bg-slate-800 text-slate-400 hover:text-rose-400'
-                                      }`}
-                                      title="Excluir Lançamento"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -1484,6 +1509,7 @@ export default function ProductMovements({
                       <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>{weeksGrandTotal.totalEstoque}</td>
                       <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-rose-600' : 'text-rose-400'}`}>{weeksGrandTotal.totalRma}</td>
                       <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>{weeksGrandTotal.totalOpenbox}</td>
+                      <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-indigo-600' : 'text-indigo-400'}`}>{weeksGrandTotal.totalOutros}</td>
                       <td className={`py-4 px-4 text-center font-mono text-sm ${isLight ? 'text-purple-600' : 'text-purple-400'}`}>{weeksGrandTotal.totalEs}</td>
                       <td className={`py-4 px-4 text-center font-mono text-base ${
                         isLight 
@@ -1524,6 +1550,7 @@ export default function ProductMovements({
                         <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-emerald-600' : 'text-emerald-400/80'}`}>{monthTotals.totalEstoque}</td>
                         <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-rose-600' : 'text-rose-400/80'}`}>{monthTotals.totalRma}</td>
                         <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-amber-600' : 'text-amber-400/80'}`}>{monthTotals.totalOpenbox}</td>
+                        <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-indigo-600' : 'text-indigo-400/80'}`}>{monthTotals.totalOutros}</td>
                         <td className={`py-2.5 px-4 text-center font-mono font-bold ${isLight ? 'text-purple-600' : 'text-purple-400/80'}`}>{monthTotals.totalEs}</td>
                         <td className={`py-2.5 px-4 text-center font-mono font-bold ${
                           isLight ? 'text-slate-900 bg-slate-100/80 border-x border-slate-200' : 'text-slate-200 bg-slate-900/60'
@@ -2373,9 +2400,10 @@ export default function ProductMovements({
                           ? Math.max(6, (h.total / hourlyDistribution.maxCount) * 75) 
                           : 6;
 
-                        // Calculate percentages for stacked segments (Estoque, Openbox, RMA)
+                        // Calculate percentages for stacked segments (Estoque, Openbox, Outros, RMA)
                         const pctEstoque = hasEntries ? (h.estoque / h.total) * 100 : 0;
                         const pctOpenbox = hasEntries ? (h.openbox / h.total) * 100 : 0;
+                        const pctOutros = hasEntries ? (h.outros / h.total) * 100 : 0;
                         const pctRma = hasEntries ? (h.rma / h.total) * 100 : 0;
 
                         return (
@@ -2415,6 +2443,13 @@ export default function ProductMovements({
                                       title={`Openbox: ${h.openbox}`}
                                     />
                                   )}
+                                  {pctOutros > 0 && (
+                                    <div 
+                                      style={{ height: `${pctOutros}%` }} 
+                                      className="w-full bg-indigo-500 transition-all duration-200" 
+                                      title={`Outros: ${h.outros}`}
+                                    />
+                                  )}
                                   {pctRma > 0 && (
                                     <div 
                                       style={{ height: `${pctRma}%` }} 
@@ -2446,6 +2481,7 @@ export default function ProductMovements({
                                   <div className="space-y-0.5 text-[9px] text-slate-300">
                                     {h.estoque > 0 && <div className="text-emerald-400">Estoque: {h.estoque} un</div>}
                                     {h.openbox > 0 && <div className="text-amber-400">Openbox: {h.openbox} un</div>}
+                                    {h.outros > 0 && <div className="text-indigo-400">Outros: {h.outros} un</div>}
                                     {h.rma > 0 && <div className="text-rose-400">RMA: {h.rma} un</div>}
                                   </div>
                                 )}
@@ -2479,6 +2515,7 @@ export default function ProductMovements({
                       <span className={`font-bold ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>Setores:</span>
                       <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Estoque</span>
                       <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Openbox</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500"></span> Outros</span>
                       <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span> RMA</span>
                     </div>
 
