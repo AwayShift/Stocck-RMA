@@ -445,10 +445,21 @@ export default function BackupModal({
     'Sábado'
   ];
 
+  if (isStorageManagerOpen) {
+    return (
+      <BackupStorageManagerModal
+        isOpen={true}
+        onClose={() => setIsStorageManagerOpen(false)}
+        isLight={isLight}
+        onRestoreSuccess={onRestoreSuccess}
+      />
+    );
+  }
+
   return (
     <div 
       className={`fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-150 ${
-        isLight ? 'bg-white/75 backdrop-blur-sm' : 'bg-slate-950/85'
+        isLight ? 'bg-white/75' : 'bg-black/85'
       }`}
       id="backup-modal-backdrop"
       onClick={(e) => {
@@ -1624,7 +1635,9 @@ export default function BackupModal({
       {/* Delete Cloud Snapshot Confirmation Dialog */}
       {snapshotToDelete && (
         <div 
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/85 animate-in fade-in duration-150"
+          className={`fixed inset-0 z-[120] flex items-center justify-center p-4 animate-in fade-in duration-150 ${
+            isLight ? 'bg-white/75' : 'bg-black/85'
+          }`}
           id="delete-snapshot-dialog"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isDeletingSnapshot) setSnapshotToDelete(null);
@@ -1692,14 +1705,6 @@ export default function BackupModal({
           </div>
         </div>
       )}
-
-      {/* Dedicated Backup Storage Manager & Quick Deletion Modal */}
-      <BackupStorageManagerModal
-        isOpen={isStorageManagerOpen}
-        onClose={() => setIsStorageManagerOpen(false)}
-        isLight={isLight}
-        onRestoreSuccess={onRestoreSuccess}
-      />
     </div>
   );
 }

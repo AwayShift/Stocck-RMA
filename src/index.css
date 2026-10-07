@@ -429,13 +429,12 @@ html.light div[id$="-modal-overlay"],
 html.light div[id$="-modal-backdrop"],
 html.light #settings-modal-overlay,
 html.light #backup-modal-backdrop,
+html.light #backup-storage-manager-modal-backdrop,
 html.light #manual-inflow-modal,
 html.light #excel-inflow-import-modal-overlay,
 html.light #db-switcher-modal-overlay,
 html.light #physical-stock-unit-modal-overlay {
   background-color: rgba(255, 255, 255, 0.75) !important;
-  backdrop-filter: blur(6px) !important;
-  -webkit-backdrop-filter: blur(6px) !important;
 }
 
 /* Ensure modal dialog cards in Light Mode pop cleanly with crisp borders and deep shadow against the white backdrop */
@@ -4355,8 +4354,6 @@ html.light #input-filter-stock-date:hover::-webkit-calendar-picker-indicator {
    ========================================================================== */
 html.light #manual-inflow-modal {
   background-color: rgba(255, 255, 255, 0.75) !important;
-  backdrop-filter: blur(6px) !important;
-  -webkit-backdrop-filter: blur(6px) !important;
 }
 
 html.light #manual-inflow-modal-card {
