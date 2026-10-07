@@ -2890,7 +2890,6 @@ export default function ProductMovements({
           setEditingInflow(null);
         }}
         onSave={handleSaveInflowRecord}
-        onDelete={handleDeleteInflowRecord}
         initialData={editingInflow}
         defaultDate={defaultEntryDate}
         allInflows={extendedDailyInflows}

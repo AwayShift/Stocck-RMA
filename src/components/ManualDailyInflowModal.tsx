@@ -32,7 +32,6 @@ interface ManualDailyInflowModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (record: DailyInflowRecord) => Promise<void>;
-  onDelete?: (idOrDate: string) => Promise<void>;
   initialData?: DailyInflowRecord | null;
   defaultDate?: string;
   allInflows?: DailyInflowRecord[];
@@ -66,7 +65,6 @@ export default function ManualDailyInflowModal({
   isOpen,
   onClose,
   onSave,
-  onDelete,
   initialData,
   defaultDate,
   allInflows,

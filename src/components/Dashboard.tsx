@@ -1000,7 +1000,6 @@ export default function Dashboard({
           onSave={async (record) => {
             await onSaveDailyInflow(record);
           }}
-          onDelete={onDeleteDailyInflow}
           initialData={todayInflowRecord || null}
           defaultDate={todayDateStr}
           allInflows={dailyInflows}
