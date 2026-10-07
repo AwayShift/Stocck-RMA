@@ -87,6 +87,7 @@ interface PhysicalStockProps {
   initialSectorFilter?: DestinationSectorType | null;
   initialSearchTerm?: string | null;
   onClearInitialFilters?: () => void;
+  currentTab?: 'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement';
 }
 
 const stripHtml = (html?: string): string => {
@@ -148,7 +149,8 @@ export default function PhysicalStock({
   initialPlatformFilter,
   initialSectorFilter,
   initialSearchTerm,
-  onClearInitialFilters
+  onClearInitialFilters,
+  currentTab = 'stock'
 }: PhysicalStockProps) {
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm || '');
   const [selectedBrand, setSelectedBrand] = useState<string>('Todas');
@@ -471,10 +473,96 @@ export default function PhysicalStock({
     return false;
   }, []);
 
-  // When initialSelectedUnit arrives from order click, position screen on the item, open modal, and set matching sector tab
+  // Reference to hold active visual highlighting timer
+  const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const handledInitialUnitRef = useRef<string | null>(null);
+
+  // Automatically remove visual highlighting on the unit card after 10 seconds (10000ms)
+  useEffect(() => {
+    if (!highlightedUnitId) {
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+    }
+
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightedUnitId(null);
+      highlightTimerRef.current = null;
+    }, 10000);
+
+    return () => {
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = null;
+      }
+    };
+  }, [highlightedUnitId]);
+
+  // Smoothly scroll to the highlighted unit across multiple rendering frames
+  useEffect(() => {
+    if (!highlightedUnitId) return;
+    const attemptScroll = () => {
+      if (!scrollToUnit(highlightedUnitId)) {
+        requestAnimationFrame(() => scrollToUnit(highlightedUnitId));
+      }
+    };
+
+    const t0 = setTimeout(attemptScroll, 60);
+    const t1 = setTimeout(attemptScroll, 180);
+    const t2 = setTimeout(attemptScroll, 380);
+    const t3 = setTimeout(attemptScroll, 750);
+    const t4 = setTimeout(attemptScroll, 1300);
+
+    return () => {
+      clearTimeout(t0);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+    };
+  }, [highlightedUnitId, scrollToUnit]);
+
+  // When active tab changes:
+  // 1. Leaving 'stock': always clear highlight, cancel timer, close modal details, and reset handled unit ref
+  // 2. Returning to 'stock' without initialSelectedUnit: clean slate (no residual highlight, no linger modal)
+  const prevTabRef = useRef(currentTab);
+  useEffect(() => {
+    if (prevTabRef.current !== currentTab) {
+      if (currentTab !== 'stock') {
+        if (highlightTimerRef.current) {
+          clearTimeout(highlightTimerRef.current);
+          highlightTimerRef.current = null;
+        }
+        setHighlightedUnitId(null);
+        setSelectedUnitId(null);
+        setIsEditingUnit(false);
+        setIsCompareModalOpen(false);
+        handledInitialUnitRef.current = null;
+      } else if (currentTab === 'stock' && !initialSelectedUnit) {
+        setHighlightedUnitId(null);
+        setSelectedUnitId(null);
+        setIsEditingUnit(false);
+      }
+      prevTabRef.current = currentTab;
+    }
+  }, [currentTab, initialSelectedUnit]);
+
+  // When initialSelectedUnit arrives from click, position screen on the item, open modal, and set matching sector tab
   React.useEffect(() => {
     if (initialSelectedUnit) {
       const targetId = initialSelectedUnit.id;
+
+      // Avoid re-processing if already handled for this specific unit
+      if (handledInitialUnitRef.current === targetId && highlightedUnitId === targetId) {
+        return;
+      }
+      handledInitialUnitRef.current = targetId;
 
       // 1. OPEN THE MODAL ONLY IF openModalOnInitialSelect is true!
       if (openModalOnInitialSelect) {
@@ -527,35 +615,8 @@ export default function PhysicalStock({
       if (onClearSelectedUnit) {
         onClearSelectedUnit();
       }
-
-      // 7. Multi-phase attempts to ensure DOM has rendered regardless of state batching and tab change
-      const attemptScroll = () => {
-        if (!scrollToUnit(targetId)) {
-          requestAnimationFrame(() => scrollToUnit(targetId));
-        }
-      };
-
-      const t0 = setTimeout(attemptScroll, 60);
-      const t1 = setTimeout(attemptScroll, 160);
-      const t2 = setTimeout(attemptScroll, 380);
-      const t3 = setTimeout(attemptScroll, 750);
-      const t4 = setTimeout(attemptScroll, 1300);
-
-      // Remove highlight smoothly after 4 seconds
-      const tEnd = !openModalOnInitialSelect ? setTimeout(() => {
-        setHighlightedUnitId(null);
-      }, 4000) : null;
-
-      return () => {
-        clearTimeout(t0);
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-        clearTimeout(t4);
-        if (tEnd) clearTimeout(tEnd);
-      };
     }
-  }, [initialSelectedUnit, openModalOnInitialSelect, units, scrollToUnit, onClearSelectedUnit]);
+  }, [initialSelectedUnit?.id, openModalOnInitialSelect, units, onClearSelectedUnit]);
 
   // When PhysicalStock unmounts (user switches tab), clear any residual parent filters
   useEffect(() => {
@@ -1241,7 +1302,7 @@ export default function PhysicalStock({
   // Reset pagination limit when search term, filters, sector tab, date, or duplicate filter changes,
   // BUT do not cap at 20 if we are navigating to a specific target unit from another tab!
   useEffect(() => {
-    const targetId = initialSelectedUnit?.id;
+    const targetId = highlightedUnitId || initialSelectedUnit?.id;
     if (targetId) {
       const idx = filteredUnits.findIndex(u => u.id === targetId);
       const rawIdx = units.findIndex(u => u.id === targetId);
@@ -1254,9 +1315,9 @@ export default function PhysicalStock({
     setVisibleCount(20);
   }, [searchTerm, selectedBrand, selectedCategory, selectedVoltage, selectedDate, activeTab, filterOnlyDuplicates]);
 
-  // Ensure visibleCount expands ONLY when an external initialSelectedUnit arrives from another tab
+  // Ensure visibleCount expands when a target item arrives or is highlighted
   useEffect(() => {
-    const targetId = initialSelectedUnit?.id;
+    const targetId = highlightedUnitId || initialSelectedUnit?.id;
     if (!targetId) return;
 
     const idx = filteredUnits.findIndex(u => u.id === targetId);
@@ -1270,7 +1331,7 @@ export default function PhysicalStock({
         setVisibleCount(Math.max(visibleCount, rawIdx + 50));
       }
     }
-  }, [filteredUnits, initialSelectedUnit, units, visibleCount]);
+  }, [filteredUnits, highlightedUnitId, initialSelectedUnit, units, visibleCount]);
 
   // Slice filtered units according to current pagination limit (20 items per page)
   const displayedUnits = filteredUnits.slice(0, visibleCount);
@@ -3188,17 +3249,6 @@ export default function PhysicalStock({
                     </span>
                   )}
 
-                  {currentUnit.pendingRegistrationNumber && (
-                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md border flex items-center gap-1.5 ${
-                      isLight
-                        ? 'bg-sky-50 text-sky-800 border-sky-300'
-                        : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                    }`} title={`Vinculado à Pendência: ${currentUnit.pendingRegistrationNumber}`}>
-                      <Hash className="w-3.5 h-3.5 text-sky-400" />
-                      <span>Pendência: {currentUnit.pendingRegistrationNumber}</span>
-                    </span>
-                  )}
-
                   {isEditingUnit && (
                     <span className={`px-2 py-0.5 text-[10px] font-black rounded-md uppercase tracking-wider border ${
                       isLight 
@@ -4349,7 +4399,7 @@ export default function PhysicalStock({
                 )}
 
                 {/* Technical Specifications Hero Bar */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 bg-slate-950 p-4 sm:p-5 border border-slate-800 rounded-2xl shadow-inner text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3 bg-slate-950 p-4 sm:p-5 border border-slate-800 rounded-2xl shadow-inner text-xs">
                   {/* SKU */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -4388,62 +4438,6 @@ export default function PhysicalStock({
                       <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60 text-sky-400 transition-opacity ml-1 shrink-0" />
                     </button>
                   </div>
-
-                  {/* Registration Code */}
-                  {(() => {
-                    const regCode = (currentUnit.pendingRegistrationNumber || '').replace(/^#/, '').trim();
-                    const hasCode = Boolean(regCode && regCode !== '');
-
-                    return (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                            Nº de Registro
-                          </span>
-                          {hasCode && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleCopyCode(regCode, 'reg', e)}
-                              className={`text-[10px] flex items-center gap-1 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer ${
-                                copiedCodeKey === 'reg'
-                                  ? 'bg-emerald-500/20 text-emerald-300'
-                                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                              }`}
-                              title="Copiar Nº de Registro"
-                              id="btn-copy-reg"
-                            >
-                              {copiedCodeKey === 'reg' ? (
-                                <>
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                  <span className="text-[9px]">Copiado!</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span className="text-[9px]">Copiar</span>
-                                </>
-                              )}
-                            </button>
-                          )}
-                        </div>
-                        {hasCode ? (
-                          <button
-                            type="button"
-                            onClick={(e) => handleCopyCode(regCode, 'reg', e)}
-                            className="w-full text-left font-mono text-xs sm:text-sm font-bold text-slate-200 bg-slate-900 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-800 block truncate transition-colors cursor-pointer group flex items-center justify-between"
-                            title="Clique para copiar Número de Registro"
-                          >
-                            <span className="truncate">{regCode}</span>
-                            <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60 text-slate-300 transition-opacity ml-1 shrink-0" />
-                          </button>
-                        ) : (
-                          <span className="font-mono text-xs sm:text-sm font-bold px-2.5 py-1.5 rounded-lg border block truncate text-slate-500 bg-slate-900/50 border-slate-800/60 italic">
-                            Não Informado
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
 
                   {/* Serial Number */}
                   <div className="space-y-1.5">
@@ -4574,21 +4568,26 @@ export default function PhysicalStock({
                         </button>
                       </div>
                     )}
-                    {currentUnit.pendingRegistrationNumber && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-400 font-semibold text-[11px]">Nº Pendência:</span>
-                        <button
-                          type="button"
-                          onClick={(e) => handleCopyCode(currentUnit.pendingRegistrationNumber || '', 'pendingReg', e)}
-                          className="font-mono text-[11px] font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 rounded transition-colors cursor-pointer group flex items-center gap-1"
-                          title="Clique para copiar Número de Registro de Pendência"
-                        >
-                          <Hash className="w-2.5 h-2.5 text-sky-400" />
-                          <span>{currentUnit.pendingRegistrationNumber}</span>
-                          <Copy className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
-                        </button>
-                      </div>
-                    )}
+                    {(() => {
+                      const regCode = (currentUnit.pendingRegistrationNumber || '').replace(/^#/, '').trim();
+                      if (!regCode) return null;
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-400 font-semibold text-[11px]">Nº de Registro:</span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyCode(regCode, 'reg', e)}
+                            className="font-mono text-[11px] font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 rounded transition-colors cursor-pointer group flex items-center gap-1"
+                            title="Clique para copiar Número de Registro"
+                            id="btn-copy-reg-bottom"
+                          >
+                            <Hash className="w-2.5 h-2.5 text-sky-400" />
+                            <span>{regCode}</span>
+                            <Copy className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        </div>
+                      );
+                    })()}
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="flex items-center gap-1.5 text-slate-400">
                         <Clock className="w-3.5 h-3.5 text-slate-500" />

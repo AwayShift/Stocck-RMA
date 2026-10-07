@@ -451,6 +451,36 @@ export default function ProductCompareModal({
                 </div>
               )}
 
+              {/* Secondary Codes: Order, STI, and Registration Number */}
+              {(selectedProduct.orderNumber || selectedProduct.trackingCode || selectedProduct.registrationNumber) && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {selectedProduct.orderNumber && (
+                    <span className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold border flex items-center gap-1 ${
+                      isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300'
+                    }`}>
+                      <span className="text-slate-400 font-sans font-semibold">Ped:</span>
+                      <span className="text-sky-400">{selectedProduct.orderNumber}</span>
+                    </span>
+                  )}
+                  {selectedProduct.trackingCode && (
+                    <span className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold border flex items-center gap-1 ${
+                      isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300'
+                    }`}>
+                      <span className="text-slate-400 font-sans font-semibold">Código STI:</span>
+                      <span className="text-sky-400">{selectedProduct.trackingCode}</span>
+                    </span>
+                  )}
+                  {selectedProduct.registrationNumber && (
+                    <span className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold border flex items-center gap-1 ${
+                      isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300'
+                    }`}>
+                      <span className="text-slate-400 font-sans font-semibold">Nº de Registro:</span>
+                      <span className="text-sky-400">{selectedProduct.registrationNumber}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* SECTION: Selected Product Photo Gallery */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">

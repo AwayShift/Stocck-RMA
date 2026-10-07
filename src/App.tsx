@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.5
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   TrendingUp, 
   Database, 
@@ -134,6 +134,8 @@ export default function App() {
   } | null>(null);
 
   const handleNavigateToStockWithFilters = (platform?: PlatformType | null, sector?: DestinationSectorType | null, searchTerm?: string | null) => {
+    setSelectedTriageUnit(null);
+    setOpenModalOnStockSelect(false);
     setInitialStockFilters({
       platform: platform || null,
       sector: sector || null,
@@ -732,12 +734,18 @@ export default function App() {
     }
   };
 
-  // Tab navigation that always clears sticky filters so returning to stock tab defaults to 'Todos'
+  // Tab navigation that always clears sticky filters and modals so returning to stock tab defaults to clean slate
   const handleSwitchTab = (tab: 'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement') => {
     setSelectedTriageUnit(null);
+    setOpenModalOnStockSelect(false);
     setInitialStockFilters(null);
     setActiveTab(tab);
   };
+
+  const handleClearSelectedUnit = useCallback(() => {
+    setSelectedTriageUnit(null);
+    setOpenModalOnStockSelect(false);
+  }, []);
 
   // View unit modal from Dashboard without navigating to stock
   const handleViewUnitDetails = (unit: TriageUnit) => {
@@ -1120,6 +1128,7 @@ export default function App() {
 
             <div style={{ display: activeTab === 'stock' ? 'block' : 'none' }}>
               <PhysicalStock 
+                currentTab={activeTab}
                 units={triageUnits}
                 products={products}
                 pendingItems={pendingItems}
@@ -1129,7 +1138,7 @@ export default function App() {
                 onRevertCheckoutUnit={handleRevertCheckoutTriage}
                 initialSelectedUnit={selectedTriageUnit}
                 openModalOnInitialSelect={openModalOnStockSelect}
-                onClearSelectedUnit={() => setSelectedTriageUnit(null)}
+                onClearSelectedUnit={handleClearSelectedUnit}
                 onGoToStockDirectly={handleGoToStockDirectlyFromModal}
                 onSaveTriage={handleSaveTriage}
                 enableSpreadsheetImport={enableSpreadsheetImport}
@@ -1161,40 +1170,88 @@ export default function App() {
                   const list = await syncPendingItemsIncrementally(true);
                   if (Array.isArray(list)) setPendingItems(list);
                 }}
-                onNavigateToStock={(unitId?: string) => {
-                  if (unitId && unitId.trim()) {
-                    const raw = unitId.trim();
+                onNavigateToStock={(target?: string | PendingItem | TriageUnit) => {
+                  let rawTarget = typeof target === 'string' ? target.trim() : '';
+                  let foundUnit: TriageUnit | undefined = undefined;
+
+                  if (target && typeof target === 'object') {
+                    if ('baseProductSku' in target) {
+                      foundUnit = target as TriageUnit;
+                    } else if ('productName' in target) {
+                      foundUnit = getLinkedStockUnit(target as PendingItem, triageUnits);
+                      rawTarget = (target as PendingItem).orderNumber || (target as PendingItem).registrationNumber || (target as PendingItem).trackingCode || '';
+                    }
+                  }
+
+                  if (!foundUnit && rawTarget) {
+                    const raw = rawTarget.trim();
                     const clean = raw.toLowerCase();
                     const cleanSti = normalizeStiCode(raw).toLowerCase();
                     const cleanOrder = raw.replace(/^[#]/, '').toLowerCase();
-                    const match = triageUnits.find(u => 
-                      u.id === raw || 
-                      areOrdersMatching(u.orderNumber, raw) ||
-                      (u.orderNumber && (
-                        u.orderNumber.trim().toLowerCase() === clean ||
-                        u.orderNumber.trim().toLowerCase() === cleanOrder ||
-                        u.orderNumber.trim().toLowerCase().replace(/^[#]/, '') === cleanOrder
-                      )) ||
-                      (u.trackingCode && (
-                        u.trackingCode.toLowerCase() === clean ||
-                        normalizeStiCode(u.trackingCode).toLowerCase() === cleanSti
-                      )) ||
-                      (u.pendingRegistrationNumber && u.pendingRegistrationNumber.toLowerCase() === clean) ||
-                      (u.pendingItemId && u.pendingItemId === raw) ||
-                      (u.serialNumber && u.serialNumber.trim().toLowerCase() === clean)
-                    );
 
-                    if (match) {
-                      setSelectedTriageUnit({ ...match });
-                      setInitialStockFilters(null);
-                    } else {
-                      setSelectedTriageUnit(null);
-                      setInitialStockFilters({
-                        platform: null,
-                        sector: null,
-                        searchTerm: raw.replace(/^[#]/, '').trim()
-                      });
+                    // 1. Direct unit ID match
+                    foundUnit = triageUnits.find(u => u.id === raw);
+
+                    // 2. Pending items match -> get linked stock unit
+                    if (!foundUnit) {
+                      const matchedPending = pendingItems.find(p => 
+                        p.id === raw || 
+                        (p.registrationNumber && p.registrationNumber.trim().toLowerCase() === clean) ||
+                        (p.orderNumber && areOrdersMatching(p.orderNumber, raw))
+                      );
+                      if (matchedPending) {
+                        foundUnit = getLinkedStockUnit(matchedPending, triageUnits);
+                      }
                     }
+
+                    // 3. Resilient Order Number match
+                    if (!foundUnit) {
+                      foundUnit = triageUnits.find(u => 
+                        areOrdersMatching(u.orderNumber, raw) ||
+                        (u.orderNumber && (
+                          u.orderNumber.trim().toLowerCase() === clean ||
+                          u.orderNumber.trim().toLowerCase() === cleanOrder ||
+                          u.orderNumber.trim().toLowerCase().replace(/^[#]/, '') === cleanOrder
+                        ))
+                      );
+                    }
+
+                    // 4. Tracking Code / STI match
+                    if (!foundUnit) {
+                      foundUnit = triageUnits.find(u => 
+                        u.trackingCode && (
+                          u.trackingCode.toLowerCase() === clean ||
+                          normalizeStiCode(u.trackingCode).toLowerCase() === cleanSti
+                        )
+                      );
+                    }
+
+                    // 5. Pending Registration Number, Pending Item ID, or Serial Number match
+                    if (!foundUnit) {
+                      foundUnit = triageUnits.find(u => 
+                        (u.pendingRegistrationNumber && (
+                          u.pendingRegistrationNumber.toLowerCase() === clean ||
+                          u.pendingRegistrationNumber.replace(/^[#]/, '').toLowerCase() === cleanOrder
+                        )) ||
+                        (u.pendingItemId && u.pendingItemId === raw) ||
+                        (u.serialNumber && u.serialNumber.trim().toLowerCase() === clean)
+                      );
+                    }
+                  }
+
+                  if (foundUnit) {
+                    setSelectedTriageUnit({ ...foundUnit });
+                    setOpenModalOnStockSelect(false);
+                    setInitialStockFilters(null);
+                    setActiveTab('stock');
+                  } else if (rawTarget) {
+                    setSelectedTriageUnit(null);
+                    setOpenModalOnStockSelect(false);
+                    setInitialStockFilters({
+                      platform: null,
+                      sector: null,
+                      searchTerm: rawTarget.replace(/^[#]/, '').trim()
+                    });
                     setActiveTab('stock');
                   } else {
                     handleSwitchTab('stock');
@@ -1215,6 +1272,7 @@ export default function App() {
                 onSaveTriage={handleSaveTriage}
                 onNavigateToStockUnit={(unit) => {
                   setSelectedTriageUnit({ ...unit });
+                  setOpenModalOnStockSelect(false);
                   setInitialStockFilters(null);
                   setActiveTab('stock');
                 }}

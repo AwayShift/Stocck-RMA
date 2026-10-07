@@ -105,7 +105,7 @@ interface PendingItemsProps {
   onSaveTriage?: (unit: TriageUnit) => Promise<void>;
   onNavigateToRmaWithPending?: (item: PendingItem) => void;
   userRole?: string | null;
-  onNavigateToStock?: (unitId?: string) => void;
+  onNavigateToStock?: (target?: string | PendingItem | TriageUnit) => void;
   enableSpreadsheetExport?: boolean;
   onRefreshPending?: () => Promise<void>;
 }
@@ -1918,7 +1918,7 @@ export default function PendingItems({
                           onClick={(e) => {
                             e.stopPropagation();
                             if (onNavigateToStock) {
-                              onNavigateToStock(item.linkedUnitId || item.transferredUnitId || item.linkedUnitTrackingCode || item.orderNumber);
+                              onNavigateToStock(linkedUnit?.id || item.linkedUnitId || item.transferredUnitId || item.linkedUnitTrackingCode || item.orderNumber);
                             }
                           }}
                           className="font-mono text-[10px] font-semibold px-2 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 flex items-center gap-1 cursor-pointer transition-colors"
@@ -2252,7 +2252,7 @@ export default function PendingItems({
                             onClick={(e) => {
                               e.stopPropagation();
                               if (onNavigateToStock) {
-                                onNavigateToStock(item.linkedUnitId || item.transferredUnitId || item.linkedUnitTrackingCode || item.orderNumber);
+                                onNavigateToStock(linkedUnit?.id || item.linkedUnitId || item.transferredUnitId || item.linkedUnitTrackingCode || item.orderNumber);
                               }
                             }}
                             className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 mt-0.5 cursor-pointer"
@@ -4439,9 +4439,6 @@ export default function PendingItems({
             {/* Product Summary Card */}
             <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/25">
-                  {resolvingItem.registrationNumber || 'PENDÊNCIA'}
-                </span>
                 <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                   SKU: {resolvingItem.sku || 'SEM SKU'}
                 </span>
@@ -4456,9 +4453,9 @@ export default function PendingItems({
                 {resolvingItem.productName}
               </div>
 
-              {/* Order and STI if present */}
-              {(resolvingItem.orderNumber || resolvingItem.trackingCode) && (
-                <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-900">
+              {/* Order, STI and Registration Number if present */}
+              {(resolvingItem.orderNumber || resolvingItem.trackingCode || resolvingItem.registrationNumber) && (
+                <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-900 flex-wrap">
                   {resolvingItem.orderNumber && (
                     <span className="text-sky-400 font-semibold">
                       Ped: {resolvingItem.orderNumber}
@@ -4467,6 +4464,11 @@ export default function PendingItems({
                   {resolvingItem.trackingCode && (
                     <span className="text-slate-300">
                       STI: {normalizeStiCode(resolvingItem.trackingCode)}
+                    </span>
+                  )}
+                  {resolvingItem.registrationNumber && (
+                    <span className="text-sky-400 font-semibold">
+                      Nº Registro: {resolvingItem.registrationNumber}
                     </span>
                   )}
                 </div>
@@ -4604,8 +4606,9 @@ export default function PendingItems({
                 <button
                   type="button"
                   onClick={() => {
+                    const target = transferSuccessData?.trackingCode || transferSuccessData?.sku || '';
                     setTransferSuccessData(null);
-                    onNavigateToStock();
+                    onNavigateToStock(target);
                   }}
                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-emerald-900/30 flex items-center gap-2"
                   id="btn-goto-stock-after-transfer"
