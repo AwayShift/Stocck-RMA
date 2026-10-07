@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.5
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   TrendingUp, 
   Database, 
@@ -734,12 +734,46 @@ export default function App() {
     }
   };
 
+  // Scroll positions per tab to prevent scroll bleed between tabs
+  const tabScrollPositionsRef = useRef<Record<string, number>>({});
+  const previousTabRef = useRef(activeTab);
+
+  useEffect(() => {
+    const prevTab = previousTabRef.current;
+    if (prevTab !== activeTab) {
+      // Save scroll position of previous tab
+      tabScrollPositionsRef.current[prevTab] = window.scrollY;
+      previousTabRef.current = activeTab;
+
+      // When navigating to a non-stock tab, ensure the viewport starts at the top (or at that tab's saved scroll)
+      if (activeTab !== 'stock') {
+        const targetScrollY = tabScrollPositionsRef.current[activeTab] || 0;
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: targetScrollY, left: 0, behavior: 'instant' });
+        });
+      } else if (!selectedTriageUnit) {
+        // When opening stock via navigation tab (clean state), scroll to top
+        const targetScrollY = tabScrollPositionsRef.current['stock'] || 0;
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: targetScrollY, left: 0, behavior: 'instant' });
+        });
+      }
+    }
+  }, [activeTab, selectedTriageUnit]);
+
   // Tab navigation that always clears sticky filters and modals so returning to stock tab defaults to clean slate
   const handleSwitchTab = (tab: 'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement') => {
+    tabScrollPositionsRef.current[activeTab] = window.scrollY;
+    if (tab === 'stock') {
+      tabScrollPositionsRef.current['stock'] = 0;
+    }
     setSelectedTriageUnit(null);
     setOpenModalOnStockSelect(false);
     setInitialStockFilters(null);
     setActiveTab(tab);
+
+    const targetY = tab === 'stock' ? 0 : (tabScrollPositionsRef.current[tab] || 0);
+    window.scrollTo({ top: targetY, left: 0, behavior: 'instant' });
   };
 
   const handleClearSelectedUnit = useCallback(() => {

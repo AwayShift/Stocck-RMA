@@ -463,6 +463,7 @@ export default function PhysicalStock({
 
   // Helper to scroll to a specific unit card in the DOM (supports both grid and list view)
   const scrollToUnit = useCallback((targetId: string) => {
+    if (currentTab !== 'stock') return false;
     const gridElem = document.getElementById(`stock-unit-${targetId}`);
     const listElem = document.getElementById(`stock-unit-list-${targetId}`);
     const targetElem = gridElem || listElem;
@@ -471,7 +472,7 @@ export default function PhysicalStock({
       return true;
     }
     return false;
-  }, []);
+  }, [currentTab]);
 
   // Reference to hold active visual highlighting timer
   const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -504,12 +505,17 @@ export default function PhysicalStock({
     };
   }, [highlightedUnitId]);
 
-  // Smoothly scroll to the highlighted unit across multiple rendering frames
+  // Smoothly scroll to the highlighted unit across multiple rendering frames ONLY when in stock tab
   useEffect(() => {
-    if (!highlightedUnitId) return;
+    if (!highlightedUnitId || currentTab !== 'stock') return;
     const attemptScroll = () => {
+      if (currentTab !== 'stock') return;
       if (!scrollToUnit(highlightedUnitId)) {
-        requestAnimationFrame(() => scrollToUnit(highlightedUnitId));
+        requestAnimationFrame(() => {
+          if (currentTab === 'stock') {
+            scrollToUnit(highlightedUnitId);
+          }
+        });
       }
     };
 
@@ -526,7 +532,7 @@ export default function PhysicalStock({
       clearTimeout(t3);
       clearTimeout(t4);
     };
-  }, [highlightedUnitId, scrollToUnit]);
+  }, [highlightedUnitId, scrollToUnit, currentTab]);
 
   // When active tab changes:
   // 1. Leaving 'stock': always clear highlight, cancel timer, close modal details, and reset handled unit ref
