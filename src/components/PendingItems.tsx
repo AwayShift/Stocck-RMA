@@ -44,7 +44,8 @@ import {
   Link2,
   Calendar,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  GitCompare
 } from 'lucide-react';
 import { 
   PendingItem, 
@@ -56,6 +57,7 @@ import {
   TriageUnit
 } from '../types';
 import { ImageZoomModal } from './ImageZoomModal';
+import ProductCompareModal from './ProductCompareModal';
 import { PlatformSelector } from './PlatformSelector';
 import { uploadFileToStorage, saveTriageUnit } from '../lib/dbService';
 import { syncPendingItemsIncrementally } from '../lib/syncCacheService';
@@ -282,6 +284,8 @@ export default function PendingItems({
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PendingItem | null>(null);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [compareProductData, setCompareProductData] = useState<any>(null);
   
   // Delete Confirmation Modal
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<PendingItem | null>(null);
@@ -2632,12 +2636,46 @@ export default function PendingItems({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsFormModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {formSku && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompareProductData({
+                        name: formProductName || 'Produto Pendente',
+                        sku: formSku,
+                        serialNumber: formSerial,
+                        voltage: formVoltage,
+                        destinationSector: formStockDestination || 'RMA',
+                        platform: formPlatform,
+                        orderNumber: formOrderNumber,
+                        trackingCode: formTrackingCode,
+                        registrationNumber: formRegistrationNumber,
+                        deviceStatus: formDeviceStatus === 'Outro' ? formCustomDeviceStatus : formDeviceStatus,
+                        packageStatus: formPackageStatus === 'Outro' ? formCustomPackageStatus : formPackageStatus,
+                        customerReason: formCustomerReason || formReason,
+                        accessoriesInclusion: formStockAccessories,
+                        notes: formDetailedNotes,
+                        photosGeneral: formPhotos,
+                      });
+                      setIsCompareModalOpen(true);
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Comparar fotos e descrição com o produto cadastrado na base"
+                    id="btn-pending-compare-base"
+                  >
+                    <GitCompare className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Comparar com Base</span>
+                    <span className="sm:hidden">Comparar</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsFormModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body Form */}
@@ -3594,12 +3632,49 @@ export default function PendingItems({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsTransferModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {transferSku && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompareProductData({
+                        name: transferProductName || itemToTransfer.productName || 'Produto',
+                        sku: transferSku,
+                        serialNumber: transferSerialNumber,
+                        voltage: transferVoltage,
+                        destinationSector: transferDestination,
+                        platform: transferPlatform,
+                        orderNumber: transferOrderNumber,
+                        trackingCode: transferSti,
+                        registrationNumber: itemToTransfer.registrationNumber,
+                        deviceStatus: transferDeviceStatus === 'Outro' ? transferCustomDeviceStatus : transferDeviceStatus,
+                        packageStatus: transferPackageStatus === 'Outro' ? transferCustomPackageStatus : transferPackageStatus,
+                        customerReason: transferCustomerReason || itemToTransfer.customerReason,
+                        accessoriesInclusion: transferAccessories,
+                        notes: transferNotes,
+                        photosProduct: transferPhotosProduct,
+                        photosBox: transferPhotosBox,
+                        photosAccessories: transferPhotosAccessories,
+                        photosGeneral: itemToTransfer.photos,
+                      });
+                      setIsCompareModalOpen(true);
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Comparar fotos e descrição com o produto cadastrado na base"
+                    id="btn-transfer-compare-base"
+                  >
+                    <GitCompare className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Comparar com Base</span>
+                    <span className="sm:hidden">Comparar</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsTransferModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Transfer Error Alert */}
@@ -4551,6 +4626,20 @@ export default function PendingItems({
           imageUrl={zoomImage}
           onClose={() => setZoomImage(null)}
           title={zoomTitle}
+        />
+      )}
+
+      {/* Product Comparison Modal */}
+      {isCompareModalOpen && compareProductData && (
+        <ProductCompareModal
+          isOpen={isCompareModalOpen}
+          onClose={() => {
+            setIsCompareModalOpen(false);
+            setCompareProductData(null);
+          }}
+          selectedProduct={compareProductData}
+          baseProduct={findBaseProduct({ baseProductSku: compareProductData.sku }, products)}
+          allBaseProducts={products}
         />
       )}
     </div>

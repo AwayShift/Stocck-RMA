@@ -48,10 +48,12 @@ import {
   ArrowRightLeft,
   ArrowRight,
   Box,
-  Tag
+  Tag,
+  GitCompare
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType, PendingItem } from '../types';
 import ExcelImportModal from './ExcelImportModal';
+import ProductCompareModal from './ProductCompareModal';
 import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
 import { ImageZoomModal } from './ImageZoomModal';
 import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct, getResolvedUnitProductName, getOptimizedThumbnailUrl } from '../utils/productImages';
@@ -299,6 +301,9 @@ export default function PhysicalStock({
     stiCode: string;
     error: string | null;
   } | null>(null);
+
+  // Base Product Comparison Modal state (for units not in Estoque Principal)
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
 
   // Selected unit details
   const currentUnit = units.find(u => u.id === selectedUnitId);
@@ -574,6 +579,7 @@ export default function PhysicalStock({
     setIsCustomEditPackageStatus(false);
     setCustomEditPackageStatusText('');
     setIsEditPendingSelectorOpen(false);
+    setIsCompareModalOpen(false);
   };
 
   const handleStartEdit = (unit: TriageUnit) => {
@@ -3216,6 +3222,22 @@ export default function PhysicalStock({
               <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                 {isEditingUnit ? (
                   <>
+                    {editForm && editForm.destinationSector !== 'Principal' && (
+                      <button 
+                        type="button"
+                        onClick={() => setIsCompareModalOpen(true)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                          isLight
+                            ? 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-300 shadow-2xs'
+                            : 'bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 border-sky-500/40 shadow-2xs'
+                        }`}
+                        title="Comparar fotos e descrição com o produto base cadastrado"
+                        id="btn-edit-modal-compare-base-product"
+                      >
+                        <GitCompare className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                        <span className="hidden sm:inline">Comparar com Base</span>
+                      </button>
+                    )}
                     <button 
                       type="button"
                       onClick={() => { 
@@ -3246,6 +3268,24 @@ export default function PhysicalStock({
                   </>
                 ) : (
                   <>
+                    {/* Discrete Compare with Base button for products not in main stock */}
+                    {currentUnit.destinationSector !== 'Principal' && (
+                      <button 
+                        type="button"
+                        onClick={() => setIsCompareModalOpen(true)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                          isLight
+                            ? 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-300 shadow-2xs'
+                            : 'bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 border-sky-500/40 shadow-2xs'
+                        }`}
+                        title="Comparar fotos e descrição deste produto com o cadastro base original"
+                        id="btn-modal-compare-base-product"
+                      >
+                        <GitCompare className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                        <span className="hidden sm:inline">Comparar com Base</span>
+                        <span className="sm:hidden">Comparar</span>
+                      </button>
+                    )}
                     <button 
                       type="button"
                       onClick={() => {
@@ -4683,6 +4723,18 @@ export default function PhysicalStock({
                               Vinculado ao Catálogo Base (Sem duplicação de dados)
                             </span>
                           )}
+                          {currentUnit.destinationSector !== 'Principal' && (
+                            <button
+                              type="button"
+                              onClick={() => setIsCompareModalOpen(true)}
+                              className="px-2.5 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                              title="Comparar fotos e descrição com o produto cadastrado na base"
+                              id="btn-gallery-compare-base"
+                            >
+                              <GitCompare className="w-3.5 h-3.5 text-sky-400" />
+                              <span>Comparar com Base</span>
+                            </button>
+                          )}
                           {currentUnit.destinationSector === 'Principal' && (
                             <button
                               type="button"
@@ -5315,6 +5367,38 @@ export default function PhysicalStock({
           defaultSector={activeTab === 'Openbox' ? 'Openbox' : activeTab === 'RMA' ? 'RMA' : activeTab === 'Principal' ? 'Principal' : 'Openbox'}
         />,
         document.body
+      )}
+
+      {/* Product Comparison Modal for units not in Estoque Principal */}
+      {isCompareModalOpen && currentUnit && (
+        <ProductCompareModal
+          isOpen={isCompareModalOpen}
+          onClose={() => setIsCompareModalOpen(false)}
+          selectedProduct={{
+            id: currentUnit.id,
+            name: isEditingUnit && editForm ? editForm.baseProductName : currentUnit.baseProductName,
+            sku: isEditingUnit && editForm ? editForm.baseProductSku : currentUnit.baseProductSku,
+            serialNumber: isEditingUnit && editForm ? editForm.serialNumber : currentUnit.serialNumber,
+            voltage: isEditingUnit && editForm ? editForm.baseProductVoltage : currentUnit.baseProductVoltage,
+            destinationSector: isEditingUnit && editForm ? editForm.destinationSector : currentUnit.destinationSector,
+            originSector: currentUnit.originSector,
+            platform: currentUnit.platform,
+            orderNumber: currentUnit.orderNumber,
+            trackingCode: resolvedCurrentUnitSti || currentUnit.trackingCode,
+            registrationNumber: currentUnit.pendingRegistrationNumber,
+            deviceStatus: isEditingUnit && editForm ? editForm.deviceStatus : currentUnit.deviceStatus,
+            packageStatus: isEditingUnit && editForm ? editForm.packageStatus : currentUnit.packageStatus,
+            customerReason: isEditingUnit && editForm ? editForm.customerReason : currentUnit.customerReason,
+            accessoriesInclusion: isEditingUnit && editForm ? editForm.accessoriesInclusion : currentUnit.accessoriesInclusion,
+            notes: isEditingUnit && editForm ? editForm.notes : currentUnit.notes,
+            photosProduct: isEditingUnit && editForm ? editForm.photosProduct : currentUnit.photosProduct,
+            photosBox: isEditingUnit && editForm ? editForm.photosBox : currentUnit.photosBox,
+            photosAccessories: isEditingUnit && editForm ? editForm.photosAccessories : currentUnit.photosAccessories,
+          }}
+          baseProduct={findBaseProduct(currentUnit, products)}
+          allBaseProducts={products}
+          isLight={isLight}
+        />
       )}
     </div>
   );
