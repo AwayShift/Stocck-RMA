@@ -448,7 +448,7 @@ export default function BackupModal({
   return (
     <div 
       className={`fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-150 ${
-        isLight ? 'bg-slate-900/60' : 'bg-slate-950/85'
+        isLight ? 'bg-white/75 backdrop-blur-sm' : 'bg-slate-950/85'
       }`}
       id="backup-modal-backdrop"
       onClick={(e) => {

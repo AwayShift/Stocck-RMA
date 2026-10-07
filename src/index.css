@@ -398,12 +398,49 @@ html.light .hover\:text-white:hover {
   color: #0f172a !important;
 }
 
-/* Backdrops */
-html.light .bg-black\/80,
-html.light .bg-black\/70,
-html.light .bg-black\/60,
-html.light .bg-black\/50 {
-  background-color: rgba(15, 23, 42, 0.55) !important;
+/* =========================================================================
+   LIGHT MODE MODAL OVERLAY & BACKDROP (TRANSPARENT WHITE INSTEAD OF BLACK)
+   ========================================================================= */
+html.light .bg-black\/95:not(.image-zoom-overlay),
+html.light .bg-black\/90:not(.image-zoom-overlay),
+html.light .bg-black\/85:not(.image-zoom-overlay),
+html.light .bg-black\/80:not(.image-zoom-overlay),
+html.light .bg-black\/75:not(.image-zoom-overlay),
+html.light .bg-black\/70:not(.image-zoom-overlay),
+html.light .bg-black\/60:not(.image-zoom-overlay):not(.photo-hover-overlay),
+html.light .bg-black\/50:not(.image-zoom-overlay),
+html.light .bg-slate-950\/95,
+html.light .bg-slate-950\/90,
+html.light .bg-slate-950\/85,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/75,
+html.light .bg-slate-950\/70,
+html.light .bg-slate-900\/90,
+html.light .bg-slate-900\/80,
+html.light .bg-slate-900\/60 {
+  background-color: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* Modal overlays and backdrop scrims across the entire system in Light Mode */
+html.light .fixed.inset-0:not(.image-zoom-overlay),
+body.light .fixed.inset-0:not(.image-zoom-overlay),
+html[data-theme="light"] .fixed.inset-0:not(.image-zoom-overlay),
+html.light div[id$="-modal-overlay"],
+html.light div[id$="-modal-backdrop"],
+html.light #settings-modal-overlay,
+html.light #backup-modal-backdrop,
+html.light #manual-inflow-modal,
+html.light #excel-inflow-import-modal-overlay,
+html.light #db-switcher-modal-overlay,
+html.light #physical-stock-unit-modal-overlay {
+  background-color: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+
+/* Ensure modal dialog cards in Light Mode pop cleanly with crisp borders and deep shadow against the white backdrop */
+html.light .fixed.inset-0:not(.image-zoom-overlay) > div:not(.image-zoom-header):not(.image-zoom-bottom-bar) {
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(148, 163, 184, 0.35) !important;
 }
 
 /* Shadows in Light Mode */
@@ -4317,7 +4354,9 @@ html.light #input-filter-stock-date:hover::-webkit-calendar-picker-indicator {
    MANUAL DAILY INFLOW MODAL - LIGHT MODE HIGH CONTRAST
    ========================================================================== */
 html.light #manual-inflow-modal {
-  background-color: rgba(15, 23, 42, 0.75) !important;
+  background-color: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
 }
 
 html.light #manual-inflow-modal-card {
