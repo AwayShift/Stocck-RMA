@@ -47,6 +47,19 @@
           } catch (err) {}
         }
       })();
+
+      /* Safe guard for preventDefault inside passive/uncancelable event listeners */
+      (function() {
+        try {
+          var origPreventDefault = Event.prototype.preventDefault;
+          Event.prototype.preventDefault = function() {
+            if (!this.cancelable) {
+              return;
+            }
+            return origPreventDefault.apply(this, arguments);
+          };
+        } catch (e) {}
+      })();
     </script>
   </head>
   <body class="bg-slate-950 text-slate-100">

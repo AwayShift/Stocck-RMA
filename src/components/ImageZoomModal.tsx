@@ -96,16 +96,29 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, imagesList, currentIndex, onNavigate, onClose, handleZoomIn, handleZoomOut, handleReset, handleRotate]);
 
-  // Mouse wheel handler for smooth zooming
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.25 : -0.25;
-    setScale(prev => {
-      const next = Math.min(Math.max(prev + delta, 1), 5);
-      if (next === 1) setPosition({ x: 0, y: 0 });
-      return next;
-    });
-  };
+  // Native mouse wheel handler with { passive: false } for smooth zooming without browser passive warnings
+  useEffect(() => {
+    if (!isOpen) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheelNative = (e: WheelEvent) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      const delta = e.deltaY < 0 ? 0.25 : -0.25;
+      setScale(prev => {
+        const next = Math.min(Math.max(prev + delta, 1), 5);
+        if (next === 1) setPosition({ x: 0, y: 0 });
+        return next;
+      });
+    };
+
+    container.addEventListener('wheel', handleWheelNative, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheelNative);
+    };
+  }, [isOpen]);
 
   // Mouse move handler for dragging when zoomed
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -203,7 +216,6 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
       {/* Main Center Image Stage (Large screen space: 94vw and 82vh) */}
       <div 
         ref={containerRef}
-        onWheel={handleWheel}
         onClick={(e) => {
           if (e.target === e.currentTarget && scale === 1) {
             onClose();
