@@ -108,6 +108,10 @@ export interface TriageUnit {
   excludeFromDailyCount?: boolean; // Se verdadeiro, não contabiliza no contador de entrada diária
   pendingRegistrationNumber?: string; // Número de registro da pendência vinculada (Ex: REG-00001)
   pendingItemId?: string; // ID da pendência vinculada
+  needsSkuRegistration?: boolean; // Se verdadeiro, indica que o produto deu entrada sem SKU pré-cadastrado no catálogo base
+  unregisteredSku?: string; // SKU digitado livremente na entrada pelo operador
+  unregisteredProductName?: string; // Nome provisório do produto informado na entrada
+  skuRegistrationPending?: boolean; // Flag indicativa de pendência de cadastro do SKU no catálogo
   createdBy?: {
     uid?: string;
     email?: string;

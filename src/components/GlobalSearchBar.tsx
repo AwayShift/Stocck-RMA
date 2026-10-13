@@ -644,6 +644,11 @@ export function GlobalSearchBar({
                                   <span className={`font-mono font-semibold ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
                                     SKU: {unit.baseProductSku}
                                   </span>
+                                  {(unit.needsSkuRegistration || unit.skuRegistrationPending || unit.baseProductId === 'unregistered') && (
+                                    <span className="font-bold text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                      SKU Pendente
+                                    </span>
+                                  )}
                                   {unit.platform && <span>• {unit.platform}</span>}
                                 </div>
                               </div>

@@ -142,6 +142,7 @@ interface PlatformSelectorProps {
   className?: string;
   disabled?: boolean;
   platforms?: (PlatformType | string)[];
+  isLight?: boolean;
 }
 
 export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
@@ -151,6 +152,7 @@ export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
   className = '',
   disabled = false,
   platforms = DEFAULT_PLATFORMS,
+  isLight = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -246,7 +248,7 @@ export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
         onClick={() => setIsOpen(prev => !prev)}
         className={`w-full px-2.5 h-[38px] rounded-lg text-xs font-semibold border flex items-center justify-between gap-2 transition-all cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-sky-500/40 ${
           isOpen ? 'ring-2 ring-sky-500/50 border-sky-500' : ''
-        } ${currentConfig.triggerStyleDark} platform-trigger-btn`}
+        } ${isLight ? currentConfig.triggerStyleLight : currentConfig.triggerStyleDark} platform-trigger-btn`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
@@ -272,13 +274,19 @@ export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
       {/* Dropdown Options Menu */}
       {isOpen && (
         <div 
-          className="absolute top-full left-0 mt-1.5 w-full min-w-[260px] bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 platform-dropdown-menu"
+          className={`absolute top-full left-0 mt-1.5 w-full min-w-[260px] rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 platform-dropdown-menu border ${
+            isLight 
+              ? 'bg-white border-slate-300 text-slate-800 shadow-slate-300/60' 
+              : 'bg-slate-900 border-slate-700/80 text-white'
+          }`}
           role="listbox"
           id={`${id}-dropdown`}
         >
-          <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 mb-1 flex items-center justify-between">
+          <div className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between ${
+            isLight ? 'text-slate-600 border-slate-200' : 'text-slate-400 border-slate-800/80'
+          }`}>
             <span>Selecionar Plataforma</span>
-            <span className="text-[9px] text-slate-400 font-mono">({platforms.length} canais)</span>
+            <span className={`text-[9px] font-mono ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>({platforms.length} canais)</span>
           </div>
 
           <div className="space-y-1">
@@ -313,8 +321,12 @@ export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
                   }}
                   className={`w-full p-2 rounded-lg border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer group platform-option-item ${
                     isSelected 
-                      ? `${cfg.optionActiveDark} border` 
-                      : `border-transparent ${cfg.optionHoverDark} text-slate-300 hover:text-white`
+                      ? isLight
+                        ? `${cfg.optionActiveLight} border font-bold shadow-xs`
+                        : `${cfg.optionActiveDark} border font-bold` 
+                      : isLight
+                        ? `border-transparent ${cfg.optionHoverLight} text-slate-700 hover:text-slate-950 hover:bg-slate-100/90`
+                        : `border-transparent ${cfg.optionHoverDark} text-slate-300 hover:text-white`
                   }`}
                   data-platform={p}
                   id={`platform-option-${p.toLowerCase().replace(/\s+/g, '-')}`}
@@ -328,10 +340,16 @@ export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
                     </span>
 
                     <div className="min-w-0 flex flex-col">
-                      <span className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                      <span className={`text-xs font-bold truncate ${
+                        isSelected 
+                          ? isLight ? 'text-slate-950 font-black' : 'text-white' 
+                          : isLight ? 'text-slate-800' : 'text-slate-200'
+                      }`}>
                         {cfg.name}
                       </span>
-                      <span className="text-[10px] text-slate-400 truncate font-normal">
+                      <span className={`text-[10px] truncate font-normal ${
+                        isLight ? 'text-slate-500' : 'text-slate-400'
+                      }`}>
                         {cfg.tagline}
                       </span>
                     </div>
@@ -339,7 +357,11 @@ export const PlatformSelector: React.FC<PlatformSelectorProps> = ({
 
                   {/* Active Indicator Checkmark */}
                   {isSelected ? (
-                    <div className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 border border-sky-500/40">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border ${
+                      isLight 
+                        ? 'bg-sky-100 text-sky-700 border-sky-300' 
+                        : 'bg-sky-500/20 text-sky-400 border-sky-500/40'
+                    }`}>
                       <Check className="w-3 h-3 stroke-[3]" />
                     </div>
                   ) : (

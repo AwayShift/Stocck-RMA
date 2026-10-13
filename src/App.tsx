@@ -126,20 +126,27 @@ export default function App() {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDbSwitcherModalOpen, setIsDbSwitcherModalOpen] = useState<boolean>(false);
 
-  // Shared filters when navigating from Dashboard or Pending to Stock
+  // Shared filters when navigating from Dashboard, Catalog, or Pending to Stock
   const [initialStockFilters, setInitialStockFilters] = useState<{
     platform?: PlatformType | null;
     sector?: DestinationSectorType | null;
     searchTerm?: string | null;
+    pendingSku?: boolean | null;
   } | null>(null);
 
-  const handleNavigateToStockWithFilters = (platform?: PlatformType | null, sector?: DestinationSectorType | null, searchTerm?: string | null) => {
+  const handleNavigateToStockWithFilters = (
+    platform?: PlatformType | null, 
+    sector?: DestinationSectorType | null, 
+    searchTerm?: string | null,
+    pendingSku?: boolean | null
+  ) => {
     setSelectedTriageUnit(null);
     setOpenModalOnStockSelect(false);
     setInitialStockFilters({
       platform: platform || null,
       sector: sector || null,
-      searchTerm: searchTerm || null
+      searchTerm: searchTerm || null,
+      pendingSku: pendingSku || null
     });
     setActiveTab('stock');
   };
@@ -1134,6 +1141,9 @@ export default function App() {
             {activeTab === 'catalog' && (
               <BaseCatalog 
                 products={products}
+                units={triageUnits}
+                onNavigateToStock={() => handleNavigateToStockWithFilters(null, null, '', true)}
+                isLight={isLight}
                 hasMoreFromDb={hasMoreProducts}
                 isLoadingMore={isLoadingMoreProducts}
                 onLoadMoreFromDb={handleLoadMoreProducts}
@@ -1175,12 +1185,14 @@ export default function App() {
                 onClearSelectedUnit={handleClearSelectedUnit}
                 onGoToStockDirectly={handleGoToStockDirectlyFromModal}
                 onSaveTriage={handleSaveTriage}
+                onProductCreated={handleSaveProduct}
                 enableSpreadsheetImport={enableSpreadsheetImport}
                 enableSpreadsheetExport={enableSpreadsheetExport}
                 isLight={isLight}
                 initialPlatformFilter={initialStockFilters?.platform}
                 initialSectorFilter={initialStockFilters?.sector}
                 initialSearchTerm={initialStockFilters?.searchTerm}
+                initialPendingSkuFilter={Boolean(initialStockFilters?.pendingSku)}
                 onClearInitialFilters={() => setInitialStockFilters(null)}
               />
             </div>

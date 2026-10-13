@@ -81,6 +81,7 @@ export default function SettingsModal({
   userEmail
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const isLight = themeMode === 'light';
 
   // Cloudinary State
   const [cloudinaryConfig, setCloudinaryConfig] = useState<CloudinaryConfig>(() => getCloudinaryConfig());
@@ -192,21 +193,31 @@ export default function SettingsModal({
       }}
     >
       <div 
-        className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+        className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border ${
+          isLight ? 'bg-white border-slate-200 text-slate-900 shadow-xl' : 'bg-slate-900 border-slate-800 text-white'
+        }`}
         id="settings-modal"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Compacto */}
-        <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div className={`px-5 py-3.5 border-b flex items-center justify-between ${
+          isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'
+        }`}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
+            <div className={`w-8 h-8 rounded-lg border flex items-center justify-center ${
+              isLight ? 'bg-sky-50 border-sky-300 text-sky-700' : 'bg-sky-500/15 border-sky-500/30 text-sky-400'
+            }`}>
               <Settings className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white tracking-tight leading-none">
+              <h2 className={`text-sm font-bold tracking-tight leading-none ${
+                isLight ? 'text-slate-900' : 'text-white'
+              }`}>
                 Configurações
               </h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className={`text-[11px] mt-0.5 ${
+                isLight ? 'text-slate-500' : 'text-slate-400'
+              }`}>
                 Preferências e conexões do sistema
               </p>
             </div>
@@ -215,7 +226,9 @@ export default function SettingsModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+              isLight ? 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/60' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
             id="btn-close-settings-modal"
             title="Fechar"
           >
@@ -224,14 +237,16 @@ export default function SettingsModal({
         </div>
 
         {/* Compact Navigation Tabs Bar */}
-        <div className="flex items-center border-b border-slate-800 bg-slate-950/60 px-3 pt-2 gap-1 overflow-x-auto scrollbar-none">
+        <div className={`flex items-center border-b px-3 pt-2 gap-1 overflow-x-auto scrollbar-none ${
+          isLight ? 'border-slate-200 bg-slate-100' : 'border-slate-800 bg-slate-950/60'
+        }`}>
           <button
             type="button"
             onClick={() => setActiveTab('general')}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all cursor-pointer border-b-2 whitespace-nowrap ${
               activeTab === 'general'
-                ? 'text-sky-400 border-sky-400 bg-slate-900'
-                : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
+                ? isLight ? 'text-sky-700 border-sky-600 bg-white font-bold' : 'text-sky-400 border-sky-400 bg-slate-900 font-bold'
+                : isLight ? 'text-slate-600 border-transparent hover:text-slate-950 hover:bg-white/60' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
             }`}
             id="tab-btn-general"
           >
@@ -244,14 +259,14 @@ export default function SettingsModal({
             onClick={() => setActiveTab('cloudinary')}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all cursor-pointer border-b-2 whitespace-nowrap ${
               activeTab === 'cloudinary'
-                ? 'text-sky-400 border-sky-400 bg-slate-900'
-                : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
+                ? isLight ? 'text-sky-700 border-sky-600 bg-white font-bold' : 'text-sky-400 border-sky-400 bg-slate-900 font-bold'
+                : isLight ? 'text-slate-600 border-transparent hover:text-slate-950 hover:bg-white/60' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
             }`}
             id="tab-btn-cloudinary"
           >
             <Cloud className="w-3.5 h-3.5" />
             <span>Cloudinary</span>
-            <span className={`w-1.5 h-1.5 rounded-full ${isConfigured ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${isConfigured ? 'bg-emerald-500' : 'bg-amber-500'}`} />
           </button>
 
           <button
@@ -259,8 +274,8 @@ export default function SettingsModal({
             onClick={() => setActiveTab('database')}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all cursor-pointer border-b-2 whitespace-nowrap ${
               activeTab === 'database'
-                ? 'text-sky-400 border-sky-400 bg-slate-900'
-                : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
+                ? isLight ? 'text-sky-700 border-sky-600 bg-white font-bold' : 'text-sky-400 border-sky-400 bg-slate-900 font-bold'
+                : isLight ? 'text-slate-600 border-transparent hover:text-slate-950 hover:bg-white/60' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
             }`}
             id="tab-btn-database"
           >
@@ -273,8 +288,8 @@ export default function SettingsModal({
             onClick={() => setActiveTab('session')}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all cursor-pointer border-b-2 whitespace-nowrap ${
               activeTab === 'session'
-                ? 'text-sky-400 border-sky-400 bg-slate-900'
-                : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
+                ? isLight ? 'text-sky-700 border-sky-600 bg-white font-bold' : 'text-sky-400 border-sky-400 bg-slate-900 font-bold'
+                : isLight ? 'text-slate-600 border-transparent hover:text-slate-950 hover:bg-white/60' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
             }`}
             id="tab-btn-session"
           >
@@ -291,8 +306,10 @@ export default function SettingsModal({
             <div className="space-y-4 animate-in fade-in duration-150">
               {/* Theme Picker Compact */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Palette className="w-3.5 h-3.5 text-sky-400" />
+                <label className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                  isLight ? 'text-slate-700' : 'text-slate-300'
+                }`}>
+                  <Palette className={`w-3.5 h-3.5 ${isLight ? 'text-sky-600' : 'text-sky-400'}`} />
                   Tema da Interface
                 </label>
 
@@ -302,18 +319,22 @@ export default function SettingsModal({
                     onClick={() => onSelectTheme?.('dark')}
                     className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer text-left ${
                       themeMode === 'dark'
-                        ? 'bg-sky-500/15 border-sky-500 text-white shadow-sm ring-1 ring-sky-500/40'
+                        ? isLight
+                          ? 'bg-slate-800 border-slate-700 text-white shadow-sm ring-2 ring-slate-600 font-bold'
+                          : 'bg-sky-500/20 border-sky-400 text-sky-100 shadow-sm ring-2 ring-sky-400/30 font-bold'
+                        : isLight
+                        ? 'bg-white border-slate-300 text-slate-700 hover:border-slate-400 hover:bg-slate-50 shadow-2xs'
                         : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                     }`}
                     id="btn-theme-dark"
                   >
-                    <Moon className={`w-4 h-4 ${themeMode === 'dark' ? 'text-sky-400' : 'text-slate-500'}`} />
+                    <Moon className={`w-4 h-4 ${themeMode === 'dark' ? (isLight ? 'text-sky-300' : 'text-sky-300') : 'text-slate-400'}`} />
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-bold flex items-center justify-between">
-                        <span>Modo Escuro</span>
-                        {themeMode === 'dark' && <Check className="w-3.5 h-3.5 text-sky-400" />}
+                        <span className={themeMode === 'dark' ? 'text-white font-extrabold' : (isLight ? 'text-slate-800 font-semibold' : 'text-slate-300')}>Modo Escuro</span>
+                        {themeMode === 'dark' && <Check className="w-3.5 h-3.5 text-sky-400 stroke-[3]" />}
                       </div>
-                      <span className="text-[10px] text-slate-400">Padrão escuro</span>
+                      <span className={`text-[10px] ${themeMode === 'dark' ? 'text-sky-200/90 font-medium' : (isLight ? 'text-slate-500' : 'text-slate-400')}`}>Padrão escuro</span>
                     </div>
                   </button>
 
@@ -322,45 +343,53 @@ export default function SettingsModal({
                     onClick={() => onSelectTheme?.('light')}
                     className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer text-left ${
                       themeMode === 'light'
-                        ? 'bg-amber-500/15 border-amber-500 text-white shadow-sm ring-1 ring-amber-500/40'
+                        ? isLight
+                          ? 'bg-amber-50 border-amber-500 text-amber-950 shadow-sm ring-2 ring-amber-500/40 font-bold'
+                          : 'bg-amber-500/25 border-amber-400 text-amber-100 shadow-sm ring-2 ring-amber-400/40 font-bold'
+                        : isLight
+                        ? 'bg-white border-slate-300 text-slate-700 hover:border-slate-400 hover:bg-slate-50 shadow-2xs'
                         : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                     }`}
                     id="btn-theme-light"
                   >
-                    <Sun className={`w-4 h-4 ${themeMode === 'light' ? 'text-amber-400' : 'text-slate-500'}`} />
+                    <Sun className={`w-4 h-4 ${themeMode === 'light' ? (isLight ? 'text-amber-600' : 'text-amber-300') : 'text-slate-400'}`} />
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-bold flex items-center justify-between">
-                        <span>Modo Claro</span>
-                        {themeMode === 'light' && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                        <span className={themeMode === 'light' ? (isLight ? 'text-amber-950 font-black' : 'text-amber-100 font-extrabold') : (isLight ? 'text-slate-800 font-semibold' : 'text-slate-300')}>Modo Claro</span>
+                        {themeMode === 'light' && <Check className={`w-3.5 h-3.5 stroke-[3] ${isLight ? 'text-amber-600' : 'text-amber-300'}`} />}
                       </div>
-                      <span className="text-[10px] text-slate-400">Alto contraste</span>
+                      <span className={`text-[10px] ${themeMode === 'light' ? (isLight ? 'text-amber-900 font-bold' : 'text-amber-200/90 font-medium') : (isLight ? 'text-slate-500' : 'text-slate-400')}`}>Alto contraste</span>
                     </div>
                   </button>
                 </div>
               </div>
 
               {/* Spreadsheet Import Toggle Compact */}
-              <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
+              <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
+                isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/80 border-slate-800'
+              }`}>
                 <div className="flex items-center gap-2.5">
                   <div className={`p-2 rounded-lg border ${
                     enableSpreadsheetImport 
-                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' 
-                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                      ? isLight ? 'bg-emerald-100 border-emerald-300 text-emerald-800 font-bold' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' 
+                      : isLight ? 'bg-slate-200 border-slate-300 text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400'
                   }`}>
                     <FileSpreadsheet className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <div className={`text-xs font-bold flex items-center gap-1.5 ${
+                      isLight ? 'text-slate-900' : 'text-white'
+                    }`}>
                       <span>Importação de Planilhas (Excel)</span>
                       <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
                         enableSpreadsheetImport 
-                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' 
-                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                          ? isLight ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' 
+                          : isLight ? 'bg-slate-200 text-slate-700 border-slate-300' : 'bg-slate-800 text-slate-400 border-slate-700'
                       }`}>
                         {enableSpreadsheetImport ? 'Ativo' : 'Oculto'}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400">
+                    <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                       Exibe botões de importação .xlsx nas abas
                     </p>
                   </div>
@@ -372,7 +401,7 @@ export default function SettingsModal({
                   aria-checked={enableSpreadsheetImport}
                   onClick={() => onToggleSpreadsheetImport(!enableSpreadsheetImport)}
                   className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    enableSpreadsheetImport ? 'bg-emerald-500' : 'bg-slate-700'
+                    enableSpreadsheetImport ? 'bg-emerald-500' : isLight ? 'bg-slate-300' : 'bg-slate-700'
                   }`}
                   id="toggle-spreadsheet-import"
                 >
@@ -385,27 +414,31 @@ export default function SettingsModal({
               </div>
 
               {/* Spreadsheet Export Toggle Compact */}
-              <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
+              <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
+                isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/80 border-slate-800'
+              }`}>
                 <div className="flex items-center gap-2.5">
                   <div className={`p-2 rounded-lg border ${
                     enableSpreadsheetExport 
-                      ? 'bg-sky-500/15 border-sky-500/30 text-sky-400' 
-                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                      ? isLight ? 'bg-sky-100 border-sky-300 text-sky-800 font-bold' : 'bg-sky-500/15 border-sky-500/30 text-sky-400' 
+                      : isLight ? 'bg-slate-200 border-slate-300 text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400'
                   }`}>
                     <Download className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <div className={`text-xs font-bold flex items-center gap-1.5 ${
+                      isLight ? 'text-slate-900' : 'text-white'
+                    }`}>
                       <span>Exportação de Planilhas (Excel)</span>
                       <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
                         enableSpreadsheetExport 
-                          ? 'bg-sky-500/15 text-sky-400 border-sky-500/30' 
-                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                          ? isLight ? 'bg-sky-100 text-sky-800 border-sky-300' : 'bg-sky-500/15 text-sky-400 border-sky-500/30' 
+                          : isLight ? 'bg-slate-200 text-slate-700 border-slate-300' : 'bg-slate-800 text-slate-400 border-slate-700'
                       }`}>
                         {enableSpreadsheetExport ? 'Ativo' : 'Oculto'}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400">
+                    <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                       Exibe botões de exportação .xlsx nas abas
                     </p>
                   </div>
@@ -417,7 +450,7 @@ export default function SettingsModal({
                   aria-checked={enableSpreadsheetExport}
                   onClick={() => onToggleSpreadsheetExport(!enableSpreadsheetExport)}
                   className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    enableSpreadsheetExport ? 'bg-sky-500' : 'bg-slate-700'
+                    enableSpreadsheetExport ? 'bg-sky-500' : isLight ? 'bg-slate-300' : 'bg-slate-700'
                   }`}
                   id="toggle-spreadsheet-export"
                 >

@@ -1313,6 +1313,22 @@ export const mapTriageUnitToSupabase = (u: TriageUnit) => {
     rawNotes = rawNotes.replace(/\[TRANSFERRED_AT:.*?\]\s*/g, '').trim();
   }
 
+  if (u.needsSkuRegistration || u.skuRegistrationPending) {
+    if (!rawNotes.includes('[NEEDS_SKU_REGISTRATION]')) {
+      rawNotes = rawNotes ? `${rawNotes}\n[NEEDS_SKU_REGISTRATION]` : '[NEEDS_SKU_REGISTRATION]';
+    }
+    if (u.unregisteredSku) {
+      const unregMeta = `[UNREGISTERED_SKU:${u.unregisteredSku.trim()}]`;
+      rawNotes = rawNotes.replace(/\[UNREGISTERED_SKU:.*?\]\s*/g, '').trim();
+      rawNotes = `${rawNotes}\n${unregMeta}`;
+    }
+  } else {
+    rawNotes = rawNotes
+      .replace(/\[NEEDS_SKU_REGISTRATION\]\s*/g, '')
+      .replace(/\[UNREGISTERED_SKU:.*?\]\s*/g, '')
+      .trim();
+  }
+
   const payload: any = {
     id: cleanId,
     tracking_code: u.trackingCode ?? '',
@@ -1454,6 +1470,23 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
     }
   }
 
+  let unregisteredSku: string | undefined = undefined;
+  if (decompressedNotes.includes('[UNREGISTERED_SKU:')) {
+    const unregMatch = decompressedNotes.match(/\[UNREGISTERED_SKU:(.*?)\]/);
+    if (unregMatch && unregMatch[1]) {
+      unregisteredSku = unregMatch[1].trim();
+    }
+  }
+
+  const hasNeedsSkuRegistrationMarker = decompressedNotes.includes('[NEEDS_SKU_REGISTRATION]');
+  const needsSkuRegistration = Boolean(
+    r.needs_sku_registration === true ||
+    r.needsSkuRegistration === true ||
+    hasNeedsSkuRegistrationMarker ||
+    r.base_product_id === 'unregistered' ||
+    r.baseProductId === 'unregistered'
+  );
+
   const cleanNotes = decompressedNotes
     .replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '')
     .replace(/\[CREATED_BY:\{.*?\}\]\s*/g, '')
@@ -1462,6 +1495,8 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
     .replace(/\[ORIGIN_SECTOR:.*?\]\s*/g, '')
     .replace(/\[INITIAL_ENTRY_DATE:.*?\]\s*/g, '')
     .replace(/\[TRANSFERRED_AT:.*?\]\s*/g, '')
+    .replace(/\[NEEDS_SKU_REGISTRATION\]\s*/g, '')
+    .replace(/\[UNREGISTERED_SKU:.*?\]\s*/g, '')
     .trim();
 
   return {
@@ -1498,6 +1533,9 @@ export const mapSupabaseToTriageUnit = (r: any): TriageUnit => {
     ),
     pendingRegistrationNumber: pendingRegistrationNumber,
     pendingItemId: pendingItemId,
+    needsSkuRegistration: needsSkuRegistration,
+    unregisteredSku: unregisteredSku || (needsSkuRegistration ? (r.base_product_sku ?? r.baseProductSku) : undefined),
+    skuRegistrationPending: needsSkuRegistration,
     createdBy: createdBy
   };
 };

@@ -12,7 +12,8 @@ import {
   Layers, 
   Package, 
   CheckCircle, 
-  AlertCircle, 
+  AlertCircle,
+  AlertTriangle,
   Eye, 
   Plus,
   Search,
@@ -54,6 +55,7 @@ export interface TriageSummaryData {
   accessoriesInclusion: string;
   createdAt: string;
   photoThumbnail?: string;
+  needsSkuRegistration?: boolean;
   createdBy?: {
     uid?: string;
     email?: string;
@@ -112,6 +114,31 @@ export default function RmaEntry({
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
   const productDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Unregistered SKU state (permite dar entrada sem SKU cadastrado na base)
+  const [isUnregisteredSkuMode, setIsUnregisteredSkuMode] = useState<boolean>(false);
+  const [unregisteredSku, setUnregisteredSku] = useState<string>('');
+  const [unregisteredProductName, setUnregisteredProductName] = useState<string>('');
+  const [unregisteredVoltage, setUnregisteredVoltage] = useState<'110V' | '220V' | 'Bivolt' | 'N/A'>('Bivolt');
+
+  const handleEnableUnregisteredSkuMode = (initialTerm?: string) => {
+    setIsUnregisteredSkuMode(true);
+    setSelectedProductId('');
+    const raw = initialTerm !== undefined ? initialTerm : productSearchTerm;
+    const clean = raw.trim().toUpperCase();
+    setUnregisteredSku(clean);
+    if (!unregisteredProductName) {
+      setUnregisteredProductName(raw.trim() ? `${raw.trim().toUpperCase()} (Aguardando Cadastro)` : '');
+    }
+    setIsProductDropdownOpen(false);
+  };
+
+  const handleDisableUnregisteredSkuMode = () => {
+    setIsUnregisteredSkuMode(false);
+    setUnregisteredSku('');
+    setUnregisteredProductName('');
+    setUnregisteredVoltage('Bivolt');
+  };
 
   // New RMA Entry Summary Modal & Countdown state
   const [summaryModalData, setSummaryModalData] = useState<TriageSummaryData | null>(null);
@@ -403,6 +430,10 @@ export default function RmaEntry({
   const resetFormFields = () => {
     setSelectedProductId('');
     setProductSearchTerm('');
+    setIsUnregisteredSkuMode(false);
+    setUnregisteredSku('');
+    setUnregisteredProductName('');
+    setUnregisteredVoltage('Bivolt');
     setCustomerReason('');
     setExcludeFromDailyCount(false);
     handleSelectDestinationSector('Principal');
@@ -643,6 +674,9 @@ export default function RmaEntry({
 
   // Active SKU entered or selected in the RMA form
   const activeSku = useMemo(() => {
+    if (isUnregisteredSkuMode && unregisteredSku.trim()) {
+      return unregisteredSku.trim().toUpperCase();
+    }
     if (selectedProduct?.sku) return selectedProduct.sku.trim().toUpperCase();
     if (productSearchTerm.trim()) {
       const bracketMatch = productSearchTerm.match(/^\[(.*?)\]/);
@@ -654,7 +688,7 @@ export default function RmaEntry({
       return productSearchTerm.trim().toUpperCase();
     }
     return '';
-  }, [selectedProduct, productSearchTerm, products]);
+  }, [isUnregisteredSkuMode, unregisteredSku, selectedProduct, productSearchTerm, products]);
 
   // Available pending items (unlinked, strictly corresponding to activeSku, adhering to rule: 1 pendência = 1 produto)
   const availablePendingItems = useMemo(() => {
@@ -976,19 +1010,48 @@ export default function RmaEntry({
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!selectedProductId) {
-      // Auto-match if exact SKU or product name typed
-      const matched = products.find(
-        p => p.sku.toLowerCase() === productSearchTerm.trim().toLowerCase() ||
-             p.name.toLowerCase() === productSearchTerm.trim().toLowerCase()
-      );
-      if (matched) {
-        setSelectedProductId(matched.id);
-      } else {
-        setErrorMessage('Por favor, selecione ou digite um produto válido do Catálogo (SKU ou Nome).');
+    let refProduct: BaseProduct | undefined;
+
+    if (isUnregisteredSkuMode) {
+      const cleanSku = unregisteredSku.trim().toUpperCase();
+      if (!cleanSku) {
+        setErrorMessage('Por favor, informe o SKU digitado para dar entrada no produto.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
+      const cleanName = unregisteredProductName.trim() || `${cleanSku} (Cadastro Pendente)`;
+      refProduct = {
+        id: 'unregistered',
+        sku: cleanSku,
+        name: cleanName,
+        voltage: unregisteredVoltage,
+        category: 'Geral',
+        brand: 'Não Informada'
+      };
+    } else {
+      if (!selectedProductId) {
+        // Auto-match if exact SKU or product name typed
+        const matched = products.find(
+          p => p.sku.toLowerCase() === productSearchTerm.trim().toLowerCase() ||
+               p.name.toLowerCase() === productSearchTerm.trim().toLowerCase()
+        );
+        if (matched) {
+          setSelectedProductId(matched.id);
+          refProduct = matched;
+        } else {
+          setErrorMessage('Por favor, selecione ou digite um produto válido do Catálogo (SKU ou Nome), ou utilize a opção "Dar entrada sem SKU cadastrado".');
+          return;
+        }
+      } else {
+        refProduct = products.find(p => p.id === selectedProductId);
+      }
     }
+
+    if (!refProduct) {
+      setErrorMessage('Produto de referência inválido.');
+      return;
+    }
+
     // Keep tracking code as entered by user for Openbox, or if entered in Outros (optional)
     const finalTrackingCode = destinationSector === 'Openbox' 
       ? normalizeStiCode(trackingCode) 
@@ -1013,15 +1076,6 @@ export default function RmaEntry({
     // Determine final device status and package status (presets vs manual description)
     const finalDeviceStatus = (isCustomDeviceStatus ? customDeviceStatusText.trim() : deviceStatus) || 'Novo';
     const finalPackageStatus = (isCustomPackageStatus ? customPackageStatusText.trim() : packageStatus) || 'Perfeita';
-
-    const refProduct = products.find(p => p.id === selectedProductId) || products.find(
-      p => p.sku.toLowerCase() === productSearchTerm.trim().toLowerCase() ||
-           p.name.toLowerCase() === productSearchTerm.trim().toLowerCase()
-    );
-    if (!refProduct) {
-      setErrorMessage('Produto de referência inválido.');
-      return;
-    }
 
     // Process serials list
     const cleanSerials = serials.map(s => s.trim());
@@ -1058,7 +1112,7 @@ export default function RmaEntry({
     let finalPhotosAccessories = [...photosAccessories];
 
     // For items in Estoque Principal or Outros, reuse the base product's already registered image without extra storage
-    if ((destinationSector === 'Principal' || destinationSector === 'Outros') && refProduct) {
+    if ((destinationSector === 'Principal' || destinationSector === 'Outros') && refProduct && !isUnregisteredSkuMode) {
       const baseImgs = getBaseProductImages(refProduct);
       if (finalPhotosProduct.length === 0 && baseImgs.productPhotos.length > 0) {
         finalPhotosProduct = baseImgs.productPhotos;
@@ -1096,7 +1150,7 @@ export default function RmaEntry({
           trackingCode: finalTrackingCode,
           serialNumber: currentSerial,
           orderNumber: orderNumber.trim(),
-          baseProductId: refProduct.id,
+          baseProductId: isUnregisteredSkuMode ? 'unregistered' : refProduct.id,
           baseProductName: refProduct.name,
           baseProductSku: refProduct.sku,
           baseProductVoltage: refProduct.voltage,
@@ -1113,6 +1167,10 @@ export default function RmaEntry({
           createdAt: new Date(baseTimestamp + i * 150).toISOString(),
           status: 'Estoque',
           excludeFromDailyCount: excludeFromDailyCount,
+          needsSkuRegistration: isUnregisteredSkuMode,
+          unregisteredSku: isUnregisteredSkuMode ? refProduct.sku : undefined,
+          unregisteredProductName: isUnregisteredSkuMode ? refProduct.name : undefined,
+          skuRegistrationPending: isUnregisteredSkuMode,
           pendingRegistrationNumber: pendingRegistrationNumber.trim() || undefined,
           pendingItemId: selectedPendingItem?.id || (pendingRegistrationNumber.trim() ? findPendingItemByRegistrationNumber(pendingRegistrationNumber.trim(), pendingItems)?.id : undefined),
           createdBy: creator ? {
@@ -1140,6 +1198,7 @@ export default function RmaEntry({
         accessoriesInclusion: accessoriesInclusion.trim(),
         createdAt: new Date().toISOString(),
         photoThumbnail: finalPhotosProduct[0] || finalPhotosBox[0] || (refProduct.images && refProduct.images[0]) || '',
+        needsSkuRegistration: isUnregisteredSkuMode,
         createdBy: creator ? {
           uid: creator.uid,
           email: creator.email,
@@ -1167,36 +1226,61 @@ export default function RmaEntry({
   return (
     <div className="space-y-6" id="rma-entry-container">
       {/* Header banner */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl" id="rma-header">
+      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-2xl p-6 shadow-xl border ${
+        isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+      }`} id="rma-header">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <FolderMinus className="text-rose-400 w-6 h-6" />
+          <h2 className={`text-2xl font-bold tracking-tight flex items-center gap-2 ${
+            isLight ? 'text-slate-900' : 'text-white'
+          }`}>
+            <FolderMinus className="text-rose-500 w-6 h-6" />
             Entrada de RMA e Triagem
           </h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className={`text-sm mt-1 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
             Recebimento de pacotes devolvidos, laudo de análise técnica e destinação de estoque.
           </p>
         </div>
         {activeUser && (
-          <div className="flex items-center gap-2.5 px-3.5 py-2 bg-slate-950/80 border border-slate-800/80 rounded-xl shrink-0" id="rma-operator-badge">
-            <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+          <div className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl shrink-0 border ${
+            isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/80 border-slate-800/80'
+          }`} id="rma-operator-badge">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
+              isLight ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-sky-500/10 border-sky-500/20 text-sky-400'
+            }`}>
               <User className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Operador Responsável</span>
-              <span className="text-xs text-white font-bold tracking-wide">{activeUser.name || activeUser.email}</span>
+              <span className={`text-[10px] block font-medium uppercase tracking-wider ${
+                isLight ? 'text-slate-500' : 'text-slate-400'
+              }`}>Operador Responsável</span>
+              <span className={`text-xs font-bold tracking-wide ${
+                isLight ? 'text-slate-900' : 'text-white'
+              }`}>{activeUser.name || activeUser.email}</span>
             </div>
           </div>
         )}
       </div>
 
-      {products.length === 0 ? (
-        <div className="p-12 text-center bg-slate-900 border border-slate-800 rounded-2xl shadow-xl flex flex-col items-center justify-center" id="catalog-empty-warning">
-          <AlertCircle className="w-12 h-12 text-amber-500 mb-3" />
-          <h3 className="text-lg font-bold text-white">Catálogo de Base Vazio</h3>
-          <p className="text-slate-400 text-sm mt-1 max-w-md">
-            Você precisa cadastrar pelo menos um produto master no "Catálogo de Base" antes de fazer a triagem de entrada.
-          </p>
+      {products.length === 0 && !isUnregisteredSkuMode ? (
+        <div className="p-8 sm:p-12 text-center bg-slate-900 border border-slate-800 rounded-2xl shadow-xl flex flex-col items-center justify-center space-y-4" id="catalog-empty-warning">
+          <div className="p-3 bg-amber-500/10 text-amber-400 rounded-2xl border border-amber-500/20">
+            <AlertCircle className="w-10 h-10 text-amber-500" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-white">Catálogo de Base Vazio</h3>
+            <p className="text-slate-400 text-sm max-w-md">
+              Ainda não há produtos cadastrados na base. Você pode cadastrá-los na aba "Catálogo Base" ou dar entrada em um produto informando o SKU agora mesmo para cadastrá-lo posteriormente.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleEnableUnregisteredSkuMode('')}
+            className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-lg shadow-amber-500/20 flex items-center gap-2"
+            id="btn-empty-catalog-unregistered-entry"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Dar Entrada sem SKU Cadastrado (Marcar para Cadastrar Depois)</span>
+          </button>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6" id="rma-entry-form">
@@ -1218,152 +1302,330 @@ export default function RmaEntry({
             {/* Left Side Column: Fields (7 cols) */}
             <div className="lg:col-span-7 space-y-4">
               {/* Step 1: Produto do Catálogo & Números de Série (Agile Focus) */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-product-serials">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+              <div className={`border rounded-xl p-4 shadow-md space-y-3.5 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+              }`} id="rma-step-product-serials">
+                <div className={`flex items-center justify-between gap-2 border-b pb-2.5 ${
+                  isLight ? 'border-slate-200' : 'border-slate-800/80'
+                }`}>
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">1</span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Produto & Números de Série (S/N)</span>
+                    <span className={`w-5 h-5 text-[11px] font-bold flex items-center justify-center rounded-md ${
+                      isLight ? 'bg-sky-100 text-sky-700' : 'bg-sky-500/10 text-sky-400'
+                    }`}>1</span>
+                    <span className={`text-xs font-bold uppercase tracking-wider ${
+                      isLight ? 'text-slate-800' : 'text-slate-200'
+                    }`}>Produto & Números de Série (S/N)</span>
                   </div>
                   {selectedProduct && (
-                    <span className="text-[11px] font-mono font-bold text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/40">
+                    <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded border ${
+                      isLight ? 'text-sky-800 bg-sky-50 border-sky-300' : 'text-sky-400 bg-sky-950/60 border-sky-800/40'
+                    }`}>
                       SKU: {selectedProduct.sku}
                     </span>
                   )}
                 </div>
 
-                {/* SKU & Product Search Input / AutoComplete */}
-                <div className="space-y-1" ref={productDropdownRef}>
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <span>Selecionar Produto</span>
-                      <span className="text-sky-400 font-bold">*</span>
-                    </label>
-                    {selectedProduct && (
+                {/* SKU & Product Search Input / Unregistered SKU Panel */}
+                {isUnregisteredSkuMode ? (
+                  <div 
+                    className={`border-2 rounded-xl p-3.5 space-y-3 animate-in fade-in duration-200 ${
+                      isLight 
+                        ? 'bg-amber-50/95 border-amber-400 shadow-sm' 
+                        : 'bg-amber-950/20 border-amber-500/50'
+                    }`} 
+                    id="panel-unregistered-sku-mode"
+                  >
+                    <div className={`flex items-center justify-between gap-2 border-b pb-2 ${
+                      isLight ? 'border-amber-300' : 'border-amber-500/30'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`p-1 rounded-md ${
+                          isLight ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-amber-500/20 text-amber-400'
+                        }`}>
+                          <AlertTriangle className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <h4 className={`text-xs flex items-center gap-1.5 ${
+                            isLight ? 'text-amber-950 font-black' : 'text-amber-300 font-bold'
+                          }`}>
+                            <span>Entrada com SKU Pendente de Cadastro</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                              isLight 
+                                ? 'bg-amber-200/90 text-amber-950 border border-amber-300' 
+                                : 'bg-amber-500/20 text-amber-400'
+                            }`}>
+                              Modo Flexível
+                            </span>
+                          </h4>
+                          <p className={`text-[11px] ${
+                            isLight ? 'text-amber-900/90 font-medium' : 'text-amber-200/80'
+                          }`}>
+                            O pedido entrará no estoque com o SKU digitado e ficará marcado para cadastro posterior na base.
+                          </p>
+                        </div>
+                      </div>
                       <button
                         type="button"
-                        onClick={handleClearSelectedProduct}
-                        className="text-[11px] text-slate-400 hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
+                        onClick={handleDisableUnregisteredSkuMode}
+                        className={`text-[11px] font-bold flex items-center gap-1 transition-colors px-2 py-1 rounded-md cursor-pointer ${
+                          isLight 
+                            ? 'text-slate-700 hover:text-slate-950 hover:bg-amber-100' 
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title="Voltar à busca comum no catálogo"
                       >
-                        <X className="w-3 h-3" />
-                        <span>Trocar</span>
+                        <X className="w-3.5 h-3.5" />
+                        <span>Buscar no Catálogo</span>
                       </button>
-                    )}
-                  </div>
-
-                  <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
-                      <Search className="w-3.5 h-3.5" />
                     </div>
 
-                    <input
-                      type="text"
-                      placeholder="Bipar ou digitar SKU / Nome (Ex: AIR-FRYER, Batedeira...)"
-                      value={productSearchTerm}
-                      onChange={(e) => {
-                        setProductSearchTerm(e.target.value);
-                        setIsProductDropdownOpen(true);
-                        const exact = products.find(p => p.sku.toLowerCase() === e.target.value.trim().toLowerCase());
-                        if (exact) {
-                          setSelectedProductId(exact.id);
-                        } else if (selectedProductId && e.target.value !== `[${selectedProduct?.sku}] ${selectedProduct?.name}`) {
-                          setSelectedProductId('');
-                        }
-                      }}
-                      onFocus={() => setIsProductDropdownOpen(true)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && filteredProducts.length > 0) {
-                          e.preventDefault();
-                          handleSelectProduct(filteredProducts[0]);
-                        } else if (e.key === 'Escape') {
-                          setIsProductDropdownOpen(false);
-                        }
-                      }}
-                      className={`w-full pl-9 pr-9 py-2 bg-slate-950 border rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition-all font-sans ${
-                        selectedProduct 
-                          ? 'border-sky-500/60 bg-sky-950/20 text-sky-100 font-medium' 
-                          : 'border-slate-800 focus:border-sky-500'
-                      }`}
-                      id="input-product-search-sku"
-                      autoComplete="off"
-                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                      <div className="sm:col-span-5 space-y-1">
+                        <label className={`text-[10px] uppercase tracking-wider flex items-center gap-1 ${
+                          isLight ? 'text-amber-950 font-black' : 'text-amber-300 font-bold'
+                        }`}>
+                          <span>SKU Digitado</span>
+                          <span className="text-rose-500 font-bold">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ex: SKU-NOVO-123"
+                          value={unregisteredSku}
+                          onChange={(e) => setUnregisteredSku(e.target.value.toUpperCase())}
+                          className={`w-full px-3 py-1.5 rounded-lg text-xs font-mono font-bold placeholder-slate-400 focus:outline-none transition-all ${
+                            isLight
+                              ? 'bg-white border-2 border-amber-500 text-slate-900 focus:border-amber-600 focus:ring-2 focus:ring-amber-500/20 shadow-xs'
+                              : 'bg-slate-950 border border-amber-500/60 text-amber-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40'
+                          }`}
+                          id="input-unregistered-sku"
+                        />
+                      </div>
 
-                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                      {productSearchTerm && (
+                      <div className="sm:col-span-5 space-y-1">
+                        <label className={`text-[10px] font-bold uppercase tracking-wider ${
+                          isLight ? 'text-slate-700' : 'text-slate-300'
+                        }`}>
+                          <span>Nome Provisório do Produto</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Air Fryer Digital Touch..."
+                          value={unregisteredProductName}
+                          onChange={(e) => setUnregisteredProductName(e.target.value)}
+                          className={`w-full px-3 py-1.5 rounded-lg text-xs placeholder-slate-400 focus:outline-none transition-all ${
+                            isLight
+                              ? 'bg-white border border-slate-300 text-slate-900 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20 shadow-xs'
+                              : 'bg-slate-950 border border-slate-800 text-slate-200 focus:border-sky-500'
+                          }`}
+                          id="input-unregistered-product-name"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className={`text-[10px] font-bold uppercase tracking-wider ${
+                          isLight ? 'text-slate-700' : 'text-slate-300'
+                        }`}>
+                          <span>Voltagem</span>
+                        </label>
+                        <select
+                          value={unregisteredVoltage}
+                          onChange={(e) => setUnregisteredVoltage(e.target.value as any)}
+                          className={`w-full px-2 py-1.5 rounded-lg text-xs focus:outline-none transition-all ${
+                            isLight
+                              ? 'bg-white border border-slate-300 text-slate-900 focus:border-sky-500 shadow-xs font-medium'
+                              : 'bg-slate-950 border border-slate-800 text-slate-200 focus:border-sky-500'
+                          }`}
+                        >
+                          <option value="Bivolt">Bivolt</option>
+                          <option value="110V">110V</option>
+                          <option value="220V">220V</option>
+                          <option value="N/A">N/A</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1" ref={productDropdownRef}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                          <span>Selecionar Produto</span>
+                          <span className="text-sky-400 font-bold">*</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleEnableUnregisteredSkuMode(productSearchTerm)}
+                          className={`text-[10px] hover:underline flex items-center gap-1 transition-colors cursor-pointer ${
+                            isLight 
+                              ? 'text-amber-800 hover:text-amber-950 font-bold' 
+                              : 'text-amber-400 hover:text-amber-300 font-medium'
+                          }`}
+                          title="Dar entrada sem necessidade do SKU estar previamente no catálogo (marcar para cadastrar depois)"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>SKU não cadastrado? Clique aqui</span>
+                        </button>
+                      </div>
+
+                      {selectedProduct && (
                         <button
                           type="button"
                           onClick={handleClearSelectedProduct}
-                          className="p-1 text-slate-500 hover:text-white rounded transition-colors cursor-pointer"
+                          className="text-[11px] text-slate-400 hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
                         >
                           <X className="w-3 h-3" />
+                          <span>Trocar</span>
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => setIsProductDropdownOpen(prev => !prev)}
-                        className="p-1 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
-                      >
-                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isProductDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
                     </div>
 
-                    {/* Autocomplete Dropdown */}
-                    {isProductDropdownOpen && (
-                      <div className="product-search-dropdown absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-800/60">
-                        <div className="product-search-header p-2 bg-slate-900 text-[10px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10">
-                          <span className="font-bold text-slate-300">
-                            {filteredProducts.length} {filteredProducts.length === 1 ? 'produto' : 'produtos'}
-                          </span>
-                          <span className="text-[10px] text-slate-500">Mais frequentes primeiro</span>
-                        </div>
+                    <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
+                        <Search className="w-3.5 h-3.5" />
+                      </div>
 
-                        {filteredProducts.length === 0 ? (
-                          <div className="p-3 text-center text-xs text-slate-500">
-                            Nenhum produto cadastrado com este SKU ou Nome.
+                      <input
+                        type="text"
+                        placeholder="Bipar ou digitar SKU / Nome (Ex: AIR-FRYER, Batedeira...)"
+                        value={productSearchTerm}
+                        onChange={(e) => {
+                          setProductSearchTerm(e.target.value);
+                          setIsProductDropdownOpen(true);
+                          const exact = products.find(p => p.sku.toLowerCase() === e.target.value.trim().toLowerCase());
+                          if (exact) {
+                            setSelectedProductId(exact.id);
+                          } else if (selectedProductId && e.target.value !== `[${selectedProduct?.sku}] ${selectedProduct?.name}`) {
+                            setSelectedProductId('');
+                          }
+                        }}
+                        onFocus={() => setIsProductDropdownOpen(true)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && filteredProducts.length > 0) {
+                            e.preventDefault();
+                            handleSelectProduct(filteredProducts[0]);
+                          } else if (e.key === 'Escape') {
+                            setIsProductDropdownOpen(false);
+                          }
+                        }}
+                        className={`w-full pl-9 pr-9 py-2 bg-slate-950 border rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition-all font-sans ${
+                          selectedProduct 
+                            ? 'border-sky-500/60 bg-sky-950/20 text-sky-100 font-medium' 
+                            : 'border-slate-800 focus:border-sky-500'
+                        }`}
+                        id="input-product-search-sku"
+                        autoComplete="off"
+                      />
+
+                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {productSearchTerm && (
+                          <button
+                            type="button"
+                            onClick={handleClearSelectedProduct}
+                            className="p-1 text-slate-500 hover:text-white rounded transition-colors cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsProductDropdownOpen(prev => !prev)}
+                          className="p-1 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                        >
+                          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isProductDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                      </div>
+
+                      {/* Autocomplete Dropdown */}
+                      {isProductDropdownOpen && (
+                        <div className="product-search-dropdown absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700/80 rounded-xl shadow-2xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-800/60">
+                          <div className="product-search-header p-2 bg-slate-900 text-[10px] text-slate-400 flex items-center justify-between border-b border-slate-800 font-medium sticky top-0 z-10">
+                            <span className="font-bold text-slate-300">
+                              {filteredProducts.length} {filteredProducts.length === 1 ? 'produto cadastrado' : 'produtos cadastrados'}
+                            </span>
+                            <span className="text-[10px] text-slate-500">Mais frequentes primeiro</span>
                           </div>
-                        ) : (
-                          filteredProducts.map((p, idx) => {
-                            const isSelected = p.id === selectedProductId;
-                            const entryCount = getProductEntryCount(p);
-                            return (
+
+                          {filteredProducts.length === 0 ? (
+                            <div className="p-3 text-center space-y-2">
+                              <p className={`text-xs ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>Nenhum produto cadastrado com este SKU ou Nome.</p>
                               <button
-                                key={p.id}
                                 type="button"
-                                onClick={() => handleSelectProduct(p)}
-                                className={`product-search-item w-full text-left p-2 hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-2.5 cursor-pointer ${
-                                  isSelected ? 'bg-sky-500/15 product-search-item-selected' : ''
+                                onClick={() => handleEnableUnregisteredSkuMode(productSearchTerm)}
+                                className={`w-full py-2.5 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-colors cursor-pointer border ${
+                                  isLight
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
+                                    : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
                                 }`}
                               >
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="product-search-sku font-mono text-[11px] font-bold text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                                      {p.sku}
-                                    </span>
-                                    {p.voltage && p.voltage !== 'N/A' && (
-                                      <span className="product-search-voltage text-[10px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
-                                        {p.voltage}
-                                      </span>
-                                    )}
-                                    {entryCount > 0 && (
-                                      <span className="text-[9px] font-mono bg-slate-800 text-slate-400 px-1 rounded">
-                                        {entryCount} un
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="product-search-title text-[11px] font-medium text-slate-200 mt-0.5 truncate">
-                                    {p.name}
-                                  </p>
-                                </div>
-                                {isSelected && (
-                                  <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                                )}
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Dar entrada com "{productSearchTerm.trim().toUpperCase() || 'este SKU'}" sem cadastro prévio</span>
                               </button>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
+                              <p className={`text-[10px] ${isLight ? 'text-slate-600 font-medium' : 'text-slate-500'}`}>O pedido ficará marcado no Estoque para o SKU ser cadastrado posteriormente.</p>
+                            </div>
+                          ) : (
+                            <>
+                              {filteredProducts.map((p, idx) => {
+                                const isSelected = p.id === selectedProductId;
+                                const entryCount = getProductEntryCount(p);
+                                return (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => handleSelectProduct(p)}
+                                    className={`product-search-item w-full text-left p-2 hover:bg-slate-800/80 transition-colors flex items-center justify-between gap-2.5 cursor-pointer ${
+                                      isSelected ? 'bg-sky-500/15 product-search-item-selected' : ''
+                                    }`}
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="product-search-sku font-mono text-[11px] font-bold text-sky-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                          {p.sku}
+                                        </span>
+                                        {p.voltage && p.voltage !== 'N/A' && (
+                                          <span className="product-search-voltage text-[10px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
+                                            {p.voltage}
+                                          </span>
+                                        )}
+                                        {entryCount > 0 && (
+                                          <span className="text-[9px] font-mono bg-slate-800 text-slate-400 px-1 rounded">
+                                            {entryCount} un
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="product-search-title text-[11px] font-medium text-slate-200 mt-0.5 truncate">
+                                        {p.name}
+                                      </p>
+                                    </div>
+                                    {isSelected && (
+                                      <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                              <div className={`p-2 border-t text-center sticky bottom-0 ${
+                                isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/90 border-slate-800'
+                              }`}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEnableUnregisteredSkuMode(productSearchTerm)}
+                                  className={`text-[11px] flex items-center justify-center gap-1 w-full py-1.5 rounded transition-colors cursor-pointer ${
+                                    isLight
+                                      ? 'text-amber-900 hover:text-amber-950 hover:bg-amber-100/80 font-black'
+                                      : 'text-amber-400 hover:text-amber-300 hover:bg-slate-800 font-semibold'
+                                  }`}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  <span>Dar entrada com outro SKU não cadastrado na base</span>
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Multiple Serial Numbers Management (Compact Barcode Focus) */}
                 <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-3 space-y-2" id="rma-multi-serial-container">
@@ -1393,7 +1655,9 @@ export default function RmaEntry({
                   <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5">
                     {serials.map((serialVal, idx) => (
                       <div key={idx} className="flex items-center gap-1.5">
-                        <span className="w-6 h-7 bg-slate-900 border border-slate-800 text-slate-400 font-mono text-[10px] font-bold rounded flex items-center justify-center shrink-0">
+                        <span className={`w-6 h-7 font-mono text-[10px] font-bold rounded flex items-center justify-center shrink-0 border ${
+                          isLight ? 'bg-slate-100 border-slate-300 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-400'
+                        }`}>
                           #{idx + 1}
                         </span>
 
@@ -1407,7 +1671,11 @@ export default function RmaEntry({
                               e.preventDefault();
                             }
                           }}
-                          className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                          className={`flex-1 px-3 py-1.5 rounded text-xs font-mono transition-colors focus:outline-none ${
+                            isLight
+                              ? 'bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-sky-500 shadow-2xs'
+                              : 'bg-slate-900 border border-slate-800 text-slate-200 placeholder-slate-600 focus:border-sky-500'
+                          }`}
                           id={`input-serial-${idx}`}
                         />
 
@@ -1430,18 +1698,29 @@ export default function RmaEntry({
               </div>
 
               {/* Step 2: Destino, Origem e Identificação do Pacote (Ultra-compact Unified Card) */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-destination-origin">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+              <div className={`border rounded-xl p-4 shadow-md space-y-3.5 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+              }`} id="rma-step-destination-origin">
+                <div className={`flex items-center justify-between gap-2 border-b pb-2.5 ${
+                  isLight ? 'border-slate-200' : 'border-slate-800/80'
+                }`}>
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">2</span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Destino & Origem do Pacote</span>
+                    <span className={`w-5 h-5 text-[11px] font-bold flex items-center justify-center rounded-md ${
+                      isLight ? 'bg-sky-100 text-sky-700' : 'bg-sky-500/10 text-sky-400'
+                    }`}>2</span>
+                    <span className={`text-xs font-bold uppercase tracking-wider ${
+                      isLight ? 'text-slate-800' : 'text-slate-200'
+                    }`}>Destino & Origem do Pacote</span>
                   </div>
-                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border"
-                    style={{
-                      backgroundColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.1)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.1)' : destinationSector === 'Outros' ? 'rgba(99,102,241,0.1)' : 'rgba(239,68,68,0.1)',
-                      borderColor: destinationSector === 'Principal' ? 'rgba(16,185,129,0.3)' : destinationSector === 'Openbox' ? 'rgba(245,158,11,0.3)' : destinationSector === 'Outros' ? 'rgba(99,102,241,0.3)' : 'rgba(239,68,68,0.3)',
-                      color: destinationSector === 'Principal' ? '#34D399' : destinationSector === 'Openbox' ? '#FBBF24' : destinationSector === 'Outros' ? '#818CF8' : '#F87171'
-                    }}
+                  <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border ${
+                    destinationSector === 'Principal'
+                      ? isLight ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      : destinationSector === 'Openbox'
+                      ? isLight ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                      : destinationSector === 'Outros'
+                      ? isLight ? 'bg-indigo-50 border-indigo-300 text-indigo-900' : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
+                      : isLight ? 'bg-rose-50 border-rose-300 text-rose-800' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                  }`}
                   >
                     {destinationSector === 'Principal' ? '🟢 Estoque Principal' : destinationSector === 'Openbox' ? '🟠 Openbox' : destinationSector === 'Outros' ? '🟣 Outros' : '🔴 RMA'}
                   </span>
@@ -1454,15 +1733,19 @@ export default function RmaEntry({
                     onClick={() => handleSelectDestinationSector('Principal')}
                     className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'Principal'
-                        ? 'bg-emerald-500/15 border-emerald-500 ring-1 ring-emerald-500/40 text-emerald-300 font-bold shadow-sm'
-                        : 'bg-slate-950/70 border-slate-800 hover:border-emerald-500/30 text-slate-300'
+                        ? isLight
+                          ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/30 text-emerald-950 font-black shadow-sm'
+                          : 'bg-emerald-500/15 border-emerald-500 ring-1 ring-emerald-500/40 text-emerald-300 font-bold shadow-sm'
+                        : isLight
+                          ? 'bg-white border-slate-300 hover:border-emerald-500/50 hover:bg-emerald-50/40 text-slate-700 font-semibold shadow-2xs'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-emerald-500/30 text-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
                       <span className="text-xs truncate">Principal</span>
                     </div>
-                    {destinationSector === 'Principal' && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                    {destinationSector === 'Principal' && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0 stroke-[3]" />}
                   </button>
 
                   <button
@@ -1470,15 +1753,19 @@ export default function RmaEntry({
                     onClick={() => handleSelectDestinationSector('Openbox')}
                     className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'Openbox'
-                        ? 'bg-amber-500/15 border-amber-500 ring-1 ring-amber-500/40 text-amber-300 font-bold shadow-sm'
-                        : 'bg-slate-950/70 border-slate-800 hover:border-amber-500/30 text-slate-300'
+                        ? isLight
+                          ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/30 text-amber-950 font-black shadow-sm'
+                          : 'bg-amber-500/15 border-amber-500 ring-1 ring-amber-500/40 text-amber-300 font-bold shadow-sm'
+                        : isLight
+                          ? 'bg-white border-slate-300 hover:border-amber-500/50 hover:bg-amber-50/40 text-slate-700 font-semibold shadow-2xs'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-amber-500/30 text-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
                       <span className="text-xs truncate">Openbox</span>
                     </div>
-                    {destinationSector === 'Openbox' && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                    {destinationSector === 'Openbox' && <Check className="w-3.5 h-3.5 text-amber-500 shrink-0 stroke-[3]" />}
                   </button>
 
                   <button
@@ -1486,15 +1773,19 @@ export default function RmaEntry({
                     onClick={() => handleSelectDestinationSector('RMA')}
                     className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'RMA'
-                        ? 'bg-rose-500/15 border-rose-500 ring-1 ring-rose-500/40 text-rose-300 font-bold shadow-sm'
-                        : 'bg-slate-950/70 border-slate-800 hover:border-rose-500/30 text-slate-300'
+                        ? isLight
+                          ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/30 text-rose-950 font-black shadow-sm'
+                          : 'bg-rose-500/15 border-rose-500 ring-1 ring-rose-500/40 text-rose-300 font-bold shadow-sm'
+                        : isLight
+                          ? 'bg-white border-slate-300 hover:border-rose-500/50 hover:bg-rose-50/40 text-slate-700 font-semibold shadow-2xs'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-rose-500/30 text-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0"></span>
+                      <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
                       <span className="text-xs truncate">RMA</span>
                     </div>
-                    {destinationSector === 'RMA' && <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
+                    {destinationSector === 'RMA' && <Check className="w-3.5 h-3.5 text-rose-500 shrink-0 stroke-[3]" />}
                   </button>
 
                   <button
@@ -1502,15 +1793,19 @@ export default function RmaEntry({
                     onClick={() => handleSelectDestinationSector('Outros')}
                     className={`py-2 px-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
                       destinationSector === 'Outros'
-                        ? 'bg-indigo-500/15 border-indigo-500 ring-1 ring-indigo-500/40 text-indigo-300 font-bold shadow-sm'
-                        : 'bg-slate-950/70 border-slate-800 hover:border-indigo-500/30 text-slate-300'
+                        ? isLight
+                          ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/30 text-indigo-950 font-black shadow-sm'
+                          : 'bg-indigo-500/15 border-indigo-500 ring-1 ring-indigo-500/40 text-indigo-300 font-bold shadow-sm'
+                        : isLight
+                          ? 'bg-white border-slate-300 hover:border-indigo-500/50 hover:bg-indigo-50/40 text-slate-700 font-semibold shadow-2xs'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-indigo-500/30 text-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-indigo-400 shrink-0"></span>
+                      <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span>
                       <span className="text-xs truncate">Outros</span>
                     </div>
-                    {destinationSector === 'Outros' && <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                    {destinationSector === 'Outros' && <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0 stroke-[3]" />}
                   </button>
                 </div>
 
@@ -1518,20 +1813,27 @@ export default function RmaEntry({
                 <div className={`grid grid-cols-1 ${(destinationSector === 'Openbox' || destinationSector === 'Outros') ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5 pt-1`}>
                   {/* Platform */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center min-h-[20px]">Plataforma</label>
+                    <label className={`text-[11px] font-bold uppercase tracking-wider flex items-center min-h-[20px] ${
+                      isLight ? 'text-slate-700' : 'text-slate-400'
+                    }`}>Plataforma</label>
                     <PlatformSelector
                       value={platform}
                       onChange={(p) => setPlatform(p as PlatformType)}
                       id="select-platform-origin"
+                      isLight={isLight}
                     />
                   </div>
 
                   {/* Código STI - Obrigatório no Openbox, Opcional no Outros */}
                   {destinationSector === 'Openbox' && (
                     <div className="space-y-1 animate-in fade-in duration-200">
-                      <label className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between text-amber-400 min-h-[20px]">
+                      <label className={`text-[11px] font-bold uppercase tracking-wider flex items-center justify-between min-h-[20px] ${
+                        isLight ? 'text-amber-950' : 'text-amber-400'
+                      }`}>
                         <span>Código STI *</span>
-                        <span className="text-[9px] font-bold px-1 py-0.5 bg-amber-500/20 text-amber-300 rounded leading-none">Obrigatório</span>
+                        <span className={`text-[9px] font-bold px-1 py-0.5 rounded leading-none ${
+                          isLight ? 'bg-amber-100 text-amber-950 border border-amber-300 font-black' : 'bg-amber-500/20 text-amber-300'
+                        }`}>Obrigatório</span>
                       </label>
                       <input 
                         type="text"
@@ -1545,7 +1847,11 @@ export default function RmaEntry({
                           }
                         }}
                         maxLength={9}
-                        className="w-full px-3 h-[38px] bg-slate-950 rounded-lg text-xs font-mono transition-all border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400/40"
+                        className={`w-full px-3 h-[38px] rounded-lg text-xs font-mono transition-all focus:outline-none focus:ring-1 ${
+                          isLight 
+                            ? 'bg-white border-2 border-amber-500 text-slate-900 font-bold placeholder-slate-400 focus:border-amber-600 focus:ring-amber-500/20 shadow-2xs'
+                            : 'bg-slate-950 border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:ring-amber-400/40'
+                        }`}
                         id="input-tracking-code"
                         required
                       />
@@ -1554,9 +1860,13 @@ export default function RmaEntry({
 
                   {destinationSector === 'Outros' && (
                     <div className="space-y-1 animate-in fade-in duration-200">
-                      <label className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between text-indigo-300 min-h-[20px]">
+                      <label className={`text-[11px] font-bold uppercase tracking-wider flex items-center justify-between min-h-[20px] ${
+                        isLight ? 'text-indigo-950' : 'text-indigo-300'
+                      }`}>
                         <span>Código STI (Opcional)</span>
-                        <span className="text-[9px] font-bold px-1 py-0.5 bg-indigo-500/20 text-indigo-300 rounded leading-none">Opcional</span>
+                        <span className={`text-[9px] font-bold px-1 py-0.5 rounded leading-none ${
+                          isLight ? 'bg-indigo-100 text-indigo-950 border border-indigo-300 font-bold' : 'bg-indigo-500/20 text-indigo-300'
+                        }`}>Opcional</span>
                       </label>
                       <input 
                         type="text"
@@ -1567,7 +1877,11 @@ export default function RmaEntry({
                           setTrackingCode(formatted);
                         }}
                         maxLength={9}
-                        className="w-full px-3 h-[38px] bg-slate-950 rounded-lg text-xs font-mono transition-all border border-indigo-500/40 text-indigo-200 placeholder-indigo-400/40 focus:outline-none focus:ring-1 focus:ring-indigo-400/40"
+                        className={`w-full px-3 h-[38px] rounded-lg text-xs font-mono transition-all focus:outline-none focus:ring-1 ${
+                          isLight 
+                            ? 'bg-white border-2 border-indigo-400 text-slate-900 font-bold placeholder-slate-400 focus:border-indigo-600 focus:ring-indigo-500/20 shadow-2xs'
+                            : 'bg-slate-950 border border-indigo-500/40 text-indigo-200 placeholder-indigo-400/40 focus:ring-indigo-400/40'
+                        }`}
                         id="input-tracking-code-outros"
                       />
                     </div>
@@ -1576,7 +1890,9 @@ export default function RmaEntry({
                   {/* Order Number */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between min-h-[20px]">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      <label className={`text-[11px] font-bold uppercase tracking-wider ${
+                        isLight ? 'text-slate-700' : 'text-slate-400'
+                      }`}>
                         {platform === 'Outros' ? 'Nº Pedido (Sem vínculo)' : 'Nº Pedido (Opcional)'}
                       </label>
                       {detectedOrderInfo && platform !== 'Outros' && (
@@ -1590,15 +1906,19 @@ export default function RmaEntry({
                           }}
                           className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-all ${
                             detectedOrderInfo.isAmazonVariant
-                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer'
-                              : 'bg-sky-500/20 text-sky-300 border border-sky-500/40 cursor-default'
+                              ? isLight
+                                ? 'bg-amber-100 text-amber-950 border border-amber-300 hover:bg-amber-200 cursor-pointer'
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer'
+                              : isLight
+                                ? 'bg-sky-100 text-sky-900 border border-sky-300 cursor-default'
+                                : 'bg-sky-500/20 text-sky-300 border border-sky-500/40 cursor-default'
                           }`}
                           title={detectedOrderInfo.isAmazonVariant ? 'Clique para alternar entre Amazon e Amazon Ta Novo' : detectedOrderInfo.hint}
                         >
-                          <Sparkles className="w-2.5 h-2.5 text-sky-400" />
+                          <Sparkles className="w-2.5 h-2.5 text-sky-500" />
                           <span>{platform}</span>
                           {detectedOrderInfo.isAmazonVariant && (
-                            <span className="text-[9px] text-amber-400 underline ml-0.5">
+                            <span className="text-[9px] underline ml-0.5">
                               {platform === 'Amazon Ta Novo' ? '(p/ Amazon)' : '(p/ Ta Novo)'}
                             </span>
                           )}
@@ -1611,7 +1931,11 @@ export default function RmaEntry({
                       value={orderNumber}
                       onChange={(e) => handleOrderNumberChange(e.target.value)}
                       onBlur={handleOrderNumberBlur}
-                      className="w-full px-3 h-[38px] bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                      className={`w-full px-3 h-[38px] rounded-lg text-xs font-mono transition-all focus:outline-none ${
+                        isLight
+                          ? 'bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-sky-500 shadow-2xs font-medium'
+                          : 'bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-600 focus:border-sky-500'
+                      }`}
                       id="input-order-number"
                     />
                   </div>
@@ -1619,18 +1943,28 @@ export default function RmaEntry({
               </div>
 
               {/* Step 3: Avaliação Técnica e Condições (Quick Pills & Compact Fields) */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-inspection">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+              <div className={`border rounded-xl p-4 shadow-md space-y-3.5 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+              }`} id="rma-step-inspection">
+                <div className={`flex items-center justify-between gap-2 border-b pb-2.5 ${
+                  isLight ? 'border-slate-200' : 'border-slate-800/80'
+                }`}>
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">3</span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Avaliação Técnica & Condição Visual</span>
+                    <span className={`w-5 h-5 text-[11px] font-bold flex items-center justify-center rounded-md ${
+                      isLight ? 'bg-sky-100 text-sky-700' : 'bg-sky-500/10 text-sky-400'
+                    }`}>3</span>
+                    <span className={`text-xs font-bold uppercase tracking-wider ${
+                      isLight ? 'text-slate-800' : 'text-slate-200'
+                    }`}>Avaliação Técnica & Condição Visual</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Estado do Aparelho with Quick Pills */}
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado do Aparelho</label>
+                    <label className={`text-[11px] font-bold uppercase tracking-wider ${
+                      isLight ? 'text-slate-700' : 'text-slate-400'
+                    }`}>Estado do Aparelho</label>
                     <div className="grid grid-cols-4 gap-1.5" id="pills-device-status">
                       {(['Novo', 'Usado', 'Danificado', 'Descrever'] as const).map((st) => {
                         const isSelected = deviceStatus === st;
@@ -1650,8 +1984,12 @@ export default function RmaEntry({
                             }}
                             className={`py-2 px-1.5 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer truncate flex items-center justify-center gap-1 focus:outline-none select-none ${
                               isSelected
-                                ? 'bg-sky-500 text-white border-sky-400 font-bold shadow-md shadow-sky-500/25 ring-2 ring-sky-400/40 status-pill-selected'
-                                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700 status-pill-unselected'
+                                ? isLight
+                                  ? 'bg-sky-600 text-white border-sky-600 font-bold shadow-md shadow-sky-600/20 ring-2 ring-sky-500/30 status-pill-selected'
+                                  : 'bg-sky-500 text-white border-sky-400 font-bold shadow-md shadow-sky-500/25 ring-2 ring-sky-400/40 status-pill-selected'
+                                : isLight
+                                  ? 'bg-white border-slate-300 text-slate-700 hover:text-slate-950 hover:border-slate-400 hover:bg-slate-50 font-medium shadow-2xs status-pill-unselected'
+                                  : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700 status-pill-unselected'
                             }`}
                           >
                             {isSelected && <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />}
@@ -1667,7 +2005,11 @@ export default function RmaEntry({
                         placeholder="Descreva o estado do aparelho..."
                         value={customDeviceStatusText}
                         onChange={(e) => setCustomDeviceStatusText(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-slate-950 border border-sky-500/50 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
+                        className={`w-full px-3 py-1.5 rounded-lg text-xs transition-colors focus:outline-none ${
+                          isLight
+                            ? 'bg-white border-2 border-sky-500 text-slate-900 placeholder-slate-400 shadow-2xs font-medium'
+                            : 'bg-slate-950 border border-sky-500/50 text-slate-100 placeholder-slate-500'
+                        }`}
                         id="input-custom-device-status"
                         autoFocus
                       />
@@ -1676,7 +2018,9 @@ export default function RmaEntry({
 
                   {/* Estado da Embalagem with Quick Pills */}
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Estado da Caixa / Embalagem</label>
+                    <label className={`text-[11px] font-bold uppercase tracking-wider ${
+                      isLight ? 'text-slate-700' : 'text-slate-400'
+                    }`}>Estado da Caixa / Embalagem</label>
                     <div className="grid grid-cols-4 gap-1.5" id="pills-package-status">
                       {(['Perfeita', 'Usada', 'Sem Caixa', 'Descrever'] as const).map((pkg) => {
                         const isSelected = packageStatus === pkg;
@@ -1696,8 +2040,12 @@ export default function RmaEntry({
                             }}
                             className={`py-2 px-1.5 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer truncate flex items-center justify-center gap-1 focus:outline-none select-none ${
                               isSelected
-                                ? 'bg-sky-500 text-white border-sky-400 font-bold shadow-md shadow-sky-500/25 ring-2 ring-sky-400/40 status-pill-selected'
-                                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700 status-pill-unselected'
+                                ? isLight
+                                  ? 'bg-sky-600 text-white border-sky-600 font-bold shadow-md shadow-sky-600/20 ring-2 ring-sky-500/30 status-pill-selected'
+                                  : 'bg-sky-500 text-white border-sky-400 font-bold shadow-md shadow-sky-500/25 ring-2 ring-sky-400/40 status-pill-selected'
+                                : isLight
+                                  ? 'bg-white border-slate-300 text-slate-700 hover:text-slate-950 hover:border-slate-400 hover:bg-slate-50 font-medium shadow-2xs status-pill-unselected'
+                                  : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700 status-pill-unselected'
                             }`}
                             title={pkg}
                           >
@@ -1714,7 +2062,11 @@ export default function RmaEntry({
                         placeholder="Descreva o estado da caixa..."
                         value={customPackageStatusText}
                         onChange={(e) => setCustomPackageStatusText(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-slate-950 border border-sky-500/50 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
+                        className={`w-full px-3 py-1.5 rounded-lg text-xs transition-colors focus:outline-none ${
+                          isLight
+                            ? 'bg-white border-2 border-sky-500 text-slate-900 placeholder-slate-400 shadow-2xs font-medium'
+                            : 'bg-slate-950 border border-sky-500/50 text-slate-100 placeholder-slate-500'
+                        }`}
                         id="input-custom-package-status"
                         autoFocus
                       />
@@ -1723,7 +2075,9 @@ export default function RmaEntry({
                 </div>
 
                 {/* Reclamação / Motivo do Cliente with Dynamic Top 5 Suggestions (like Image 2) */}
-                <div className="space-y-2 pt-2 border-t border-slate-800/80" id="field-customer-reason-container">
+                <div className={`space-y-2 pt-2 border-t ${
+                  isLight ? 'border-slate-200' : 'border-slate-800/80'
+                }`} id="field-customer-reason-container">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                       <FileText className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-sky-600' : 'text-sky-400'}`} />
@@ -1731,7 +2085,7 @@ export default function RmaEntry({
                         Motivo da Devolução / Reclamação do Cliente
                       </label>
                     </div>
-                    <span className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                    <span className={`text-[10px] ${isLight ? 'text-slate-500 font-medium' : 'text-slate-500'}`}>
                       Informado pelo cliente ou plataforma
                     </span>
                   </div>
@@ -1743,7 +2097,7 @@ export default function RmaEntry({
                     onChange={(e) => setCustomerReason(e.target.value)}
                     className={`w-full px-3 py-2 border rounded-lg text-xs transition-colors focus:outline-none ${
                       isLight 
-                        ? 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20' 
+                        ? 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20 shadow-2xs' 
                         : 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-500 focus:border-sky-500'
                     }`}
                     id="textarea-customer-reason"
@@ -1762,16 +2116,16 @@ export default function RmaEntry({
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all text-left flex items-center gap-1 cursor-pointer select-none ${
                             isSelected
                               ? isLight
-                                ? 'bg-sky-50 text-sky-700 border-sky-400 font-bold shadow-sm'
+                                ? 'bg-sky-100 text-sky-950 border-sky-500 font-black shadow-xs'
                                 : 'bg-sky-500/20 text-sky-300 border-sky-500/70 font-bold shadow-sm shadow-sky-500/10'
                               : isLight
-                                ? 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900 hover:bg-slate-50'
+                                ? 'bg-white border-slate-300 text-slate-700 hover:border-slate-400 hover:text-slate-950 hover:bg-slate-50 shadow-2xs font-medium'
                                 : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200 hover:bg-slate-900'
                           }`}
                           title={isSelected ? `Remover motivo: "${suggestion}"` : `Adicionar motivo: "${suggestion}"`}
                         >
                           {isSelected ? (
-                            <Check className={`w-3 h-3 shrink-0 stroke-[2.5] ${isLight ? 'text-sky-600' : 'text-sky-400'}`} />
+                            <Check className={`w-3 h-3 shrink-0 stroke-[2.5] ${isLight ? 'text-sky-700' : 'text-sky-400'}`} />
                           ) : (
                             <span className={`font-bold text-xs select-none leading-none ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>+</span>
                           )}
@@ -1783,8 +2137,10 @@ export default function RmaEntry({
                 </div>
 
                 {/* Acessórios inclusos */}
-                <div className="space-y-1.5 pt-1">
-                  <label className={`text-[11px] font-bold uppercase tracking-wider ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                <div className={`space-y-1.5 pt-1 border-t ${
+                  isLight ? 'border-slate-200' : 'border-slate-800/80'
+                }`}>
+                  <label className={`text-[11px] font-bold uppercase tracking-wider ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
                     Acessórios Inclusos
                   </label>
                   <input 
@@ -1794,7 +2150,7 @@ export default function RmaEntry({
                     onChange={(e) => setAccessoriesInclusion(e.target.value)}
                     className={`w-full px-3 py-2 border rounded-lg text-xs transition-colors focus:outline-none ${
                       isLight 
-                        ? 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 focus:border-sky-500' 
+                        ? 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 focus:border-sky-500 shadow-2xs' 
                         : 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500'
                     }`}
                     id="input-accessories-inclusion"
@@ -1803,10 +2159,18 @@ export default function RmaEntry({
               </div>
 
               {/* Step 4: Laudo Técnico & Observações (Compact Editor) */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-2.5" id="rma-step-notes">
-                <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2">
-                  <span className="w-5 h-5 bg-sky-500/10 text-sky-400 text-[11px] font-bold flex items-center justify-center rounded-md">4</span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Laudo Técnico & Parecer do Triador</span>
+              <div className={`border rounded-xl p-4 shadow-md space-y-2.5 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+              }`} id="rma-step-notes">
+                <div className={`flex items-center gap-2 border-b pb-2 ${
+                  isLight ? 'border-slate-200' : 'border-slate-800/80'
+                }`}>
+                  <span className={`w-5 h-5 text-[11px] font-bold flex items-center justify-center rounded-md ${
+                    isLight ? 'bg-sky-100 text-sky-700' : 'bg-sky-500/10 text-sky-400'
+                  }`}>4</span>
+                  <span className={`text-xs font-bold uppercase tracking-wider ${
+                    isLight ? 'text-slate-800' : 'text-slate-200'
+                  }`}>Laudo Técnico & Parecer do Triador</span>
                 </div>
                 
                 <RichTextEditor
@@ -1822,25 +2186,39 @@ export default function RmaEntry({
 
             {/* Right Side Column: Media Station, Pending Link & Fast Submission (5 cols) */}
             <div className="lg:col-span-5 space-y-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-photos">
-                <div className="border-b border-slate-800/80 pb-2.5 flex justify-between items-center">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
-                    <Clipboard className="text-sky-400 w-4 h-4" />
+              <div className={`border rounded-xl p-4 shadow-md space-y-3.5 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+              }`} id="rma-step-photos">
+                <div className={`border-b pb-2.5 flex justify-between items-center ${
+                  isLight ? 'border-slate-200' : 'border-slate-800/80'
+                }`}>
+                  <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                    isLight ? 'text-slate-900' : 'text-white'
+                  }`}>
+                    <Clipboard className="text-sky-500 w-4 h-4" />
                     <span>Fotos & Mídia</span>
                   </h3>
-                  <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-950 rounded text-[10px] text-sky-400 font-mono border border-slate-800">
-                    <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-pulse"></span>
+                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono border ${
+                    isLight ? 'bg-sky-50 text-sky-700 border-sky-300 font-bold' : 'bg-slate-950 text-sky-400 border-slate-800'
+                  }`}>
+                    <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-pulse"></span>
                     <span>Ctrl+V Ativo</span>
                   </div>
                 </div>
 
                 {/* Category Selector Tabs */}
-                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg text-center text-xs" id="ctrl-v-category-selector">
+                <div className={`grid grid-cols-3 gap-1 p-1 rounded-lg text-center text-xs border ${
+                  isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-950 border-slate-800'
+                }`} id="ctrl-v-category-selector">
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('product')}
                     className={`py-1.5 px-1 rounded font-bold cursor-pointer transition-all truncate ${
-                      activeUploadCategory === 'product' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      activeUploadCategory === 'product' 
+                        ? 'bg-sky-600 text-white shadow-sm' 
+                        : isLight 
+                        ? 'text-slate-700 hover:text-slate-950 hover:bg-white font-semibold' 
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
                     }`}
                   >
                     Produto ({photosProduct.length})
@@ -1849,7 +2227,11 @@ export default function RmaEntry({
                     type="button" 
                     onClick={() => setActiveUploadCategory('box')}
                     className={`py-1.5 px-1 rounded font-bold cursor-pointer transition-all truncate ${
-                      activeUploadCategory === 'box' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      activeUploadCategory === 'box' 
+                        ? 'bg-sky-600 text-white shadow-sm' 
+                        : isLight 
+                        ? 'text-slate-700 hover:text-slate-950 hover:bg-white font-semibold' 
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
                     }`}
                   >
                     Caixa ({photosBox.length})
@@ -1858,7 +2240,11 @@ export default function RmaEntry({
                     type="button" 
                     onClick={() => setActiveUploadCategory('accessories')}
                     className={`py-1.5 px-1 rounded font-bold cursor-pointer transition-all truncate ${
-                      activeUploadCategory === 'accessories' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      activeUploadCategory === 'accessories' 
+                        ? 'bg-sky-600 text-white shadow-sm' 
+                        : isLight 
+                        ? 'text-slate-700 hover:text-slate-950 hover:bg-white font-semibold' 
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
                     }`}
                   >
                     Acessórios ({photosAccessories.length})
@@ -2268,22 +2654,30 @@ export default function RmaEntry({
               </div>
 
               {/* Bloco de Finalização & Salvar */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3.5" id="rma-step-submit">
+              <div className={`border rounded-xl p-4 shadow-md space-y-3.5 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+              }`} id="rma-step-submit">
                 {/* Opção de Contador Diário */}
-                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+                <div className={`border rounded-xl p-3 ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'
+                }`}>
                   <label className="flex items-start gap-2.5 cursor-pointer select-none">
                     <input 
                       type="checkbox"
                       checked={excludeFromDailyCount}
                       onChange={(e) => setExcludeFromDailyCount(e.target.checked)}
-                      className="mt-0.5 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-400 focus:ring-offset-slate-900 h-4 w-4"
+                      className="mt-0.5 rounded border-slate-400 bg-white text-amber-500 focus:ring-amber-400 h-4 w-4"
                       id="checkbox-exclude-daily-count"
                     />
                     <div className="space-y-0.5">
-                      <span className="text-xs font-semibold text-slate-200 block">
+                      <span className={`text-xs font-semibold block ${
+                        isLight ? 'text-slate-900' : 'text-slate-200'
+                      }`}>
                         Não contabilizar na entrada diária
                       </span>
-                      <span className="text-[11px] text-slate-400 block leading-tight">
+                      <span className={`text-[11px] block leading-tight ${
+                        isLight ? 'text-slate-600' : 'text-slate-400'
+                      }`}>
                         O produto entrará normalmente no estoque, mas será ignorado do contador de devoluções de hoje.
                       </span>
                     </div>
@@ -2402,6 +2796,12 @@ export default function RmaEntry({
                     <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
                       SKU: {summaryModalData.product.sku}
                     </span>
+                    {summaryModalData.needsSkuRegistration && (
+                      <span className="font-bold text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 dark:text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>SKU Não Cadastrado na Base (Pendente de Cadastro)</span>
+                      </span>
+                    )}
                     {summaryModalData.product.voltage && (
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
                         isLight ? 'bg-slate-200 text-slate-800' : 'bg-slate-700 text-slate-200'

@@ -25,9 +25,10 @@ import {
   List,
   Link as LinkIcon,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  ArrowRight
 } from 'lucide-react';
-import { BaseProduct } from '../types';
+import { BaseProduct, TriageUnit } from '../types';
 import { uploadFileToStorage, uploadImageUrlToStorage, saveBatchBaseProducts } from '../lib/dbService';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { RichTextEditor } from './RichTextEditor';
@@ -41,6 +42,8 @@ import { getOptimizedThumbnailUrl } from '../utils/productImages';
 
 interface BaseCatalogProps {
   products: BaseProduct[];
+  units?: TriageUnit[];
+  onNavigateToStock?: () => void;
   hasMoreFromDb?: boolean;
   isLoadingMore?: boolean;
   onLoadMoreFromDb?: () => Promise<void>;
@@ -50,10 +53,13 @@ interface BaseCatalogProps {
   userRole?: 'admin' | 'operator' | null;
   enableSpreadsheetImport?: boolean;
   enableSpreadsheetExport?: boolean;
+  isLight?: boolean;
 }
 
 export default function BaseCatalog({ 
   products, 
+  units = [],
+  onNavigateToStock,
   hasMoreFromDb = false,
   isLoadingMore = false,
   onLoadMoreFromDb,
@@ -62,7 +68,8 @@ export default function BaseCatalog({
   onDeleteProduct, 
   userRole,
   enableSpreadsheetImport = true,
-  enableSpreadsheetExport = true 
+  enableSpreadsheetExport = true,
+  isLight = false
 }: BaseCatalogProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
@@ -442,6 +449,16 @@ export default function BaseCatalog({
     }
   };
 
+  const pendingSkuUnits = React.useMemo(() => {
+    if (!units || units.length === 0) return [];
+    return units.filter(u => u.status === 'Estoque' && (
+      u.needsSkuRegistration === true ||
+      u.skuRegistrationPending === true ||
+      u.baseProductId === 'unregistered' ||
+      u.baseProductId?.startsWith('unregistered-')
+    ));
+  }, [units]);
+
   return (
     <div className="space-y-6" id="base-catalog-container">
       {/* Header and Action buttons */}
@@ -496,6 +513,61 @@ export default function BaseCatalog({
           </button>
         </div>
       </div>
+
+      {/* Alert banner for products entered in RMA with unregistered SKU awaiting catalog registration */}
+      {pendingSkuUnits.length > 0 && (
+        <div 
+          className={`border rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg ${
+            isLight 
+              ? 'bg-amber-50/95 border-amber-400/90 shadow-amber-500/5' 
+              : 'bg-amber-950/30 border-amber-500/40'
+          }`} 
+          id="catalog-pending-skus-banner"
+        >
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl border shrink-0 ${
+              isLight 
+                ? 'bg-amber-100 text-amber-800 border-amber-300' 
+                : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+            }`}>
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className={`text-sm flex items-center gap-2 ${
+                isLight ? 'text-amber-950 font-black' : 'text-amber-300 font-bold'
+              }`}>
+                <span>{pendingSkuUnits.length} pedido(s) deram entrada no estoque sem SKU cadastrado na base</span>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold ${
+                  isLight 
+                    ? 'bg-amber-200/90 text-amber-950 border-amber-400/80' 
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  Aguardando Cadastro
+                </span>
+              </h4>
+              <p className={`text-xs mt-0.5 ${
+                isLight ? 'text-amber-900/90 font-medium' : 'text-amber-200/80'
+              }`}>
+                Os pedidos foram registrados no estoque físico e estão marcados para que os SKUs digitados sejam cadastrados no catálogo oficial.
+              </p>
+            </div>
+          </div>
+          {onNavigateToStock && (
+            <button
+              type="button"
+              onClick={onNavigateToStock}
+              className={`px-4 py-2.5 text-xs rounded-xl transition-all cursor-pointer shrink-0 shadow-md flex items-center gap-1.5 font-black ${
+                isLight 
+                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/25 border border-amber-400' 
+                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
+              }`}
+            >
+              <span>Ver Pedidos no Estoque</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Main Catalog View */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden" id="catalog-main-card">

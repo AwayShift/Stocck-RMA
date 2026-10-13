@@ -49,7 +49,8 @@ import {
   ArrowRight,
   Box,
   Tag,
-  GitCompare
+  GitCompare,
+  Plus
 } from 'lucide-react';
 import { TriageUnit, DestinationSectorType, PlatformType, BaseProduct, DeviceStatusType, PackageStatusType, PendingItem } from '../types';
 import ExcelImportModal from './ExcelImportModal';
@@ -66,6 +67,19 @@ import { RichTextEditor } from './RichTextEditor';
 import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
 import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
 import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform } from '../utils/orderPlatformHelper';
+import QuickRegisterSkuModal from './QuickRegisterSkuModal';
+
+export const isUnitPendingSkuRegistration = (unit: TriageUnit, productsList?: BaseProduct[]): boolean => {
+  if (!unit) return false;
+  if (unit.needsSkuRegistration === true || unit.skuRegistrationPending === true) return true;
+  if (unit.baseProductId === 'unregistered' || unit.baseProductId === '' || unit.baseProductId?.startsWith('unregistered-')) return true;
+  if (Array.isArray(productsList) && productsList.length > 0 && unit.baseProductSku) {
+    const cleanSku = unit.baseProductSku.trim().toLowerCase();
+    const exists = productsList.some(p => p.sku && p.sku.trim().toLowerCase() === cleanSku);
+    if (!exists && unit.baseProductId === 'unregistered') return true;
+  }
+  return false;
+};
 
 interface PhysicalStockProps {
   units: TriageUnit[];
@@ -80,12 +94,14 @@ interface PhysicalStockProps {
   onClearSelectedUnit?: () => void;
   onGoToStockDirectly?: (unit: TriageUnit) => void;
   onSaveTriage?: (unit: TriageUnit) => Promise<void>;
+  onProductCreated?: (product: BaseProduct) => void;
   enableSpreadsheetImport?: boolean;
   enableSpreadsheetExport?: boolean;
   isLight?: boolean;
   initialPlatformFilter?: PlatformType | null;
   initialSectorFilter?: DestinationSectorType | null;
   initialSearchTerm?: string | null;
+  initialPendingSkuFilter?: boolean;
   onClearInitialFilters?: () => void;
   currentTab?: 'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement';
 }
@@ -143,12 +159,14 @@ export default function PhysicalStock({
   onClearSelectedUnit,
   onGoToStockDirectly,
   onSaveTriage,
+  onProductCreated,
   enableSpreadsheetImport = true,
   enableSpreadsheetExport = true,
   isLight = false,
   initialPlatformFilter,
   initialSectorFilter,
   initialSearchTerm,
+  initialPendingSkuFilter,
   onClearInitialFilters,
   currentTab = 'stock'
 }: PhysicalStockProps) {
@@ -189,6 +207,16 @@ export default function PhysicalStock({
       }
     }
   }, [initialSectorFilter, onClearInitialFilters]);
+
+  // React to initial pending SKU filter from Base Catalog / Dashboard navigation
+  useEffect(() => {
+    if (initialPendingSkuFilter) {
+      setFilterOnlyPendingSku(true);
+      if (onClearInitialFilters) {
+        onClearInitialFilters();
+      }
+    }
+  }, [initialPendingSkuFilter, onClearInitialFilters]);
 
   const getTodayIsoDate = () => {
     const now = new Date();
@@ -352,15 +380,101 @@ export default function PhysicalStock({
   const [isEditPendingSelectorOpen, setIsEditPendingSelectorOpen] = useState(false);
   const editPendingSelectorRef = useRef<HTMLDivElement>(null);
 
+  // SKU catalog autocomplete for edit mode
+  const [isEditSkuDropdownOpen, setIsEditSkuDropdownOpen] = useState(false);
+  const [editSkuSearchTerm, setEditSkuSearchTerm] = useState('');
+  const editSkuDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (editPendingSelectorRef.current && !editPendingSelectorRef.current.contains(event.target as Node)) {
         setIsEditPendingSelectorOpen(false);
       }
+      if (editSkuDropdownRef.current && !editSkuDropdownRef.current.contains(event.target as Node)) {
+        setIsEditSkuDropdownOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Filter products by SKU or Name for the edit modal autocomplete (prioritizing exact match and prefix)
+  const filteredEditProducts = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    const term = (editSkuSearchTerm || editForm?.baseProductSku || '').trim().toLowerCase();
+    if (!term) return products;
+    return products.filter(p =>
+      (p.sku && p.sku.toLowerCase().includes(term)) ||
+      (p.name && p.name.toLowerCase().includes(term))
+    ).sort((a, b) => {
+      const aExact = a.sku?.toLowerCase() === term;
+      const bExact = b.sku?.toLowerCase() === term;
+      if (aExact && !bExact) return -1;
+      if (!aExact && bExact) return 1;
+      const aStarts = a.sku?.toLowerCase().startsWith(term);
+      const bStarts = b.sku?.toLowerCase().startsWith(term);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [products, editSkuSearchTerm, editForm?.baseProductSku]);
+
+  // Check if current editForm product matches a registered item in the base catalog
+  const matchedBaseProductInEdit = useMemo(() => {
+    if (!editForm || !products || products.length === 0) return null;
+    if (editForm.baseProductId && editForm.baseProductId !== 'unregistered' && !editForm.baseProductId.startsWith('unregistered-')) {
+      const byId = products.find(p => p.id === editForm.baseProductId);
+      if (byId) return byId;
+    }
+    const currentSku = (editForm.baseProductSku || '').trim().toLowerCase();
+    if (currentSku) {
+      return products.find(p => p.sku && p.sku.trim().toLowerCase() === currentSku) || null;
+    }
+    return null;
+  }, [editForm?.baseProductId, editForm?.baseProductSku, products]);
+
+  // Fill basic information from base catalog product into the unit being edited
+  const handleSelectEditBaseProduct = (p: BaseProduct) => {
+    if (!editForm) return;
+    const baseImgs = getBaseProductImages(p);
+    const hasPhotosProduct = (editForm.photosProduct?.length || 0) > 0;
+    const hasPhotosBox = (editForm.photosBox?.length || 0) > 0;
+    const hasPhotosAccessories = (editForm.photosAccessories?.length || 0) > 0;
+
+    setEditForm({
+      ...editForm,
+      baseProductId: p.id,
+      baseProductSku: p.sku,
+      baseProductName: p.name,
+      baseProductVoltage: (p.voltage && p.voltage !== 'N/A' ? p.voltage : (editForm.baseProductVoltage || 'Bivolt')),
+      needsSkuRegistration: false,
+      skuRegistrationPending: false,
+      unregisteredSku: undefined,
+      unregisteredProductName: undefined,
+      photosProduct: !hasPhotosProduct && baseImgs.productPhotos.length > 0 
+        ? [...baseImgs.productPhotos] 
+        : editForm.photosProduct,
+      photosBox: !hasPhotosBox && baseImgs.boxPhotos.length > 0
+        ? [...baseImgs.boxPhotos]
+        : editForm.photosBox,
+      photosAccessories: !hasPhotosAccessories && baseImgs.accessoriesPhotos.length > 0
+        ? [...baseImgs.accessoriesPhotos]
+        : editForm.photosAccessories,
+    });
+    setEditSkuSearchTerm(p.sku);
+    setIsEditSkuDropdownOpen(false);
+  };
+
+  const handleClearEditSku = () => {
+    if (!editForm) return;
+    setEditSkuSearchTerm('');
+    setEditForm({
+      ...editForm,
+      baseProductSku: '',
+      baseProductId: '',
+    });
+    setIsEditSkuDropdownOpen(true);
+  };
 
   const cleanSku = (val?: string) => {
     if (!val) return '';
@@ -646,6 +760,8 @@ export default function PhysicalStock({
     setIsCustomEditPackageStatus(false);
     setCustomEditPackageStatusText('');
     setIsEditPendingSelectorOpen(false);
+    setIsEditSkuDropdownOpen(false);
+    setEditSkuSearchTerm('');
     setIsCompareModalOpen(false);
   };
 
@@ -677,6 +793,9 @@ export default function PhysicalStock({
     const isCustomPkg = Boolean(unit.packageStatus) && !STANDARD_PACKAGE_STATUSES.includes(unit.packageStatus);
     setIsCustomEditPackageStatus(isCustomPkg);
     setCustomEditPackageStatusText(isCustomPkg ? unit.packageStatus : '');
+
+    setEditSkuSearchTerm(resolvedSku);
+    setIsEditSkuDropdownOpen(false);
 
     setIsEditingUnit(true);
   };
@@ -802,6 +921,19 @@ export default function PhysicalStock({
         updatedForm.excludeFromDailyCount = false; // Garante que será contabilizado no registro diário
       } else if (!isRealStockTransfer(updatedForm.originSector)) {
         updatedForm.originSector = undefined;
+      }
+
+      // Check if SKU matches a registered product in base catalog
+      const cleanSkuVal = (updatedForm.baseProductSku || '').trim().toLowerCase();
+      const matchedCatalog = products.find(p => p.sku && p.sku.trim().toLowerCase() === cleanSkuVal);
+      if (matchedCatalog) {
+        if (!updatedForm.baseProductId || updatedForm.baseProductId === 'unregistered' || updatedForm.baseProductId.startsWith('unregistered-')) {
+          updatedForm.baseProductId = matchedCatalog.id;
+        }
+        updatedForm.needsSkuRegistration = false;
+        updatedForm.skuRegistrationPending = false;
+        updatedForm.unregisteredSku = undefined;
+        updatedForm.unregisteredProductName = undefined;
       }
 
       // Ensure product name uses the registered system name if generic or blank
@@ -1018,6 +1150,10 @@ export default function PhysicalStock({
   // State to toggle filtering only duplicate items
   const [filterOnlyDuplicates, setFilterOnlyDuplicates] = useState(false);
 
+  // State to toggle filtering only units whose SKU is pending registration in the base catalog
+  const [filterOnlyPendingSku, setFilterOnlyPendingSku] = useState(false);
+  const [quickRegisterUnit, setQuickRegisterUnit] = useState<TriageUnit | null>(null);
+
   // Track duplicated STI Codes (trackingCode) and Serial Numbers (serialNumber) in active physical stock
   const duplicateStiSet = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -1067,6 +1203,10 @@ export default function PhysicalStock({
   const duplicateUnitsCount = React.useMemo(() => {
     return units.filter(u => u.status === 'Estoque' && (isDuplicateSti(u) || isDuplicateSerial(u))).length;
   }, [units, duplicateStiSet, duplicateSerialSet]);
+
+  const pendingSkuUnitsCount = React.useMemo(() => {
+    return units.filter(u => u.status === 'Estoque' && isUnitPendingSkuRegistration(u, products)).length;
+  }, [units, products]);
 
   // Units in the current sector tab (e.g. Todos Ativos, Principal, Openbox, RMA, Baixado)
   const tabUnits = React.useMemo(() => {
@@ -1180,6 +1320,11 @@ export default function PhysicalStock({
     const list = units.filter(unit => {
       // 0. Filter only duplicate items if toggle is active
       if (filterOnlyDuplicates && !isUnitDuplicate(unit)) {
+        return false;
+      }
+
+      // 0.1 Filter only items whose SKU is pending registration in the base catalog
+      if (filterOnlyPendingSku && !isUnitPendingSkuRegistration(unit, products)) {
         return false;
       }
 
@@ -1303,7 +1448,7 @@ export default function PhysicalStock({
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       return timeB - timeA;
     });
-  }, [units, filterOnlyDuplicates, selectedBrand, selectedCategory, selectedPlatform, selectedVoltage, selectedDate, searchTerm, activeTab, products]);
+  }, [units, filterOnlyDuplicates, filterOnlyPendingSku, selectedBrand, selectedCategory, selectedPlatform, selectedVoltage, selectedDate, searchTerm, activeTab, products]);
 
   // Reset pagination limit when search term, filters, sector tab, date, or duplicate filter changes,
   // BUT do not cap at 20 if we are navigating to a specific target unit from another tab!
@@ -1319,7 +1464,7 @@ export default function PhysicalStock({
       }
     }
     setVisibleCount(20);
-  }, [searchTerm, selectedBrand, selectedCategory, selectedVoltage, selectedDate, activeTab, filterOnlyDuplicates]);
+  }, [searchTerm, selectedBrand, selectedCategory, selectedVoltage, selectedDate, activeTab, filterOnlyDuplicates, filterOnlyPendingSku]);
 
   // Ensure visibleCount expands when a target item arrives or is highlighted
   useEffect(() => {
@@ -1859,19 +2004,31 @@ export default function PhysicalStock({
       </div>
 
       {/* Main Stock layout Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden" id="stock-main-card">
+      <div className={`rounded-2xl shadow-xl overflow-hidden border ${
+        isLight ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+      }`} id="stock-main-card">
         {/* Navigation Tabs bar */}
-        <div className="flex flex-wrap border-b border-slate-800 bg-slate-950 p-2 gap-1" id="stock-tabs">
+        <div className={`flex flex-wrap border-b p-2 gap-1 ${
+          isLight ? 'border-slate-200 bg-slate-100' : 'border-slate-800 bg-slate-950'
+        }`} id="stock-tabs">
           <button 
             onClick={() => setActiveTab('Todos')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'Todos' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/15' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'Todos' 
+                ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/15' 
+                : isLight ? 'text-slate-600 hover:text-slate-950 hover:bg-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
           >
             Todos Ativos ({units.filter(u => u.status === 'Estoque').length})
           </button>
           <button 
             onClick={() => setActiveTab('Principal')}
             id="stock-tab-principal"
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'Principal' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-slate-455 hover:text-emerald-400 hover:bg-slate-850'}`}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'Principal' 
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' 
+                : isLight ? 'text-slate-600 hover:text-emerald-700 hover:bg-white' : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
+            }`}
           >
             <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
             Estoque Principal ({units.filter(u => isUnitInSector(u, 'Principal')).length})
@@ -1879,7 +2036,11 @@ export default function PhysicalStock({
           <button 
             onClick={() => setActiveTab('Openbox')}
             id="stock-tab-openbox"
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'Openbox' ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/15' : 'text-slate-455 hover:text-amber-400 hover:bg-slate-850'}`}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'Openbox' 
+                ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/15' 
+                : isLight ? 'text-slate-600 hover:text-amber-700 hover:bg-white' : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800'
+            }`}
           >
             <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
             Openbox ({units.filter(u => isUnitInSector(u, 'Openbox')).length})
@@ -1887,7 +2048,11 @@ export default function PhysicalStock({
           <button 
             onClick={() => setActiveTab('RMA')}
             id="stock-tab-rma"
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'RMA' ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/15' : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800'}`}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'RMA' 
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/15' 
+                : isLight ? 'text-slate-600 hover:text-rose-700 hover:bg-white' : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800'
+            }`}
           >
             <span className="w-2 h-2 bg-rose-400 rounded-full"></span>
             RMA ({units.filter(u => isUnitInSector(u, 'RMA')).length})
@@ -1895,18 +2060,22 @@ export default function PhysicalStock({
           <button 
             onClick={() => setActiveTab('Outros')}
             id="stock-tab-outros"
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'Outros' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/15' : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-800'}`}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'Outros' 
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/15' 
+                : isLight ? 'text-slate-600 hover:text-indigo-700 hover:bg-white' : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-800'
+            }`}
           >
             <span className="w-2 h-2 bg-indigo-400 rounded-full"></span>
             Outros ({units.filter(u => isUnitInSector(u, 'Outros')).length})
           </button>
-          <div className="h-6 w-[1px] bg-slate-800 self-center mx-1"></div>
+          <div className={`h-6 w-[1px] self-center mx-1 ${isLight ? 'bg-slate-300' : 'bg-slate-800'}`}></div>
           <button 
             onClick={() => setActiveTab('Baixado')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
               activeTab === 'Baixado' 
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' 
-                : 'text-slate-455 hover:text-purple-400 hover:bg-slate-850'
+                : isLight ? 'text-slate-600 hover:text-purple-700 hover:bg-white' : 'text-slate-400 hover:text-purple-400 hover:bg-slate-800'
             }`}
             id="tab-btn-baixados"
           >
@@ -1916,7 +2085,9 @@ export default function PhysicalStock({
         </div>
 
         {/* Search and Filters Controls Bar */}
-        <div className="p-5 border-b border-slate-800 bg-slate-900 space-y-4" id="stock-search-bar">
+        <div className={`p-5 border-b space-y-4 ${
+          isLight ? 'border-slate-200 bg-slate-50' : 'border-slate-800 bg-slate-900'
+        }`} id="stock-search-bar">
           {/* Top row: Search input and Action controls */}
           <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
             <div className="flex flex-1 items-center gap-3 max-w-2xl">
@@ -1927,7 +2098,11 @@ export default function PhysicalStock({
                   placeholder="Pesquisar por SKU, Nome, Plataforma, STI, Serial ou Laudo..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-9 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                  className={`w-full pl-10 pr-9 py-2.5 rounded-xl text-sm transition-colors focus:outline-none ${
+                    isLight
+                      ? 'bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-sky-500 shadow-2xs font-medium'
+                      : 'bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 focus:border-sky-500'
+                  }`}
                   id="input-stock-search"
                 />
                 {searchTerm && (
@@ -1948,10 +2123,10 @@ export default function PhysicalStock({
                   onClick={handleToggleSelectAll}
                   className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer select-none shrink-0 ${
                     filteredUnits.every(u => selectedUnitIds.includes(u.id))
-                      ? 'bg-sky-500/10 border-sky-500/40 text-sky-400 shadow-sm'
+                      ? isLight ? 'bg-sky-100 border-sky-400 text-sky-800 shadow-sm' : 'bg-sky-500/10 border-sky-500/40 text-sky-400 shadow-sm'
                       : selectedUnitIds.length > 0
-                      ? 'bg-sky-950/40 border-sky-800/50 text-sky-300'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                      ? isLight ? 'bg-sky-50 border-sky-300 text-sky-700' : 'bg-sky-950/40 border-sky-800/50 text-sky-300'
+                      : isLight ? 'bg-white border-slate-300 text-slate-700 hover:border-slate-400 hover:text-slate-950 shadow-2xs' : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
                   }`}
                   id="btn-select-all"
                   title={filteredUnits.every(u => selectedUnitIds.includes(u.id)) ? "Deselecionar todos" : "Selecionar todos os produtos filtrados"}
@@ -2043,13 +2218,42 @@ export default function PhysicalStock({
                 )}
               </button>
 
+              {/* Filter Pending SKU Registration button */}
+              <button 
+                type="button"
+                onClick={() => setFilterOnlyPendingSku(prev => !prev)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  filterOnlyPendingSku
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-lg shadow-amber-500/20 scale-105'
+                    : pendingSkuUnitsCount > 0
+                    ? isLight
+                      ? 'bg-amber-100 border-amber-400 text-amber-950 hover:bg-amber-200'
+                      : 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
+                    : isLight
+                    ? 'bg-white border-slate-300 text-slate-600 hover:text-slate-900'
+                    : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
+                }`}
+                title="Filtrar produtos que deram entrada sem SKU previamente cadastrado na base"
+                id="btn-filter-pending-skus"
+              >
+                <Tag className={`w-3.5 h-3.5 ${filterOnlyPendingSku ? 'text-slate-950' : (isLight ? 'text-amber-800' : 'text-amber-400')}`} />
+                <span>{filterOnlyPendingSku ? 'Apenas SKUs Pendentes' : `SKUs Pendentes (${pendingSkuUnitsCount})`}</span>
+                {pendingSkuUnitsCount > 0 && !filterOnlyPendingSku && (
+                  <span className={`w-2 h-2 rounded-full ${isLight ? 'bg-amber-600' : 'bg-amber-400 animate-pulse'}`}></span>
+                )}
+              </button>
+
               {/* View switcher: Grid vs List/Linhas */}
-              <div className="view-switcher-container flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-0.5" id="stock-view-switcher">
+              <div className={`view-switcher-container flex p-1 rounded-xl border gap-0.5 ${
+                isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-950 border-slate-800'
+              }`} id="stock-view-switcher">
                 <button
                   onClick={() => handleSetViewMode('grid')}
                   className={`view-switcher-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     viewMode === 'grid' 
                       ? 'view-switcher-active bg-sky-500 text-white shadow-sm' 
+                      : isLight 
+                      ? 'view-switcher-inactive text-slate-600 hover:text-slate-950 hover:bg-white font-semibold' 
                       : 'view-switcher-inactive text-slate-400 hover:text-white hover:bg-slate-900'
                   }`}
                   title="Visualização em Grade"
@@ -2063,6 +2267,8 @@ export default function PhysicalStock({
                   className={`view-switcher-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     viewMode === 'list' 
                       ? 'view-switcher-active bg-sky-500 text-white shadow-sm' 
+                      : isLight 
+                      ? 'view-switcher-inactive text-slate-600 hover:text-slate-950 hover:bg-white font-semibold' 
                       : 'view-switcher-inactive text-slate-400 hover:text-white hover:bg-slate-900'
                   }`}
                   title="Visualização em Linhas"
@@ -2076,11 +2282,15 @@ export default function PhysicalStock({
           </div>
 
           {/* Filter Controls Row: Marcas, Categoria, Plataforma, Voltagem, Data de Registro */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-3 border-t border-slate-800" id="stock-filter-controls">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-3 border-t ${
+            isLight ? 'border-slate-200' : 'border-slate-800'
+          }`} id="stock-filter-controls">
             {/* 1. Filter by Marca (Brand) */}
             <div className="space-y-1">
               <div className="h-5 flex items-center">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <label className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                  isLight ? 'text-slate-700' : 'text-slate-400'
+                }`}>
                   <Sliders className="w-3 h-3 text-purple-400" />
                   <span>Marca</span>
                 </label>
@@ -2088,8 +2298,14 @@ export default function PhysicalStock({
               <select
                 value={selectedBrand}
                 onChange={(e) => setSelectedBrand(e.target.value)}
-                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors truncate ${
-                  selectedBrand !== 'Todas' ? 'border-purple-500/50 bg-purple-950/20 text-purple-300' : 'border-slate-800'
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-sky-500 transition-colors truncate cursor-pointer ${
+                  isLight
+                    ? selectedBrand !== 'Todas'
+                      ? 'border-purple-400 bg-purple-50 text-purple-950 font-bold shadow-2xs'
+                      : 'bg-white border-slate-300 text-slate-800 hover:border-slate-400 shadow-2xs'
+                    : selectedBrand !== 'Todas'
+                      ? 'border-purple-500/50 bg-purple-950/20 text-purple-300'
+                      : 'bg-slate-950 border-slate-800 text-slate-200'
                 }`}
                 id="select-filter-stock-brand"
               >
@@ -2103,7 +2319,9 @@ export default function PhysicalStock({
             {/* 2. Filter by Categoria */}
             <div className="space-y-1">
               <div className="h-5 flex items-center">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <label className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                  isLight ? 'text-slate-700' : 'text-slate-400'
+                }`}>
                   <Layers className="w-3 h-3 text-emerald-400" />
                   <span>Categoria</span>
                 </label>
@@ -2111,8 +2329,14 @@ export default function PhysicalStock({
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors truncate ${
-                  selectedCategory !== 'Todas' ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' : 'border-slate-800'
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-sky-500 transition-colors truncate cursor-pointer ${
+                  isLight
+                    ? selectedCategory !== 'Todas'
+                      ? 'border-emerald-400 bg-emerald-50 text-emerald-950 font-bold shadow-2xs'
+                      : 'bg-white border-slate-300 text-slate-800 hover:border-slate-400 shadow-2xs'
+                    : selectedCategory !== 'Todas'
+                      ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300'
+                      : 'bg-slate-950 border-slate-800 text-slate-200'
                 }`}
                 id="select-filter-stock-category"
               >
@@ -2123,7 +2347,7 @@ export default function PhysicalStock({
                       <option 
                         key={opt.value} 
                         value={opt.value}
-                        className={opt.isGeneralHeader ? 'font-bold text-emerald-400 bg-slate-900' : 'pl-4'}
+                        className={opt.isGeneralHeader ? (isLight ? 'font-bold text-emerald-800 bg-emerald-50' : 'font-bold text-emerald-400 bg-slate-900') : 'pl-4'}
                       >
                         {opt.label}
                       </option>
@@ -2136,7 +2360,9 @@ export default function PhysicalStock({
             {/* 2.5 Filter by Plataforma */}
             <div className="space-y-1">
               <div className="h-5 flex items-center">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <label className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                  isLight ? 'text-slate-700' : 'text-slate-400'
+                }`}>
                   <ShoppingCart className={`w-3 h-3 ${selectedPlatform !== 'Todas' ? getPlatformFilterStyle(selectedPlatform).dotClasses.replace('bg-', 'text-') : 'text-sky-400'}`} />
                   <span>Plataforma</span>
                 </label>
@@ -2144,8 +2370,14 @@ export default function PhysicalStock({
               <select
                 value={selectedPlatform}
                 onChange={(e) => setSelectedPlatform(e.target.value)}
-                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold focus:outline-none transition-colors truncate ${
-                  selectedPlatform !== 'Todas' ? getPlatformFilterStyle(selectedPlatform).selectClasses : 'border-slate-800 text-slate-200'
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none transition-colors truncate cursor-pointer ${
+                  isLight
+                    ? selectedPlatform !== 'Todas'
+                      ? getPlatformFilterStyle(selectedPlatform).selectClasses
+                      : 'bg-white border-slate-300 text-slate-800 hover:border-slate-400 shadow-2xs'
+                    : selectedPlatform !== 'Todas'
+                      ? `bg-slate-950 ${getPlatformFilterStyle(selectedPlatform).selectClasses}`
+                      : 'bg-slate-950 border-slate-800 text-slate-200'
                 }`}
                 id="select-filter-stock-platform"
               >
@@ -2163,7 +2395,9 @@ export default function PhysicalStock({
             {/* 3. Filter by Voltagem */}
             <div className="space-y-1">
               <div className="h-5 flex items-center">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <label className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                  isLight ? 'text-slate-700' : 'text-slate-400'
+                }`}>
                   <Zap className="w-3 h-3 text-amber-400" />
                   <span>Tensão / Voltagem</span>
                 </label>
@@ -2171,8 +2405,14 @@ export default function PhysicalStock({
               <select
                 value={selectedVoltage}
                 onChange={(e) => setSelectedVoltage(e.target.value)}
-                className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors truncate ${
-                  selectedVoltage !== 'Todas' ? 'border-amber-500/50 bg-amber-950/20 text-amber-300' : 'border-slate-800'
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-sky-500 transition-colors truncate cursor-pointer ${
+                  isLight
+                    ? selectedVoltage !== 'Todas'
+                      ? 'border-amber-400 bg-amber-50 text-amber-950 font-bold shadow-2xs'
+                      : 'bg-white border-slate-300 text-slate-800 hover:border-slate-400 shadow-2xs'
+                    : selectedVoltage !== 'Todas'
+                      ? 'border-amber-500/50 bg-amber-950/20 text-amber-300'
+                      : 'bg-slate-950 border-slate-800 text-slate-200'
                 }`}
                 id="select-filter-stock-voltage"
               >
@@ -2187,7 +2427,9 @@ export default function PhysicalStock({
             {/* 4. Filter by Data de Registro */}
             <div className="space-y-1">
               <div className="h-5 flex items-center justify-between">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <label className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                  isLight ? 'text-slate-700' : 'text-slate-400'
+                }`}>
                   <Calendar className="w-3 h-3 text-sky-400" />
                   <span>Data de Registro</span>
                 </label>
@@ -2197,7 +2439,9 @@ export default function PhysicalStock({
                     onClick={() => setSelectedDate(getTodayIsoDate())}
                     className={`text-[9px] px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
                       selectedDate === getTodayIsoDate()
-                        ? 'bg-sky-500 text-white'
+                        ? 'bg-sky-500 text-white shadow-xs'
+                        : isLight
+                        ? 'bg-white border border-slate-300 text-slate-700 hover:text-slate-950 hover:bg-slate-100 shadow-2xs'
                         : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
                     }`}
                     title="Filtrar produtos registrados hoje"
@@ -2209,7 +2453,9 @@ export default function PhysicalStock({
                     onClick={() => setSelectedDate(getYesterdayIsoDate())}
                     className={`text-[9px] px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
                       selectedDate === getYesterdayIsoDate()
-                        ? 'bg-sky-500 text-white'
+                        ? 'bg-sky-500 text-white shadow-xs'
+                        : isLight
+                        ? 'bg-white border border-slate-300 text-slate-700 hover:text-slate-950 hover:bg-slate-100 shadow-2xs'
                         : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
                     }`}
                     title="Filtrar produtos registrados ontem"
@@ -2220,7 +2466,9 @@ export default function PhysicalStock({
                     <button
                       type="button"
                       onClick={() => setSelectedDate('')}
-                      className="text-[9px] px-1.5 py-0.5 rounded font-bold text-rose-400 hover:bg-rose-500/20 cursor-pointer transition-colors"
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-bold cursor-pointer transition-colors ${
+                        isLight ? 'text-rose-700 hover:bg-rose-100' : 'text-rose-400 hover:bg-rose-500/20'
+                      }`}
                       title="Limpar filtro de data"
                     >
                       Limpar
@@ -2260,8 +2508,18 @@ export default function PhysicalStock({
                     }
                   }}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500 transition-colors cursor-pointer [color-scheme:dark] ${
-                    selectedDate ? 'border-sky-500/50 bg-sky-950/20 text-sky-300' : 'border-slate-800'
+                  className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-sky-500 transition-colors cursor-pointer ${
+                    isLight
+                      ? `[color-scheme:light] ${
+                          selectedDate
+                            ? 'border-sky-500 bg-sky-50 text-sky-950 font-bold shadow-2xs'
+                            : 'bg-white border-slate-300 text-slate-800 hover:border-slate-400 shadow-2xs'
+                        }`
+                      : `[color-scheme:dark] ${
+                          selectedDate
+                            ? 'border-sky-500/50 bg-sky-950/20 text-sky-300'
+                            : 'bg-slate-950 border-slate-800 text-slate-200'
+                        }`
                   }`}
                   id="input-filter-stock-date"
                 />
@@ -2270,13 +2528,15 @@ export default function PhysicalStock({
           </div>
 
           {/* Active Filter Badges & Results Counter Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800 text-xs text-slate-400" id="stock-filter-summary">
+          <div className={`flex flex-wrap items-center justify-between gap-3 pt-3 border-t text-xs ${
+            isLight ? 'border-slate-200 text-slate-700' : 'border-slate-800 text-slate-400'
+          }`} id="stock-filter-summary">
             <div className="flex items-center gap-2 flex-wrap">
-              <Filter className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <Filter className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-sky-600' : 'text-sky-400'}`} />
               <span>
-                Exibindo <strong className="text-sky-400">{displayedUnits.length}</strong> de <strong className="text-white">{filteredUnits.length}</strong> {filteredUnits.length === 1 ? 'unidade' : 'unidades'}
+                Exibindo <strong className={isLight ? 'text-sky-700 font-bold' : 'text-sky-400'}>{displayedUnits.length}</strong> de <strong className={isLight ? 'text-slate-950 font-bold' : 'text-white'}>{filteredUnits.length}</strong> {filteredUnits.length === 1 ? 'unidade' : 'unidades'}
                 {activeTab !== 'Todos' && (
-                  <span className="text-slate-500 ml-1">
+                  <span className={`ml-1 ${isLight ? 'text-slate-600' : 'text-slate-500'}`}>
                     no setor {activeTab}
                   </span>
                 )}
@@ -2286,7 +2546,11 @@ export default function PhysicalStock({
                 <button
                   type="button"
                   onClick={handleClearAllFilters}
-                  className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-sky-400 hover:text-sky-300 rounded-lg text-[11px] font-bold border border-slate-700 transition-colors cursor-pointer"
+                  className={`ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                    isLight 
+                      ? 'bg-sky-50 text-sky-700 border-sky-300 hover:bg-sky-100' 
+                      : 'bg-slate-800 hover:bg-slate-750 text-sky-400 hover:text-sky-300 border-slate-700'
+                  }`}
                   id="btn-clear-stock-filters"
                   title="Remover todos os filtros aplicados"
                 >
@@ -2300,12 +2564,14 @@ export default function PhysicalStock({
             {hasActiveFilters && (
               <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
                 {selectedBrand !== 'Todas' && (
-                  <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300 font-medium flex items-center gap-1">
+                  <span className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                    isLight ? 'bg-purple-100 border-purple-300 text-purple-950 font-bold shadow-2xs' : 'bg-purple-500/10 border-purple-500/30 text-purple-300 font-medium'
+                  }`}>
                     <span>Marca: {selectedBrand}</span>
                     <button 
                       type="button" 
                       onClick={() => setSelectedBrand('Todas')} 
-                      className="hover:text-white transition-colors cursor-pointer"
+                      className={`transition-colors cursor-pointer ${isLight ? 'text-purple-700 hover:text-rose-600' : 'hover:text-white'}`}
                       title="Remover filtro de Marca"
                     >
                       <X className="w-2.5 h-2.5" />
@@ -2313,12 +2579,14 @@ export default function PhysicalStock({
                   </span>
                 )}
                 {selectedCategory !== 'Todas' && (
-                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-medium flex items-center gap-1">
+                  <span className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                    isLight ? 'bg-emerald-100 border-emerald-300 text-emerald-950 font-bold shadow-2xs' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-medium'
+                  }`}>
                     <span>Cat: {selectedCategory}</span>
                     <button 
                       type="button" 
                       onClick={() => setSelectedCategory('Todas')} 
-                      className="hover:text-white transition-colors cursor-pointer"
+                      className={`transition-colors cursor-pointer ${isLight ? 'text-emerald-700 hover:text-rose-600' : 'hover:text-white'}`}
                       title="Remover filtro de Categoria"
                     >
                       <X className="w-2.5 h-2.5" />
@@ -2366,12 +2634,14 @@ export default function PhysicalStock({
                   );
                 })()}
                 {selectedVoltage !== 'Todas' && (
-                  <span className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 font-medium flex items-center gap-1">
+                  <span className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                    isLight ? 'bg-amber-100 border-amber-300 text-amber-950 font-bold shadow-2xs' : 'bg-amber-500/10 border-amber-500/30 text-amber-300 font-medium'
+                  }`}>
                     <span>Voltagem: {selectedVoltage}</span>
                     <button 
                       type="button" 
                       onClick={() => setSelectedVoltage('Todas')} 
-                      className="hover:text-white transition-colors cursor-pointer"
+                      className={`transition-colors cursor-pointer ${isLight ? 'text-amber-700 hover:text-rose-600' : 'hover:text-white'}`}
                       title="Remover filtro de Voltagem"
                     >
                       <X className="w-2.5 h-2.5" />
@@ -2379,13 +2649,15 @@ export default function PhysicalStock({
                   </span>
                 )}
                 {selectedDate && (
-                  <span className="px-2 py-0.5 rounded-md bg-sky-500/10 border border-sky-500/30 text-sky-300 font-medium flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-sky-400" />
+                  <span className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                    isLight ? 'bg-sky-100 border-sky-300 text-sky-950 font-bold shadow-2xs' : 'bg-sky-500/10 border-sky-500/30 text-sky-300 font-medium'
+                  }`}>
+                    <Calendar className={`w-3 h-3 ${isLight ? 'text-sky-700' : 'text-sky-400'}`} />
                     <span>Data: {new Date(`${selectedDate}T12:00:00`).toLocaleDateString('pt-BR')}</span>
                     <button 
                       type="button" 
                       onClick={() => setSelectedDate('')} 
-                      className="hover:text-white transition-colors cursor-pointer"
+                      className={`transition-colors cursor-pointer ${isLight ? 'text-sky-700 hover:text-rose-600' : 'hover:text-white'}`}
                       title="Remover filtro de Data"
                     >
                       <X className="w-2.5 h-2.5" />
@@ -2393,12 +2665,14 @@ export default function PhysicalStock({
                   </span>
                 )}
                 {searchTerm && (
-                  <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300 flex items-center gap-1">
+                  <span className={`px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                    isLight ? 'bg-slate-100 border-slate-300 text-slate-800 font-bold shadow-2xs' : 'bg-slate-800 border-slate-700 text-slate-300'
+                  }`}>
                     <span>Busca: "{searchTerm}"</span>
                     <button 
                       type="button" 
                       onClick={() => setSearchTerm('')} 
-                      className="hover:text-white transition-colors cursor-pointer"
+                      className={`transition-colors cursor-pointer ${isLight ? 'text-slate-600 hover:text-rose-600' : 'hover:text-white'}`}
                       title="Limpar texto de busca"
                     >
                       <X className="w-2.5 h-2.5" />
@@ -2542,6 +2816,24 @@ export default function PhysicalStock({
                             <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
                             Pedido Selecionado
                           </span>
+                        )}
+                        {isUnitPendingSkuRegistration(unit, products) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setQuickRegisterUnit(unit);
+                            }}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold transition-colors cursor-pointer border ${
+                              isLight 
+                                ? 'text-amber-950 bg-amber-100 border-amber-400 hover:bg-amber-200' 
+                                : 'text-amber-300 bg-amber-500/20 border-amber-500/40 hover:bg-amber-500/30 font-bold'
+                            }`}
+                            title="Este pedido deu entrada sem SKU na base. Clique para cadastrar no catálogo agora."
+                          >
+                            <AlertTriangle className={`w-2.5 h-2.5 ${isLight ? 'text-amber-800' : 'text-amber-400'}`} />
+                            <span>SKU Pendente</span>
+                          </button>
                         )}
                         <button
                           type="button"
@@ -2940,6 +3232,24 @@ export default function PhysicalStock({
                             </>
                           )}
                         </button>
+                        {isUnitPendingSkuRegistration(unit, products) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setQuickRegisterUnit(unit);
+                            }}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold transition-colors cursor-pointer shrink-0 border ${
+                              isLight 
+                                ? 'text-amber-950 bg-amber-100 border-amber-400 hover:bg-amber-200' 
+                                : 'text-amber-300 bg-amber-500/20 border-amber-500/40 hover:bg-amber-500/30 font-bold'
+                            }`}
+                            title="SKU não cadastrado na base. Clique para cadastrar este produto no catálogo agora."
+                          >
+                            <AlertTriangle className={`w-2.5 h-2.5 ${isLight ? 'text-amber-800' : 'text-amber-400'}`} />
+                            <span>Cadastrar SKU</span>
+                          </button>
+                        )}
                         {(() => {
                           const isSti = unit.destinationSector === 'Openbox';
                           const code = isSti 
@@ -3397,6 +3707,43 @@ export default function PhysicalStock({
               </div>
             </div>
 
+            {/* SKU Pending Registration Warning Banner */}
+            {isUnitPendingSkuRegistration(currentUnit, products) && (
+              <div className={`px-6 py-3.5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                isLight 
+                  ? 'bg-amber-50/95 border-amber-300 text-amber-950' 
+                  : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+              }`}>
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-1.5 rounded-lg shrink-0 border ${
+                    isLight ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-amber-500/20 text-amber-400 border-transparent'
+                  }`}>
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className={`text-xs ${isLight ? 'text-amber-950 font-black' : 'text-amber-300 font-bold'}`}>
+                      SKU Pendente de Cadastro no Catálogo Base
+                    </h4>
+                    <p className={`text-[11px] ${isLight ? 'text-amber-900/90 font-medium' : 'text-amber-200/80'}`}>
+                      Este produto deu entrada no estoque com o SKU <strong className={`font-mono ${isLight ? 'text-amber-950 font-black' : 'text-amber-300'}`}>"{currentUnit.baseProductSku}"</strong> sem registro prévio na base.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQuickRegisterUnit(currentUnit)}
+                  className={`px-3.5 py-1.5 rounded-xl transition-all shrink-0 cursor-pointer shadow-md flex items-center justify-center gap-1.5 text-xs font-black ${
+                    isLight 
+                      ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/20 border border-amber-400' 
+                      : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
+                  }`}
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  <span>Cadastrar SKU na Base</span>
+                </button>
+              </div>
+            )}
+
             {/* Modal Body: Switch between View Mode and Edit Mode */}
             {isEditingUnit && editForm ? (
               /* EDIT MODE CONTENT */
@@ -3415,60 +3762,283 @@ export default function PhysicalStock({
                 </div>
 
                 {/* Section 1: Main Info */}
-                <div className="space-y-4 bg-slate-950 p-5 border border-slate-800 rounded-xl">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
-                    <Package className="w-4 h-4" />
-                    Dados Principais & Identificação Técnica
-                  </h4>
+                <div className={`space-y-4 p-5 rounded-xl border ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'
+                }`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                      <Package className="w-4 h-4" />
+                      Dados Principais & Identificação Técnica
+                    </h4>
+                    {matchedBaseProductInEdit ? (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                        isLight 
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
+                          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      }`}>
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        <span>Vinculado ao Catálogo Base</span>
+                      </span>
+                    ) : editForm.baseProductSku?.trim() ? (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                        isLight 
+                          ? 'bg-amber-50 text-amber-900 border-amber-300' 
+                          : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      }`}>
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>SKU Avulso (Não Cadastrado na Base)</span>
+                      </span>
+                    ) : null}
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="sm:col-span-3">
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        Nome do Produto
-                      </label>
+                    {/* SKU with Autocomplete Dropdown */}
+                    <div className="sm:col-span-1 relative" ref={editSkuDropdownRef}>
+                      <div className="flex items-center justify-between mb-1 min-h-[18px]">
+                        <label className={`block text-[11px] font-bold ${
+                          isLight ? 'text-slate-800' : 'text-slate-300'
+                        }`}>
+                          Código SKU *
+                        </label>
+                        {editForm.baseProductSku && (
+                          <button
+                            type="button"
+                            onClick={handleClearEditSku}
+                            className={`text-[10px] font-semibold flex items-center gap-0.5 cursor-pointer transition-colors ${
+                              isLight ? 'text-slate-600 hover:text-rose-600' : 'text-slate-400 hover:text-rose-400'
+                            }`}
+                            title="Trocar / Limpar SKU para buscar outro na base"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                            <span>Trocar</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
+                          <Search className="w-3.5 h-3.5" />
+                        </div>
+
+                        <input 
+                          type="text" 
+                          value={editForm.baseProductSku} 
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditSkuSearchTerm(val);
+                            setEditForm({ ...editForm, baseProductSku: val });
+                            setIsEditSkuDropdownOpen(true);
+                            const clean = val.trim().toLowerCase();
+                            const exact = products.find(p => p.sku && p.sku.toLowerCase() === clean);
+                            if (exact) {
+                              setEditForm(prev => prev ? {
+                                ...prev,
+                                baseProductId: exact.id,
+                                baseProductSku: exact.sku,
+                                baseProductName: exact.name,
+                                baseProductVoltage: (exact.voltage && exact.voltage !== 'N/A' ? exact.voltage : (prev.baseProductVoltage || 'Bivolt')),
+                                needsSkuRegistration: false,
+                                skuRegistrationPending: false,
+                                unregisteredSku: undefined,
+                                unregisteredProductName: undefined,
+                              } : null);
+                            }
+                          }} 
+                          onFocus={() => setIsEditSkuDropdownOpen(true)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && filteredEditProducts.length > 0) {
+                              e.preventDefault();
+                              handleSelectEditBaseProduct(filteredEditProducts[0]);
+                            } else if (e.key === 'Escape') {
+                              setIsEditSkuDropdownOpen(false);
+                            }
+                          }}
+                          className={`w-full pl-9 pr-14 py-2.5 rounded-lg text-xs font-mono font-bold focus:outline-none transition-all uppercase ${
+                            matchedBaseProductInEdit
+                              ? isLight 
+                                ? 'bg-sky-50/70 border-2 border-sky-500 text-sky-950 font-extrabold shadow-2xs'
+                                : 'bg-sky-950/30 border border-sky-500/70 text-sky-300'
+                              : isLight
+                                ? 'bg-white border border-slate-300 text-slate-900 focus:border-sky-500 shadow-2xs'
+                                : 'bg-slate-900 border border-slate-700 text-white focus:border-sky-500'
+                          }`} 
+                          placeholder="Bipar ou digitar SKU..."
+                          autoComplete="off"
+                          id="edit-unit-sku-input"
+                        />
+
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          {editForm.baseProductSku && (
+                            <button
+                              type="button"
+                              onClick={handleClearEditSku}
+                              className="p-1 text-slate-400 hover:text-slate-200 rounded transition-colors cursor-pointer"
+                              title="Limpar SKU"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setIsEditSkuDropdownOpen(prev => !prev)}
+                            className="p-1 text-slate-400 hover:text-slate-200 rounded transition-colors cursor-pointer"
+                            title="Listar todos os SKUs da base"
+                          >
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isEditSkuDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Autocomplete Dropdown */}
+                      {isEditSkuDropdownOpen && (
+                        <div className={`absolute left-0 top-full mt-1.5 w-full sm:w-[460px] rounded-xl shadow-2xl z-50 max-h-64 overflow-y-auto divide-y border animate-in fade-in duration-100 ${
+                          isLight 
+                            ? 'bg-white border-slate-300 divide-slate-100 text-slate-900 shadow-xl' 
+                            : 'bg-slate-950 border-slate-700/80 divide-slate-800/60 text-slate-100'
+                        }`}>
+                          <div className={`p-2 text-[10px] flex items-center justify-between border-b font-medium sticky top-0 z-10 ${
+                            isLight ? 'bg-slate-100 border-slate-200 text-slate-600' : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}>
+                            <span className={`font-bold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                              {filteredEditProducts.length} {filteredEditProducts.length === 1 ? 'produto registrado' : 'produtos registrados'}
+                            </span>
+                            <span className="text-[10px] text-sky-400">Clique para preencher dados básicos</span>
+                          </div>
+
+                          {filteredEditProducts.length === 0 ? (
+                            <div className="p-3.5 text-center space-y-1.5">
+                              <p className={`text-xs font-medium ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
+                                Nenhum produto cadastrado com este SKU ou Nome.
+                              </p>
+                              <p className={`text-[10.5px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                                O pedido será salvo com o SKU avulso digitado.
+                              </p>
+                            </div>
+                          ) : (
+                            filteredEditProducts.map((p) => {
+                              const isSelected = editForm.baseProductId === p.id || (p.sku && p.sku.toLowerCase() === editForm.baseProductSku?.trim().toLowerCase());
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => handleSelectEditBaseProduct(p)}
+                                  className={`w-full text-left p-2.5 transition-colors flex items-center justify-between gap-2.5 cursor-pointer ${
+                                    isSelected 
+                                      ? isLight 
+                                        ? 'bg-sky-50 border-l-3 border-sky-600' 
+                                        : 'bg-sky-500/15 border-l-3 border-sky-400'
+                                      : isLight 
+                                        ? 'hover:bg-slate-100' 
+                                        : 'hover:bg-slate-800/80'
+                                  }`}
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded border ${
+                                        isLight 
+                                          ? 'bg-slate-100 text-sky-800 border-slate-300' 
+                                          : 'bg-slate-950 text-sky-400 border-slate-800'
+                                      }`}>
+                                        {p.sku}
+                                      </span>
+                                      {p.voltage && p.voltage !== 'N/A' && (
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                          isLight ? 'bg-slate-200 text-slate-700' : 'bg-slate-900 text-slate-400'
+                                        }`}>
+                                          {p.voltage}
+                                        </span>
+                                      )}
+                                      {p.brand && p.brand !== 'N/A' && (
+                                        <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded border ${
+                                          isLight 
+                                            ? 'bg-purple-50 text-purple-800 border-purple-200' 
+                                            : 'bg-purple-500/10 text-purple-300 border-purple-500/30'
+                                        }`}>
+                                          {p.brand}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className={`text-[11px] font-medium mt-1 truncate ${
+                                      isLight ? 'text-slate-800' : 'text-slate-200'
+                                    }`}>
+                                      {p.name}
+                                    </p>
+                                  </div>
+                                  {isSelected && (
+                                    <span className="text-sky-500 text-xs shrink-0 flex items-center gap-1 font-bold">
+                                      <Check className="w-4 h-4 stroke-[2.5]" />
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Nome do Produto */}
+                    <div className="sm:col-span-2">
+                      <div className="flex items-center justify-between mb-1 min-h-[18px]">
+                        <label className={`block text-[11px] font-bold ${
+                          isLight ? 'text-slate-800' : 'text-slate-300'
+                        }`}>
+                          Nome do Produto *
+                        </label>
+                        {matchedBaseProductInEdit && (
+                          <span className={`text-[10px] ${
+                            isLight ? 'text-slate-600 font-medium' : 'text-slate-400'
+                          }`}>
+                            Preenchido da base (editável)
+                          </span>
+                        )}
+                      </div>
                       <input 
                         type="text" 
                         value={editForm.baseProductName} 
                         onChange={(e) => setEditForm({ ...editForm, baseProductName: e.target.value })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500" 
+                        className={`w-full rounded-lg p-2.5 text-xs font-bold focus:outline-none transition-colors border ${
+                          isLight 
+                            ? 'bg-white border-slate-300 text-slate-900 focus:border-sky-500 shadow-2xs' 
+                            : 'bg-slate-900 border-slate-700 text-white focus:border-sky-500'
+                        }`} 
                         placeholder="Nome do produto"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        SKU
-                      </label>
-                      <input 
-                        type="text" 
-                        value={editForm.baseProductSku} 
-                        onChange={(e) => setEditForm({ ...editForm, baseProductSku: e.target.value })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-sky-400 font-mono focus:outline-none focus:border-sky-500" 
-                        placeholder="Ex: 1650"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      <label className={`block text-[11px] font-bold mb-1 ${
+                        isLight ? 'text-slate-800' : 'text-slate-300'
+                      }`}>
                         Número de Série (S/N)
                       </label>
                       <input 
                         type="text" 
                         value={editForm.serialNumber || ''} 
                         onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
+                        className={`w-full rounded-lg p-2.5 text-xs font-bold font-mono focus:outline-none transition-colors border ${
+                          isLight 
+                            ? 'bg-white border-slate-300 text-slate-900 focus:border-sky-500 shadow-2xs' 
+                            : 'bg-slate-900 border-slate-700 text-slate-200 focus:border-sky-500'
+                        }`} 
                         placeholder="Ex: SN-123456789-BR"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      <label className={`block text-[11px] font-bold mb-1 ${
+                        isLight ? 'text-slate-800' : 'text-slate-300'
+                      }`}>
                         Voltagem Elétrica
                       </label>
                       <select 
                         value={editForm.baseProductVoltage || 'Bivolt'} 
                         onChange={(e) => setEditForm({ ...editForm, baseProductVoltage: e.target.value })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                        className={`w-full rounded-lg p-2.5 text-xs font-bold focus:outline-none cursor-pointer transition-colors border ${
+                          isLight 
+                            ? 'bg-white border-slate-300 text-slate-900 focus:border-sky-500 shadow-2xs' 
+                            : 'bg-slate-900 border-slate-700 text-white focus:border-sky-500'
+                        }`}
                       >
                         <option value="Bivolt">Bivolt</option>
                         <option value="110V / 127V">110V / 127V</option>
@@ -3479,13 +4049,19 @@ export default function PhysicalStock({
 
                     {/* Plataforma de Origem */}
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      <label className={`block text-[11px] font-bold mb-1 ${
+                        isLight ? 'text-slate-800' : 'text-slate-300'
+                      }`}>
                         Plataforma de Origem
                       </label>
                       <select 
                         value={(editForm.platform as string) === 'Outro' ? 'Outros' : (editForm.platform || '')} 
                         onChange={(e) => setEditForm({ ...editForm, platform: (e.target.value === 'Outro' ? 'Outros' : e.target.value) as PlatformType })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                        className={`w-full rounded-lg p-2.5 text-xs font-bold focus:outline-none cursor-pointer transition-colors border ${
+                          isLight 
+                            ? 'bg-white border-slate-300 text-slate-900 focus:border-sky-500 shadow-2xs' 
+                            : 'bg-slate-900 border-slate-700 text-white focus:border-sky-500'
+                        }`}
                         id="edit-unit-platform"
                       >
                         <option value="">Sem Plataforma / Não informada</option>
@@ -3698,13 +4274,19 @@ export default function PhysicalStock({
                     </div>
 
                     <div className="sm:col-span-3">
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      <label className={`block text-[11px] font-bold mb-1 ${
+                        isLight ? 'text-slate-700' : 'text-slate-300'
+                      }`}>
                         Setor de Destino
                       </label>
                       <select 
                         value={editForm.destinationSector} 
                         onChange={(e) => setEditForm({ ...editForm, destinationSector: e.target.value as DestinationSectorType })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                        className={`w-full border rounded-lg p-2.5 text-xs font-bold focus:outline-none focus:border-sky-500 cursor-pointer ${
+                          isLight 
+                            ? 'bg-white border-slate-300 text-slate-900 shadow-2xs' 
+                            : 'bg-slate-900 border-slate-700 text-white'
+                        }`}
                       >
                         <option value="Principal">Estoque Principal (Prontos / Novos)</option>
                         <option value="Openbox">Openbox (Outlet / Revisados)</option>
@@ -3712,10 +4294,14 @@ export default function PhysicalStock({
                         <option value="Outros">Outros (Estoque Geral)</option>
                       </select>
                       {isRealStockTransfer(editForm.originSector) && (
-                        <p className="text-[10.5px] text-amber-400/95 flex items-center gap-1.5 mt-1.5 bg-amber-500/10 border border-amber-500/25 px-2.5 py-1.5 rounded-lg">
-                          <ArrowRightLeft className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                        <p className={`text-[10.5px] flex items-center gap-1.5 mt-1.5 border px-2.5 py-1.5 rounded-lg ${
+                          isLight 
+                            ? 'bg-amber-50 border-amber-300 text-amber-950 font-semibold' 
+                            : 'bg-amber-500/10 border-amber-500/25 text-amber-400/95'
+                        }`}>
+                          <ArrowRightLeft className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-amber-700' : 'text-amber-400'}`} />
                           <span>
-                            Estoque de Origem: <strong className="text-amber-300">{editForm.originSector}</strong>
+                            Estoque de Origem: <strong className={isLight ? 'text-amber-950 font-black' : 'text-amber-300'}>{editForm.originSector}</strong>
                             {editForm.initialEntryDate ? ` (Entrada inicial: ${new Date(editForm.initialEntryDate).toLocaleDateString('pt-BR')})` : ''}
                           </span>
                         </p>
@@ -3723,19 +4309,27 @@ export default function PhysicalStock({
 
                       {/* Explicit Openbox STI requirement notice & input */}
                       {editForm.destinationSector === 'Openbox' && (
-                        <div className="mt-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 animate-in fade-in duration-200">
+                        <div className={`mt-2.5 p-3 rounded-xl border space-y-1.5 animate-in fade-in duration-200 ${
+                          isLight ? 'bg-amber-50 border-amber-300' : 'bg-amber-500/10 border-amber-500/30'
+                        }`}>
                           <div className="flex items-center justify-between">
-                            <label className="text-[11px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                              <Tag className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                            <label className={`text-[11px] font-bold flex items-center gap-1.5 ${
+                              isLight ? 'text-amber-950' : 'text-amber-300'
+                            }`}>
+                              <Tag className={`w-3.5 h-3.5 ${isLight ? 'text-amber-700' : 'text-amber-400'}`} />
                               <span>Código STI Obrigatório para Openbox</span>
-                              <span className="text-rose-600 dark:text-rose-400 font-bold">*</span>
+                              <span className="text-rose-600 font-bold">*</span>
                             </label>
                             {isValidStiCode(editForm.trackingCode) ? (
-                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              <span className={`text-[10px] font-bold border px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                                isLight ? 'bg-emerald-100 border-emerald-400 text-emerald-950 font-black' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                              }`}>
                                 <Check className="w-3 h-3 stroke-[3]" /> STI Válido
                               </span>
                             ) : (
-                              <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                              <span className={`text-[10px] font-bold border px-1.5 py-0.5 rounded ${
+                                isLight ? 'bg-rose-100 border-rose-300 text-rose-900 font-black' : 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+                              }`}>
                                 Obrigatório (STI + 6 dígitos)
                               </span>
                             )}
@@ -3748,15 +4342,21 @@ export default function PhysicalStock({
                               setEditForm({ ...editForm, trackingCode: formatted });
                             }} 
                             maxLength={9}
-                            className={`w-full bg-slate-900 rounded-lg p-2.5 text-xs font-mono font-bold focus:outline-none border transition-colors ${
+                            className={`w-full rounded-lg p-2.5 text-xs font-mono font-bold focus:outline-none border transition-colors ${
                               isValidStiCode(editForm.trackingCode)
-                                ? 'border-emerald-500 text-emerald-800 dark:text-emerald-300 focus:border-emerald-600'
-                                : 'border-amber-500 text-amber-900 dark:text-amber-200 placeholder-amber-600/50 focus:border-amber-600'
+                                ? isLight 
+                                  ? 'bg-white border-2 border-emerald-500 text-emerald-950 focus:border-emerald-600 shadow-2xs' 
+                                  : 'bg-slate-900 border-emerald-500 text-emerald-300 focus:border-emerald-600'
+                                : isLight 
+                                ? 'bg-white border-2 border-amber-500 text-amber-950 placeholder-amber-700/60 focus:border-amber-600 shadow-2xs' 
+                                : 'bg-slate-900 border-amber-500 text-amber-200 placeholder-amber-600/50 focus:border-amber-600'
                             }`}
                             placeholder="Ex: STI134920"
                           />
-                          <p className="text-[10.5px] text-amber-800 dark:text-amber-300/80 font-medium">
-                            Produtos no Openbox obrigatoriamente exigem o código STI no formato <strong className="text-amber-950 dark:text-amber-200 font-bold">STI + 6 números</strong>.
+                          <p className={`text-[10.5px] font-medium ${
+                            isLight ? 'text-amber-900' : 'text-amber-300/80'
+                          }`}>
+                            Produtos no Openbox obrigatoriamente exigem o código STI no formato <strong className={isLight ? 'text-amber-950 font-black' : 'text-amber-200 font-bold'}>STI + 6 números</strong>.
                           </p>
                         </div>
                       )}
@@ -3765,8 +4365,12 @@ export default function PhysicalStock({
                 </div>
 
                 {/* Section 2: Diagnostics & Condition */}
-                <div className="space-y-4 bg-slate-950 p-5 border border-slate-800 rounded-xl">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <div className={`space-y-4 p-5 rounded-xl border ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'
+                }`}>
+                  <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                    isLight ? 'text-amber-800 font-black' : 'text-amber-400'
+                  }`}>
                     <AlertTriangle className="w-4 h-4" />
                     Condição, Motivo & Acessórios
                   </h4>
@@ -3774,7 +4378,9 @@ export default function PhysicalStock({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[11px] font-bold text-slate-300">
+                        <label className={`block text-[11px] font-bold ${
+                          isLight ? 'text-slate-800' : 'text-slate-300'
+                        }`}>
                           Estado do Aparelho
                         </label>
                         {!isCustomEditDeviceStatus && editForm.deviceStatus !== 'Descrever' ? (
@@ -3784,7 +4390,9 @@ export default function PhysicalStock({
                               setIsCustomEditDeviceStatus(true);
                               setEditForm({ ...editForm, deviceStatus: 'Descrever' as any });
                             }}
-                            className="text-[10px] text-sky-400 hover:text-sky-300 font-medium transition-colors cursor-pointer"
+                            className={`text-[10px] font-bold transition-colors cursor-pointer ${
+                              isLight ? 'text-sky-700 hover:text-sky-900' : 'text-sky-400 hover:text-sky-300'
+                            }`}
                           >
                             + Descrever
                           </button>
@@ -3796,7 +4404,9 @@ export default function PhysicalStock({
                               setCustomEditDeviceStatusText('');
                               setEditForm({ ...editForm, deviceStatus: 'Usado' });
                             }}
-                            className="text-[10px] text-slate-400 hover:text-slate-200 font-medium transition-colors cursor-pointer"
+                            className={`text-[10px] font-semibold transition-colors cursor-pointer ${
+                              isLight ? 'text-slate-600 hover:text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                            }`}
                           >
                             Opções padrão
                           </button>
@@ -3815,7 +4425,9 @@ export default function PhysicalStock({
                             setEditForm({ ...editForm, deviceStatus: val as DeviceStatusType });
                           }
                         }} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                        className={`w-full border rounded-lg p-2.5 text-xs font-bold focus:outline-none focus:border-sky-500 cursor-pointer ${
+                          isLight ? 'bg-white border-slate-300 text-slate-900 shadow-2xs' : 'bg-slate-900 border-slate-700 text-white'
+                        }`}
                       >
                         <option value="Novo">Novo</option>
                         <option value="Usado">Usado</option>
@@ -3835,7 +4447,11 @@ export default function PhysicalStock({
                             }}
                             placeholder="Descreva o estado do aparelho..."
                             autoFocus
-                            className="w-full bg-slate-900 border border-sky-500/70 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition-colors"
+                            className={`w-full rounded-lg p-2.5 text-xs focus:outline-none transition-colors border ${
+                              isLight 
+                                ? 'bg-white border-2 border-sky-500 text-slate-900 placeholder-slate-400 shadow-2xs font-medium' 
+                                : 'bg-slate-900 border border-sky-500/70 text-white placeholder-slate-500 focus:border-sky-400'
+                            }`}
                           />
                           <div className="flex flex-wrap gap-1">
                             {['Leves marcas de uso', 'Riscos na carcaça', 'Tela riscada/trincada', 'Sem marcas estéticas'].map((tag) => (
@@ -3847,7 +4463,11 @@ export default function PhysicalStock({
                                   setCustomEditDeviceStatusText(newVal);
                                   setEditForm({ ...editForm, deviceStatus: newVal as any });
                                 }}
-                                className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
+                                className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer font-medium ${
+                                  isLight 
+                                    ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-950 shadow-2xs' 
+                                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500'
+                                }`}
                               >
                                 + {tag}
                               </button>
@@ -3859,7 +4479,9 @@ export default function PhysicalStock({
 
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[11px] font-bold text-slate-300">
+                        <label className={`block text-[11px] font-bold ${
+                          isLight ? 'text-slate-800' : 'text-slate-300'
+                        }`}>
                           Estado da Embalagem / Caixa
                         </label>
                         {!isCustomEditPackageStatus && editForm.packageStatus !== 'Descrever' ? (
@@ -3869,7 +4491,9 @@ export default function PhysicalStock({
                               setIsCustomEditPackageStatus(true);
                               setEditForm({ ...editForm, packageStatus: 'Descrever' as any });
                             }}
-                            className="text-[10px] text-sky-400 hover:text-sky-300 font-medium transition-colors cursor-pointer"
+                            className={`text-[10px] font-bold transition-colors cursor-pointer ${
+                              isLight ? 'text-sky-700 hover:text-sky-900' : 'text-sky-400 hover:text-sky-300'
+                            }`}
                           >
                             + Descrever
                           </button>
@@ -3881,7 +4505,9 @@ export default function PhysicalStock({
                               setCustomEditPackageStatusText('');
                               setEditForm({ ...editForm, packageStatus: 'Danificada' });
                             }}
-                            className="text-[10px] text-slate-400 hover:text-slate-200 font-medium transition-colors cursor-pointer"
+                            className={`text-[10px] font-semibold transition-colors cursor-pointer ${
+                              isLight ? 'text-slate-600 hover:text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                            }`}
                           >
                             Opções padrão
                           </button>
@@ -3900,7 +4526,9 @@ export default function PhysicalStock({
                             setEditForm({ ...editForm, packageStatus: val as PackageStatusType });
                           }
                         }} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                        className={`w-full border rounded-lg p-2.5 text-xs font-bold focus:outline-none focus:border-sky-500 cursor-pointer ${
+                          isLight ? 'bg-white border-slate-300 text-slate-900 shadow-2xs' : 'bg-slate-900 border-slate-700 text-white'
+                        }`}
                       >
                         <option value="Perfeita">Perfeita / Na Caixa</option>
                         <option value="Usada">Usada</option>
@@ -3921,7 +4549,11 @@ export default function PhysicalStock({
                             }}
                             placeholder="Descreva o estado da embalagem/caixa..."
                             autoFocus
-                            className="w-full bg-slate-900 border border-sky-500/70 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition-colors"
+                            className={`w-full rounded-lg p-2.5 text-xs focus:outline-none transition-colors border ${
+                              isLight 
+                                ? 'bg-white border-2 border-sky-500 text-slate-900 placeholder-slate-400 shadow-2xs font-medium' 
+                                : 'bg-slate-900 border border-sky-500/70 text-white placeholder-slate-500 focus:border-sky-400'
+                            }`}
                           />
                           <div className="flex flex-wrap gap-1">
                             {['Caixa original amassada', 'Caixa rasgada', 'Sem berço interno', 'Embalagem plástica / parda'].map((tag) => (
@@ -3933,7 +4565,11 @@ export default function PhysicalStock({
                                   setCustomEditPackageStatusText(newVal);
                                   setEditForm({ ...editForm, packageStatus: newVal as any });
                                 }}
-                                className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
+                                className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer font-medium ${
+                                  isLight 
+                                    ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-950 shadow-2xs' 
+                                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500'
+                                }`}
                               >
                                 + {tag}
                               </button>
@@ -3944,27 +4580,39 @@ export default function PhysicalStock({
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      <label className={`block text-[11px] font-bold mb-1 ${
+                        isLight ? 'text-slate-800' : 'text-slate-300'
+                      }`}>
                         Motivo da Devolução / Observação Curta
                       </label>
                       <textarea 
                         value={editForm.customerReason} 
                         onChange={(e) => setEditForm({ ...editForm, customerReason: e.target.value })} 
                         rows={2}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-sky-500" 
+                        className={`w-full border rounded-lg p-2.5 text-xs focus:outline-none focus:border-sky-500 ${
+                          isLight 
+                            ? 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 shadow-2xs font-medium' 
+                            : 'bg-slate-900 border-slate-700 text-white'
+                        }`} 
                         placeholder="Ex: Revisada, sem marcas de uso, testada..."
                       />
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      <label className={`block text-[11px] font-bold mb-1 ${
+                        isLight ? 'text-slate-800' : 'text-slate-300'
+                      }`}>
                         Acessórios Recebidos
                       </label>
                       <input 
                         type="text" 
                         value={editForm.accessoriesInclusion || ''} 
                         onChange={(e) => setEditForm({ ...editForm, accessoriesInclusion: e.target.value })} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500" 
+                        className={`w-full border rounded-lg p-2.5 text-xs focus:outline-none focus:border-sky-500 ${
+                          isLight 
+                            ? 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 shadow-2xs font-medium' 
+                            : 'bg-slate-900 border-slate-700 text-slate-200'
+                        }`} 
                         placeholder="Ex: Embalagem: Na caixa; Fonte e cabo USB inclusos."
                       />
                     </div>
@@ -3972,8 +4620,12 @@ export default function PhysicalStock({
                 </div>
 
                 {/* Section 3: Technical Report / Detailed Description */}
-                <div className="space-y-3 bg-slate-950 p-5 border border-slate-800 rounded-xl">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                <div className={`space-y-3 p-5 rounded-xl border ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'
+                }`}>
+                  <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                    isLight ? 'text-sky-800 font-black' : 'text-sky-400'
+                  }`}>
                     <FileText className="w-4 h-4" />
                     Laudo Técnico de Entrada / Descrição Detalhada
                   </h4>
@@ -3986,20 +4638,26 @@ export default function PhysicalStock({
                 </div>
 
                 {/* Opção de Contador Diário */}
-                <div className="bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                <div className={`p-4 border rounded-xl ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'
+                }`}>
                   <label className="flex items-start gap-2.5 cursor-pointer select-none">
                     <input 
                       type="checkbox"
                       checked={Boolean(editForm.excludeFromDailyCount)}
                       onChange={(e) => setEditForm({ ...editForm, excludeFromDailyCount: e.target.checked })}
-                      className="mt-0.5 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-400 focus:ring-offset-slate-900 h-4 w-4"
+                      className="mt-0.5 rounded border-slate-400 bg-white text-amber-500 focus:ring-amber-400 h-4 w-4"
                       id="checkbox-edit-exclude-daily"
                     />
                     <div className="space-y-0.5">
-                      <span className="text-xs font-semibold text-slate-200 block">
+                      <span className={`text-xs font-semibold block ${
+                        isLight ? 'text-slate-900' : 'text-slate-200'
+                      }`}>
                         Não contabilizar no registro de entrada diária
                       </span>
-                      <span className="text-[11px] text-slate-400 block leading-tight">
+                      <span className={`text-[11px] block leading-tight ${
+                        isLight ? 'text-slate-600' : 'text-slate-400'
+                      }`}>
                         Se marcado, este produto será ignorado do contador e gráficos de devoluções diárias.
                       </span>
                     </div>
@@ -4989,31 +5647,39 @@ export default function PhysicalStock({
           }}
         >
           <div 
-            className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150"
+            className={`w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150 border ${
+              isLight ? 'bg-white border-slate-200 text-slate-900 shadow-xl' : 'bg-slate-900 border-slate-800 text-white'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0">
+                <div className={`p-2.5 rounded-xl shrink-0 border ${
+                  isLight ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                }`}>
                   <Sparkles className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Transferência para Estoque Principal</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <h3 className={`text-base font-bold ${isLight ? 'text-slate-950' : 'text-white'}`}>Transferência para Estoque Principal</h3>
+                  <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     {getResolvedUnitProductName(transferModalData.unit, products)} ({transferModalData.unit.sti || transferModalData.unit.trackingCode})
                   </p>
                 </div>
               </div>
               <button 
                 onClick={() => setTransferModalData(null)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                className={`p-1 rounded-lg transition-colors cursor-pointer ${
+                  isLight ? 'text-slate-500 hover:text-slate-950 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 leading-relaxed">
+            <div className={`p-3.5 rounded-xl text-xs leading-relaxed border ${
+              isLight ? 'bg-amber-50 border-amber-300 text-amber-950 font-medium' : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+            }`}>
               Este produto veio de outro armazém (<strong>{transferModalData.unit.destinationSector}</strong>) e já possui <strong>{transferModalData.savedPhotosCount} foto(s) cadastrada(s)</strong>.
               <br />
               Escolha a opção de imagem para o <strong>Estoque Principal</strong>:
@@ -5024,16 +5690,22 @@ export default function PhysicalStock({
               {/* Option 1: Keep Saved Photos */}
               <div 
                 onClick={() => handleConfirmTransferWithPhotoChoice('keep_saved')}
-                className="p-3.5 bg-slate-950 hover:bg-emerald-950/30 border border-slate-800 hover:border-emerald-500/50 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                className={`p-3.5 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 group border ${
+                  isLight 
+                    ? 'bg-white hover:bg-emerald-50 border-slate-300 hover:border-emerald-500 shadow-2xs' 
+                    : 'bg-slate-950 hover:bg-emerald-950/30 border-slate-800 hover:border-emerald-500/50'
+                }`}
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs font-bold text-white group-hover:text-emerald-300">
+                    <Camera className="w-4 h-4 text-emerald-500" />
+                    <span className={`text-xs font-bold ${
+                      isLight ? 'text-slate-900 group-hover:text-emerald-800 font-extrabold' : 'text-white group-hover:text-emerald-300'
+                    }`}>
                       1. Manter Fotos Já Cadastradas
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400">
+                  <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     Preserva exatamente as fotos reais salvas na triagem deste item.
                   </p>
                 </div>
@@ -5041,7 +5713,9 @@ export default function PhysicalStock({
                   <img 
                     src={transferModalData.unit.photosProduct[0]} 
                     alt="Salva" 
-                    className="w-12 h-12 rounded-lg object-cover border border-slate-700 shrink-0 group-hover:scale-105 transition-transform" 
+                    className={`w-12 h-12 rounded-lg object-cover shrink-0 group-hover:scale-105 transition-transform border ${
+                      isLight ? 'border-slate-300 bg-slate-50' : 'border-slate-700'
+                    }`} 
                   />
                 )}
               </div>
@@ -5052,16 +5726,22 @@ export default function PhysicalStock({
                 return (
                   <div 
                     onClick={() => handleConfirmTransferWithPhotoChoice('use_base')}
-                    className="p-3.5 bg-slate-950 hover:bg-sky-950/30 border border-slate-800 hover:border-sky-500/50 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                    className={`p-3.5 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 group border ${
+                      isLight 
+                        ? 'bg-white hover:bg-sky-50 border-slate-300 hover:border-sky-500 shadow-2xs' 
+                        : 'bg-slate-950 hover:bg-sky-950/30 border-slate-800 hover:border-sky-500/50'
+                    }`}
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <ImageIcon className="w-4 h-4 text-sky-400" />
-                        <span className="text-xs font-bold text-white group-hover:text-sky-300">
+                        <ImageIcon className="w-4 h-4 text-sky-500" />
+                        <span className={`text-xs font-bold ${
+                          isLight ? 'text-slate-900 group-hover:text-sky-800 font-extrabold' : 'text-white group-hover:text-sky-300'
+                        }`}>
                           2. Usar Imagem do Catálogo Base
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400">
+                      <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                         Aplica a foto oficial cadastrada no Catálogo Base (sem duplicação de dados).
                       </p>
                     </div>
@@ -5069,7 +5749,9 @@ export default function PhysicalStock({
                       <img 
                         src={baseImgs.main} 
                         alt="Base" 
-                        className="w-12 h-12 rounded-lg object-cover border border-slate-700 shrink-0 group-hover:scale-105 transition-transform" 
+                        className={`w-12 h-12 rounded-lg object-cover shrink-0 group-hover:scale-105 transition-transform border ${
+                          isLight ? 'border-slate-300 bg-slate-50' : 'border-slate-700'
+                        }`} 
                       />
                     )}
                   </div>
@@ -5082,16 +5764,22 @@ export default function PhysicalStock({
                 return (
                   <div 
                     onClick={() => handleConfirmTransferWithPhotoChoice('combine')}
-                    className="p-3.5 bg-slate-950 hover:bg-amber-950/30 border border-slate-800 hover:border-amber-500/50 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                    className={`p-3.5 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 group border ${
+                      isLight 
+                        ? 'bg-white hover:bg-amber-50 border-slate-300 hover:border-amber-500 shadow-2xs' 
+                        : 'bg-slate-950 hover:bg-amber-950/30 border-slate-800 hover:border-amber-500/50'
+                    }`}
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <Layers className="w-4 h-4 text-amber-400" />
-                        <span className="text-xs font-bold text-white group-hover:text-amber-300">
+                        <Layers className="w-4 h-4 text-amber-500" />
+                        <span className={`text-xs font-bold ${
+                          isLight ? 'text-slate-900 group-hover:text-amber-800 font-extrabold' : 'text-white group-hover:text-amber-300'
+                        }`}>
                           3. Usar Ambas (Combinar Imagens)
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400">
+                      <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                         Mantém as fotos já salvas E inclui as fotos oficiais do catálogo base.
                       </p>
                     </div>
@@ -5402,6 +6090,20 @@ export default function PhysicalStock({
           }}
           baseProduct={findBaseProduct(currentUnit, products)}
           allBaseProducts={products}
+          isLight={isLight}
+        />
+      )}
+
+      {/* Quick Register SKU Modal */}
+      {quickRegisterUnit && (
+        <QuickRegisterSkuModal
+          isOpen={Boolean(quickRegisterUnit)}
+          onClose={() => setQuickRegisterUnit(null)}
+          unit={quickRegisterUnit}
+          units={units}
+          products={products}
+          onUpdateUnit={onUpdateUnit}
+          onProductCreated={onProductCreated}
           isLight={isLight}
         />
       )}
