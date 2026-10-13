@@ -1208,6 +1208,19 @@ export default function PhysicalStock({
     return units.filter(u => u.status === 'Estoque' && isUnitPendingSkuRegistration(u, products)).length;
   }, [units, products]);
 
+  // Auto-reset filters if corresponding counts drop to 0
+  useEffect(() => {
+    if (duplicateUnitsCount === 0 && filterOnlyDuplicates) {
+      setFilterOnlyDuplicates(false);
+    }
+  }, [duplicateUnitsCount, filterOnlyDuplicates]);
+
+  useEffect(() => {
+    if (pendingSkuUnitsCount === 0 && filterOnlyPendingSku) {
+      setFilterOnlyPendingSku(false);
+    }
+  }, [pendingSkuUnitsCount, filterOnlyPendingSku]);
+
   // Units in the current sector tab (e.g. Todos Ativos, Principal, Openbox, RMA, Baixado)
   const tabUnits = React.useMemo(() => {
     if (activeTab === 'Todos') {
@@ -1284,6 +1297,7 @@ export default function PhysicalStock({
     setSelectedVoltage('Todas');
     setSelectedDate('');
     setFilterOnlyDuplicates(false);
+    setFilterOnlyPendingSku(false);
   };
 
   const hasActiveFilters = Boolean(
@@ -1293,7 +1307,8 @@ export default function PhysicalStock({
     selectedPlatform !== 'Todas' ||
     selectedVoltage !== 'Todas' || 
     selectedDate !== '' ||
-    filterOnlyDuplicates
+    filterOnlyDuplicates ||
+    filterOnlyPendingSku
   );
 
   // Helper: Retrieve discharge / checkout date
@@ -2197,51 +2212,51 @@ export default function PhysicalStock({
                 </>
               )}
 
-              {/* Filter Duplicates button */}
-              <button 
-                type="button"
-                onClick={() => setFilterOnlyDuplicates(prev => !prev)}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
-                  filterOnlyDuplicates
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-lg shadow-amber-500/20 scale-105'
-                    : duplicateUnitsCount > 0
-                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
-                    : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
-                }`}
-                title="Filtrar produtos com STI ou Serial repetidos"
-                id="btn-filter-duplicates"
-              >
-                <AlertTriangle className={`w-3.5 h-3.5 ${filterOnlyDuplicates ? 'text-slate-950' : 'text-amber-400'}`} />
-                <span>{filterOnlyDuplicates ? 'Apenas Duplicados' : `Duplicados (${duplicateUnitsCount})`}</span>
-                {duplicateUnitsCount > 0 && !filterOnlyDuplicates && (
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                )}
-              </button>
+              {/* Filter Duplicates button - só aparece se houver registros duplicados */}
+              {(duplicateUnitsCount > 0 || filterOnlyDuplicates) && (
+                <button 
+                  type="button"
+                  onClick={() => setFilterOnlyDuplicates(prev => !prev)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border animate-in fade-in duration-150 ${
+                    filterOnlyDuplicates
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-lg shadow-amber-500/20 scale-105'
+                      : isLight
+                      ? 'bg-amber-100 border-amber-300 text-amber-950 hover:bg-amber-200'
+                      : 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
+                  }`}
+                  title="Filtrar produtos com STI ou Serial repetidos"
+                  id="btn-filter-duplicates"
+                >
+                  <AlertTriangle className={`w-3.5 h-3.5 ${filterOnlyDuplicates ? 'text-slate-950' : (isLight ? 'text-amber-800' : 'text-amber-400')}`} />
+                  <span>{filterOnlyDuplicates ? 'Apenas Duplicados' : `Duplicados (${duplicateUnitsCount})`}</span>
+                  {duplicateUnitsCount > 0 && !filterOnlyDuplicates && (
+                    <span className={`w-2 h-2 rounded-full ${isLight ? 'bg-amber-600' : 'bg-amber-400 animate-pulse'}`}></span>
+                  )}
+                </button>
+              )}
 
-              {/* Filter Pending SKU Registration button */}
-              <button 
-                type="button"
-                onClick={() => setFilterOnlyPendingSku(prev => !prev)}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
-                  filterOnlyPendingSku
-                    ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-lg shadow-amber-500/20 scale-105'
-                    : pendingSkuUnitsCount > 0
-                    ? isLight
+              {/* Filter Pending SKU Registration button - só aparece se houver produtos com SKU pendente */}
+              {(pendingSkuUnitsCount > 0 || filterOnlyPendingSku) && (
+                <button 
+                  type="button"
+                  onClick={() => setFilterOnlyPendingSku(prev => !prev)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border animate-in fade-in duration-150 ${
+                    filterOnlyPendingSku
+                      ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-lg shadow-amber-500/20 scale-105'
+                      : isLight
                       ? 'bg-amber-100 border-amber-400 text-amber-950 hover:bg-amber-200'
                       : 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
-                    : isLight
-                    ? 'bg-white border-slate-300 text-slate-600 hover:text-slate-900'
-                    : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
-                }`}
-                title="Filtrar produtos que deram entrada sem SKU previamente cadastrado na base"
-                id="btn-filter-pending-skus"
-              >
-                <Tag className={`w-3.5 h-3.5 ${filterOnlyPendingSku ? 'text-slate-950' : (isLight ? 'text-amber-800' : 'text-amber-400')}`} />
-                <span>{filterOnlyPendingSku ? 'Apenas SKUs Pendentes' : `SKUs Pendentes (${pendingSkuUnitsCount})`}</span>
-                {pendingSkuUnitsCount > 0 && !filterOnlyPendingSku && (
-                  <span className={`w-2 h-2 rounded-full ${isLight ? 'bg-amber-600' : 'bg-amber-400 animate-pulse'}`}></span>
-                )}
-              </button>
+                  }`}
+                  title="Filtrar produtos que deram entrada sem SKU previamente cadastrado na base"
+                  id="btn-filter-pending-skus"
+                >
+                  <Tag className={`w-3.5 h-3.5 ${filterOnlyPendingSku ? 'text-slate-950' : (isLight ? 'text-amber-800' : 'text-amber-400')}`} />
+                  <span>{filterOnlyPendingSku ? 'Apenas SKUs Pendentes' : `SKUs Pendentes (${pendingSkuUnitsCount})`}</span>
+                  {pendingSkuUnitsCount > 0 && !filterOnlyPendingSku && (
+                    <span className={`w-2 h-2 rounded-full ${isLight ? 'bg-amber-600' : 'bg-amber-400 animate-pulse'}`}></span>
+                  )}
+                </button>
+              )}
 
               {/* View switcher: Grid vs List/Linhas */}
               <div className={`view-switcher-container flex p-1 rounded-xl border gap-0.5 ${
