@@ -6,6 +6,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { BaseProduct, TriageUnit, DailyInflowRecord, PendingItem, CaseTracking, UserAccount } from '../types';
 import { compressText, decompressText } from './compressionService';
+import { normalizeRegistrationNumber } from '../utils/pendingRegistrationHelper';
 
 export interface SupabaseConfig {
   url: string;
@@ -1606,9 +1607,47 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
   const cleanId = (p.id && p.id.trim()) ? p.id.trim() : generateUUID();
   const now = new Date().toISOString();
 
+  // Garante que o número de registro nunca seja perdido
+  let regNum = p.registrationNumber && p.registrationNumber.trim();
+  if (regNum === 'REG-S/N' || regNum === 'S/N' || regNum === '-' || !regNum) {
+    regNum = '';
+    // Tenta resgatar do cache local de pendências
+    try {
+      const rawPending = localStorage.getItem('stocck_cache_pending_items_v2');
+      if (rawPending) {
+        const parsed = JSON.parse(rawPending);
+        const hit = parsed.find((item: any) => item.id === cleanId);
+        if (hit?.registrationNumber && hit.registrationNumber !== 'REG-S/N' && hit.registrationNumber !== '-') {
+          regNum = hit.registrationNumber;
+        }
+      }
+    } catch {}
+
+    // Se ainda não achou, tenta resgatar de unidade de triagem vinculada
+    if (!regNum) {
+      try {
+        const rawTriage = localStorage.getItem('stocck_cache_triage_units_v2');
+        if (rawTriage) {
+          const parsed = JSON.parse(rawTriage);
+          const hit = parsed.find((u: any) => 
+            u.pendingItemId === cleanId || 
+            (p.orderNumber && u.orderNumber && u.orderNumber.trim() === p.orderNumber.trim())
+          );
+          if (hit?.pendingRegistrationNumber && hit.pendingRegistrationNumber !== 'REG-S/N' && hit.pendingRegistrationNumber !== '-') {
+            regNum = hit.pendingRegistrationNumber;
+          }
+        }
+      } catch {}
+    }
+  }
+
+  if (regNum) {
+    regNum = normalizeRegistrationNumber(regNum);
+  }
+
   let rawNotes = p.detailedNotes || '';
-  if (p.registrationNumber) {
-    const regMeta = `[REG_NUM:${p.registrationNumber}]`;
+  if (regNum) {
+    const regMeta = `[REG_NUM:${regNum}]`;
     rawNotes = rawNotes.replace(/\[REG_NUM:.*?\]\s*/g, '').trim();
     rawNotes = rawNotes ? `${rawNotes}\n${regMeta}` : regMeta;
   }
@@ -1672,8 +1711,8 @@ export const mapPendingItemToSupabase = (p: PendingItem) => {
     created_by: p.createdBy || null
   };
 
-  if (p.registrationNumber && getHasPendingRegistrationCol() !== false) {
-    payload.registration_number = p.registrationNumber;
+  if (regNum && getHasPendingRegistrationCol() !== false) {
+    payload.registration_number = regNum;
   }
 
   // Only include extended columns if supported by remote schema
@@ -1694,13 +1733,61 @@ export const mapSupabaseToPendingItem = (r: any): PendingItem => {
   const decompressedNotes = decompressText(r.detailed_notes || r.detailedNotes || '');
 
   let regNum: string | undefined = undefined;
-  if (r.registration_number) {
-    regNum = r.registration_number;
-  } else if (r.registrationNumber) {
-    regNum = r.registrationNumber;
+  if (r.registration_number && r.registration_number.trim() && r.registration_number.trim().toUpperCase() !== 'REG-S/N') {
+    regNum = normalizeRegistrationNumber(r.registration_number);
+  } else if (r.registrationNumber && r.registrationNumber.trim() && r.registrationNumber.trim().toUpperCase() !== 'REG-S/N') {
+    regNum = normalizeRegistrationNumber(r.registrationNumber);
   } else if (decompressedNotes.includes('[REG_NUM:')) {
     const match = decompressedNotes.match(/\[REG_NUM:(.*?)\]/);
-    if (match && match[1]) regNum = match[1].trim();
+    if (match && match[1] && match[1].trim().toUpperCase() !== 'REG-S/N') {
+      regNum = normalizeRegistrationNumber(match[1]);
+    }
+  } else if (r.pending_registration_number && r.pending_registration_number.trim() && r.pending_registration_number.trim().toUpperCase() !== 'REG-S/N') {
+    regNum = normalizeRegistrationNumber(r.pending_registration_number);
+  }
+
+  // Fallback em caso de notas brutas não comprimidas
+  if (!regNum && typeof (r.detailed_notes || r.detailedNotes) === 'string') {
+    const raw = r.detailed_notes || r.detailedNotes;
+    if (raw.includes('[REG_NUM:')) {
+      const match = raw.match(/\[REG_NUM:(.*?)\]/);
+      if (match && match[1] && match[1].trim().toUpperCase() !== 'REG-S/N') {
+        regNum = normalizeRegistrationNumber(match[1]);
+      }
+    }
+  }
+
+  // Fallback em cache local para não perder o registro existente
+  if (!regNum && r.id) {
+    try {
+      const rawPending = localStorage.getItem('stocck_cache_pending_items_v2');
+      if (rawPending) {
+        const cachedList = JSON.parse(rawPending);
+        const hit = cachedList.find((p: any) => p.id === r.id);
+        if (hit?.registrationNumber && hit.registrationNumber.trim().toUpperCase() !== 'REG-S/N') {
+          regNum = normalizeRegistrationNumber(hit.registrationNumber);
+        }
+      }
+    } catch {}
+  }
+
+  // Fallback com unidades de estoque físico salvas em cache local
+  if (!regNum && r.id) {
+    try {
+      const rawTriage = localStorage.getItem('stocck_cache_triage_units_v2');
+      if (rawTriage) {
+        const triageList = JSON.parse(rawTriage);
+        const hit = triageList.find((u: any) => 
+          u.pendingItemId === r.id ||
+          (r.order_number && u.orderNumber && u.orderNumber.trim() === r.order_number.trim()) ||
+          (r.transferred_unit_id && u.id === r.transferred_unit_id) ||
+          (r.linked_unit_id && u.id === r.linked_unit_id)
+        );
+        if (hit?.pendingRegistrationNumber && hit.pendingRegistrationNumber.trim().toUpperCase() !== 'REG-S/N') {
+          regNum = normalizeRegistrationNumber(hit.pendingRegistrationNumber);
+        }
+      }
+    } catch {}
   }
 
   let linkedUnitId: string | undefined = r.linked_unit_id || r.linkedUnitId || r.transferred_unit_id || r.transferredUnitId;

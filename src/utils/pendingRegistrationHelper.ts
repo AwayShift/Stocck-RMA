@@ -10,7 +10,9 @@ import { PendingItem, TriageUnit } from '../types';
  */
 export function extractRegistrationSequence(reg: string | undefined | null): number {
   if (!reg) return 0;
-  const match = reg.trim().toUpperCase().match(/(\d+)/);
+  const clean = reg.trim().toUpperCase();
+  if (clean === 'REG-S/N' || clean === 'S/N' || clean === 'REG-NOVO') return 0;
+  const match = clean.match(/(\d+)/);
   if (!match) return 0;
   const val = parseInt(match[1], 10);
   return isNaN(val) ? 0 : val;
@@ -18,12 +20,24 @@ export function extractRegistrationSequence(reg: string | undefined | null): num
 
 /**
  * Gera o próximo número de registro sequencial para uma nova pendência (Ex: "REG-00001").
+ * Analisa tanto pendências quanto unidades de triagem para evitar colisões de sequência.
  */
-export function generatePendingRegistrationNumber(existingItems: PendingItem[]): string {
+export function generatePendingRegistrationNumber(
+  existingItems: PendingItem[],
+  triageUnits?: TriageUnit[]
+): string {
   let maxSeq = 0;
   if (Array.isArray(existingItems)) {
     for (const item of existingItems) {
-      const seq = extractRegistrationSequence(item.registrationNumber);
+      const seq = extractRegistrationSequence(item?.registrationNumber);
+      if (seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  }
+  if (Array.isArray(triageUnits)) {
+    for (const unit of triageUnits) {
+      const seq = extractRegistrationSequence(unit?.pendingRegistrationNumber);
       if (seq > maxSeq) {
         maxSeq = seq;
       }
@@ -34,22 +48,12 @@ export function generatePendingRegistrationNumber(existingItems: PendingItem[]):
 }
 
 /**
- * Garante que uma pendência possua um número de registro formatado.
- */
-export function ensurePendingRegistrationNumber(item: PendingItem, existingItems: PendingItem[]): string {
-  if (item.registrationNumber && item.registrationNumber.trim()) {
-    return normalizeRegistrationNumber(item.registrationNumber);
-  }
-  return generatePendingRegistrationNumber(existingItems);
-}
-
-/**
  * Normaliza um número de registro digitado pelo usuário (Ex: "1" => "REG-00001", "reg-12" => "REG-00012").
  */
 export function normalizeRegistrationNumber(input: string | undefined | null): string {
   if (!input) return '';
   const clean = input.trim().toUpperCase();
-  if (!clean) return '';
+  if (!clean || clean === 'REG-S/N' || clean === 'S/N' || clean === 'REG-NOVO' || clean === '-') return '';
   if (/^REG-\d+$/.test(clean)) {
     // Normaliza para 5 dígitos
     const numPart = clean.replace('REG-', '');
@@ -61,6 +65,58 @@ export function normalizeRegistrationNumber(input: string | undefined | null): s
     return `REG-${String(val).padStart(5, '0')}`;
   }
   return clean;
+}
+
+/**
+ * Garante que uma pendência possua um número de registro formatado.
+ * Tenta recuperar de vínculos existentes antes de gerar nova numeração sequencial.
+ */
+export function ensurePendingRegistrationNumber(
+  item: PendingItem,
+  existingItems: PendingItem[],
+  triageUnits?: TriageUnit[]
+): string {
+  if (item?.registrationNumber && item.registrationNumber.trim()) {
+    const normalized = normalizeRegistrationNumber(item.registrationNumber);
+    if (normalized) return normalized;
+  }
+
+  // 1. Tentar recuperar de unidade vinculada no estoque físico
+  if (triageUnits && Array.isArray(triageUnits)) {
+    const linked = triageUnits.find(u => 
+      (item.linkedUnitId && u.id === item.linkedUnitId) ||
+      (item.transferredUnitId && u.id === item.transferredUnitId) ||
+      (u.pendingItemId && u.pendingItemId === item.id) ||
+      (item.orderNumber && u.orderNumber && item.orderNumber.trim() === u.orderNumber.trim())
+    );
+    if (linked?.pendingRegistrationNumber && linked.pendingRegistrationNumber.trim()) {
+      const norm = normalizeRegistrationNumber(linked.pendingRegistrationNumber);
+      if (norm) return norm;
+    }
+  }
+
+  // 2. Tentar recuperar de anotações técnicas detailedNotes (tags de resiliência)
+  const rawNotes = item?.detailedNotes || '';
+  if (rawNotes.includes('[REG_NUM:')) {
+    const match = rawNotes.match(/\[REG_NUM:(.*?)\]/);
+    if (match && match[1]) {
+      const norm = normalizeRegistrationNumber(match[1]);
+      if (norm) return norm;
+    }
+  }
+
+  return generatePendingRegistrationNumber(existingItems, triageUnits);
+}
+
+/**
+ * Recupera ou gera o número de registro correto para uma pendência que esteja sem número ("REG-S/N").
+ */
+export function healPendingItemRegistrationNumber(
+  item: PendingItem,
+  allItems: PendingItem[],
+  triageUnits?: TriageUnit[]
+): string {
+  return ensurePendingRegistrationNumber(item, allItems, triageUnits);
 }
 
 /**

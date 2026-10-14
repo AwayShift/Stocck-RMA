@@ -12,6 +12,7 @@
 
 import { BaseProduct, TriageUnit, PlatformType, DestinationSectorType, CaseTracking, DailyInflowRecord, UserAccount, PendingItem, PendingStatusType, DeviceStatusType, PackageStatusType } from '../types';
 import { recordDbOperation } from './quotaTracker';
+import { compressText } from './compressionService';
 import { 
   getActiveDbProvider, 
   getSupabaseClient,
@@ -489,6 +490,8 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
   const now = new Date().toISOString();
   const cachedPending = getCachedPendingItems();
 
+  const cachedTriage = getCachedTriageUnits();
+
   // Regra 1: "um pedido só pode ter um registro de pendência"
   if (item.orderNumber && item.orderNumber.trim()) {
     const orderValidation = validateUniqueOrderNumber(item.orderNumber, item.id, cachedPending);
@@ -498,9 +501,9 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
   }
 
   // Gera ou normaliza número de registro sequencial único
-  const regNumber = item.registrationNumber && item.registrationNumber.trim()
+  const regNumber = item.registrationNumber && item.registrationNumber.trim() && item.registrationNumber.trim().toUpperCase() !== 'REG-S/N'
     ? normalizeRegistrationNumber(item.registrationNumber)
-    : ensurePendingRegistrationNumber(item, cachedPending);
+    : ensurePendingRegistrationNumber(item, cachedPending, cachedTriage);
 
   const payload: PendingItem = {
     ...item,
@@ -589,6 +592,9 @@ export const savePendingItem = async (item: PendingItem): Promise<PendingItem> =
         updated_at: row.updated_at
       };
 
+      if (payload.registrationNumber && getHasPendingRegistrationCol() !== false && !error.message?.includes('registration_number')) {
+        fallbackRow.registration_number = payload.registrationNumber;
+      }
       if (row.created_by && !error.message?.includes('created_by')) {
         fallbackRow.created_by = row.created_by;
       }
@@ -644,12 +650,18 @@ export const updatePendingItemStatus = async (
 
   const now = new Date().toISOString();
   const cachedPending = getCachedPendingItems();
+  const cachedTriage = getCachedTriageUnits();
   const existingItem = cachedPending.find(p => p.id === cleanId);
+
+  const regNumber = existingItem?.registrationNumber && existingItem.registrationNumber.trim() && existingItem.registrationNumber.trim().toUpperCase() !== 'REG-S/N'
+    ? normalizeRegistrationNumber(existingItem.registrationNumber)
+    : ensurePendingRegistrationNumber(existingItem || ({ id: cleanId } as any), cachedPending, cachedTriage);
 
   // 1. Immediately update in-memory cache and localStorage with instant cross-tab sync (0ms)
   if (existingItem) {
     const updatedItem: PendingItem = {
       ...existingItem,
+      registrationNumber: regNumber,
       status,
       updatedAt: now,
       ...(status === 'Resolvido' ? {
@@ -664,8 +676,50 @@ export const updatePendingItemStatus = async (
   const supabase = getSupabaseClient();
   if (supabase) {
     let rawNotes = existingItem?.detailedNotes || '';
-    if (status === 'Resolvido' && resolutionReason && resolutionReason.trim()) {
-      const cleanReason = resolutionReason.trim();
+
+    // Preserva número de registro nas notas para dupla resiliência
+    if (regNumber) {
+      const regMeta = `[REG_NUM:${regNumber}]`;
+      rawNotes = rawNotes.replace(/\[REG_NUM:.*?\]\s*/g, '').trim();
+      rawNotes = rawNotes ? `${rawNotes}\n${regMeta}` : regMeta;
+    }
+
+    const unitIdToLink = existingItem?.transferredUnitId || existingItem?.linkedUnitId;
+    if (unitIdToLink) {
+      const linkMeta = `[LINKED_UNIT:${unitIdToLink}]`;
+      rawNotes = rawNotes.replace(/\[LINKED_UNIT:.*?\]\s*/g, '').trim();
+      rawNotes = rawNotes ? `${rawNotes}\n${linkMeta}` : linkMeta;
+    }
+    if (existingItem?.linkedUnitTrackingCode) {
+      const stiMeta = `[LINKED_STI:${existingItem.linkedUnitTrackingCode}]`;
+      rawNotes = rawNotes.replace(/\[LINKED_STI:.*?\]\s*/g, '').trim();
+      rawNotes = rawNotes ? `${rawNotes}\n${stiMeta}` : stiMeta;
+    }
+    if (existingItem?.customerReason) {
+      const crMeta = `[CUSTOMER_REASON:${existingItem.customerReason}]`;
+      rawNotes = rawNotes.replace(/\[CUSTOMER_REASON:.*?\]\s*/g, '').trim();
+      rawNotes = rawNotes ? `${rawNotes}\n${crMeta}` : crMeta;
+    }
+    if (existingItem?.deviceStatus) {
+      const dsMeta = `[DEVICE_STATUS:${existingItem.deviceStatus}]`;
+      rawNotes = rawNotes.replace(/\[DEVICE_STATUS:.*?\]\s*/g, '').trim();
+      rawNotes = rawNotes ? `${rawNotes}\n${dsMeta}` : dsMeta;
+    }
+    if (existingItem?.packageStatus) {
+      const psMeta = `[PACKAGE_STATUS:${existingItem.packageStatus}]`;
+      rawNotes = rawNotes.replace(/\[PACKAGE_STATUS:.*?\]\s*/g, '').trim();
+      rawNotes = rawNotes ? `${rawNotes}\n${psMeta}` : psMeta;
+    }
+    if (existingItem?.accessories) {
+      const accMeta = `[ACCESSORIES:${existingItem.accessories}]`;
+      rawNotes = rawNotes.replace(/\[ACCESSORIES:.*?\]\s*/g, '').trim();
+      rawNotes = rawNotes ? `${rawNotes}\n${accMeta}` : accMeta;
+    }
+
+    const cleanReason = (status === 'Resolvido' && resolutionReason && resolutionReason.trim())
+      ? resolutionReason.trim()
+      : existingItem?.resolutionReason;
+    if (cleanReason) {
       const resMeta = `[RESOLUTION_REASON:${cleanReason}]`;
       rawNotes = rawNotes.replace(/\[RESOLUTION_REASON:.*?\]\s*/g, '').trim();
       rawNotes = rawNotes ? `${rawNotes}\n${resMeta}` : resMeta;
@@ -673,25 +727,30 @@ export const updatePendingItemStatus = async (
 
     const updateData: any = {
       status,
-      updated_at: now
+      updated_at: now,
+      detailed_notes: compressText(rawNotes)
     };
 
-    if (rawNotes) {
-      updateData.detailed_notes = rawNotes;
+    if (regNumber && getHasPendingRegistrationCol() !== false) {
+      updateData.registration_number = regNumber;
     }
 
     if (status === 'Resolvido') {
       if (getHasPendingExtendedCols() !== false) {
         updateData.resolved_at = now;
       }
-      if (resolutionReason && resolutionReason.trim() && getHasPendingResolutionReasonCol()) {
-        updateData.resolution_reason = resolutionReason.trim();
+      if (cleanReason && getHasPendingResolutionReasonCol()) {
+        updateData.resolution_reason = cleanReason;
       }
     }
 
     let { error } = await supabase.from('pending_items').update(updateData).eq('id', cleanId);
     if (error) {
       console.warn('Supabase update pending_items status warning, executing safe fallback:', error);
+      if (error.message?.includes('registration_number')) {
+        setHasPendingRegistrationCol(false);
+        delete updateData.registration_number;
+      }
       if (error.message?.includes('resolution_reason')) {
         setHasPendingResolutionReasonCol(false);
         delete updateData.resolution_reason;
@@ -707,9 +766,14 @@ export const updatePendingItemStatus = async (
       }
       const retryRes = await supabase.from('pending_items').update(updateData).eq('id', cleanId);
       if (retryRes.error) {
-        // Safe minimal fallback: only update status and detailed_notes
-        const minimalUpdate: any = { status };
-        if (rawNotes) minimalUpdate.detailed_notes = rawNotes;
+        // Safe minimal fallback: only update status, registration_number if valid, and detailed_notes
+        const minimalUpdate: any = { 
+          status,
+          detailed_notes: compressText(rawNotes)
+        };
+        if (regNumber && getHasPendingRegistrationCol() !== false && !retryRes.error.message?.includes('registration_number')) {
+          minimalUpdate.registration_number = regNumber;
+        }
         await supabase.from('pending_items').update(minimalUpdate).eq('id', cleanId);
       }
     }

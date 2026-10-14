@@ -698,6 +698,25 @@ export const syncPendingItemsIncrementally = async (
     if (data && Array.isArray(data)) {
       const serverItems = data.map(mapSupabaseToPendingItem);
       
+      // Preserva números de registro previamente armazenados no cache local ou em unidades de estoque vinculadas
+      const cachedTriage = getCachedTriageUnits();
+      serverItems.forEach(s => {
+        if (!s.registrationNumber || s.registrationNumber.trim().toUpperCase() === 'REG-S/N') {
+          const cachedHit = currentCached.find(c => c.id === s.id);
+          if (cachedHit?.registrationNumber && cachedHit.registrationNumber.trim().toUpperCase() !== 'REG-S/N') {
+            s.registrationNumber = cachedHit.registrationNumber;
+          } else {
+            const triageHit = cachedTriage.find(u => 
+              u.pendingItemId === s.id || 
+              (s.orderNumber && u.orderNumber && u.orderNumber.trim() === s.orderNumber.trim())
+            );
+            if (triageHit?.pendingRegistrationNumber && triageHit.pendingRegistrationNumber.trim().toUpperCase() !== 'REG-S/N') {
+              s.registrationNumber = triageHit.pendingRegistrationNumber;
+            }
+          }
+        }
+      });
+
       let merged: PendingItem[];
       if (serverItems.length < 500) {
         // We retrieved 100% of all pending items from PostgreSQL!
@@ -888,6 +907,13 @@ export const handleRealtimePendingItemEvent = (
         (p.registrationNumber && newItem.registrationNumber && p.registrationNumber === newItem.registrationNumber)
     );
     if (existingIndex >= 0) {
+      const existing = list[existingIndex];
+      // CRITICAL: Nunca sobrescreve um número de registro já conhecido por undefined ou 'REG-S/N'
+      if (!newItem.registrationNumber || newItem.registrationNumber.trim().toUpperCase() === 'REG-S/N') {
+        if (existing?.registrationNumber && existing.registrationNumber.trim().toUpperCase() !== 'REG-S/N') {
+          newItem.registrationNumber = existing.registrationNumber;
+        }
+      }
       list[existingIndex] = newItem;
     } else {
       list.unshift(newItem);

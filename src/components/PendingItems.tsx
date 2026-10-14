@@ -65,7 +65,8 @@ import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from
 import { 
   generatePendingRegistrationNumber, 
   validateUniqueOrderNumber, 
-  ensurePendingRegistrationNumber 
+  ensurePendingRegistrationNumber,
+  healPendingItemRegistrationNumber
 } from '../utils/pendingRegistrationHelper';
 import { findBaseProduct, getResolvedUnitProductName, getBaseProductImages } from '../utils/productImages';
 import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform, areOrdersMatching } from '../utils/orderPlatformHelper';
@@ -525,6 +526,33 @@ export default function PendingItems({
     };
   }, [isFormModalOpen, isTransferModalOpen, transferActivePhotoTab]);
 
+  // Auto-recupera qualquer pendência com número de registro perdido ("REG-S/N")
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+    const brokenItems = items.filter(i => 
+      !i.registrationNumber || 
+      i.registrationNumber.trim().toUpperCase() === 'REG-S/N' || 
+      i.registrationNumber.trim() === 'S/N' ||
+      i.registrationNumber.trim() === '-' ||
+      i.registrationNumber.trim() === ''
+    );
+    if (brokenItems.length === 0) return;
+
+    brokenItems.forEach(async (broken) => {
+      const recoveredReg = healPendingItemRegistrationNumber(broken, items, units || []);
+      if (recoveredReg && recoveredReg !== 'REG-S/N' && recoveredReg !== broken.registrationNumber) {
+        try {
+          await onSavePending({
+            ...broken,
+            registrationNumber: recoveredReg
+          });
+        } catch (e) {
+          console.warn('Auto-heal save error for pending item:', broken.id, e);
+        }
+      }
+    });
+  }, [items, units, onSavePending]);
+
   // Handle Quick Paste Click Button
   const handleTriggerClipboardPaste = async (target: 'form' | 'transfer') => {
     try {
@@ -683,7 +711,7 @@ export default function PendingItems({
   // Open Form for New Item
   const handleOpenNewModal = () => {
     setEditingItem(null);
-    const nextReg = generatePendingRegistrationNumber(items);
+    const nextReg = generatePendingRegistrationNumber(items, units || []);
     setFormRegistrationNumber(nextReg);
     setFormSku('');
     setFormProductName('');
@@ -716,7 +744,9 @@ export default function PendingItems({
   // Open Form for Editing Item
   const handleOpenEditModal = (item: PendingItem) => {
     setEditingItem(item);
-    const reg = item.registrationNumber || ensurePendingRegistrationNumber(item, items);
+    const reg = (item.registrationNumber && item.registrationNumber.trim().toUpperCase() !== 'REG-S/N' && item.registrationNumber.trim() !== '-')
+      ? item.registrationNumber
+      : healPendingItemRegistrationNumber(item, items, units || []);
     setFormRegistrationNumber(reg);
     setFormSku(item.sku || '');
     setFormProductName(item.productName || '');
@@ -1874,10 +1904,17 @@ export default function PendingItems({
                   {/* Registration Number, SKU & Link Status */}
                   <div className="mb-2.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded border text-sky-400 bg-sky-500/10 border-sky-500/30 flex items-center gap-1" title="Número de Registro da Pendência">
-                        <Hash className="w-3 h-3 text-sky-400" />
-                        {item.registrationNumber || 'REG-S/N'}
-                      </span>
+                      {(() => {
+                        const effectiveReg = (item.registrationNumber && item.registrationNumber.trim().toUpperCase() !== 'REG-S/N' && item.registrationNumber.trim() !== '-')
+                          ? item.registrationNumber
+                          : (linkedUnit?.pendingRegistrationNumber || healPendingItemRegistrationNumber(item, items, units || []));
+                        return (
+                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded border text-sky-400 bg-sky-500/10 border-sky-500/30 flex items-center gap-1" title="Número de Registro da Pendência">
+                            <Hash className="w-3 h-3 text-sky-400" />
+                            {effectiveReg || 'REG-S/N'}
+                          </span>
+                        );
+                      })()}
                       <span className={`pending-sku-badge font-mono text-xs font-bold px-2 py-0.5 rounded border ${
                         isResolved 
                           ? 'text-slate-400 bg-slate-800/60 border-slate-700/50' 
@@ -2226,10 +2263,17 @@ export default function PendingItems({
                     >
                       {/* Nº Registro */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 border border-sky-500/25 px-2 py-0.5 rounded flex items-center gap-1 w-fit">
-                          <Hash className="w-3 h-3 text-sky-400" />
-                          <span>{item.registrationNumber || '-'}</span>
-                        </span>
+                        {(() => {
+                          const effectiveReg = (item.registrationNumber && item.registrationNumber.trim().toUpperCase() !== 'REG-S/N' && item.registrationNumber.trim() !== '-')
+                            ? item.registrationNumber
+                            : (linkedUnit?.pendingRegistrationNumber || healPendingItemRegistrationNumber(item, items, units || []));
+                          return (
+                            <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 border border-sky-500/25 px-2 py-0.5 rounded flex items-center gap-1 w-fit">
+                              <Hash className="w-3 h-3 text-sky-400" />
+                              <span>{effectiveReg || '-'}</span>
+                            </span>
+                          );
+                        })()}
                         {linkedUnit ? (
                           <button
                             type="button"
