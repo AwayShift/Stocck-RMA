@@ -6,3 +6,16 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Locks
+package-lock.json
+bun.lock
+yarn.lock
+
+# Backups & Cache
+*.json.bak
+*backup*.json
+*cache*.json
+*backup*
+*cache*
+!src/lib/backupService.ts

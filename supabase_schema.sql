@@ -127,3 +127,8 @@ CREATE TABLE IF NOT EXISTS users (
   last_login TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Índices para otimização de consultas em triage_units
+CREATE INDEX IF NOT EXISTS idx_triage_units_tracking ON triage_units(tracking_code);
+CREATE INDEX IF NOT EXISTS idx_triage_units_order ON triage_units(order_number);
+CREATE INDEX IF NOT EXISTS idx_triage_units_destination ON triage_units(destination_sector);
