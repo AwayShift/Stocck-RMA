@@ -38,6 +38,13 @@ export const getCurrentActiveAuthUser = async (): Promise<{ uid: string; email: 
   if (cachedCurrentSupabaseUser) {
     return cachedCurrentSupabaseUser;
   }
+  if (typeof window !== 'undefined' && localStorage.getItem('stocckrma_guest_mode') === 'true') {
+    return {
+      uid: 'guest',
+      email: 'visitante@stocckrma.local',
+      name: 'Visitante'
+    };
+  }
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
@@ -219,6 +226,10 @@ export const signUpWithSupabase = async (
  */
 export const signOutSupabase = async (): Promise<void> => {
   setCachedAuthUser(null);
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('stocckrma_guest_mode');
+    localStorage.removeItem(STORAGE_AUTH_USER_KEY);
+  }
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
@@ -227,7 +238,6 @@ export const signOutSupabase = async (): Promise<void> => {
       console.warn('Error during Supabase sign out:', err);
     }
   }
-  localStorage.removeItem(STORAGE_AUTH_USER_KEY);
 };
 
 /**

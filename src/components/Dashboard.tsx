@@ -48,6 +48,7 @@ interface DashboardProps {
     name?: string;
   } | null;
   userName?: string;
+  userRole?: 'admin' | 'operator' | 'viewer' | null;
 }
 
 export default function Dashboard({ 
@@ -63,8 +64,10 @@ export default function Dashboard({
   onNavigateToStock,
   onNavigateToPending,
   currentUser,
-  userName
+  userName,
+  userRole
 }: DashboardProps) {
+  const isReadOnly = userRole === 'viewer';
   const [showExcluded, setShowExcluded] = useState(false);
   const [updatingUnitId, setUpdatingUnitId] = useState<string | null>(null);
   const [unitToExclude, setUnitToExclude] = useState<TriageUnit | null>(null);
@@ -676,7 +679,7 @@ export default function Dashboard({
                     </p>
                   </div>
                 </div>
-                {onSaveDailyInflow && (
+                {onSaveDailyInflow && !isReadOnly && (
                   <button
                     type="button"
                     onClick={() => setIsManualModalOpen(true)}
@@ -814,7 +817,7 @@ export default function Dashboard({
                           </button>
                         )}
 
-                        {onUpdateUnit && (
+                        {onUpdateUnit && !isReadOnly && (
                           <button
                             type="button"
                             disabled={updatingUnitId === unit.id}

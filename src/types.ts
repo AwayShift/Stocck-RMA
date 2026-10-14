@@ -207,7 +207,7 @@ export interface UserAccount {
   uid: string;
   email: string;
   name: string;
-  role: 'admin' | 'operator';
+  role: 'admin' | 'operator' | 'viewer';
   createdAt?: string;
   lastLogin?: string;
 }

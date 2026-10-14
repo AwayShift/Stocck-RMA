@@ -55,7 +55,7 @@ interface BackupModalProps {
   onClose: () => void;
   userEmail?: string;
   userName?: string;
-  userRole?: 'admin' | 'operator' | null;
+  userRole?: 'admin' | 'operator' | 'viewer' | null;
   isLight?: boolean;
   currentCounts?: {
     products: number;

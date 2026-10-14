@@ -23,9 +23,10 @@ import {
 
 interface LoginProps {
   onLoginSuccess: () => void;
+  onGuestAccess?: () => void;
 }
 
-export default function Login({ onLoginSuccess }: LoginProps) {
+export default function Login({ onLoginSuccess, onGuestAccess }: LoginProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -248,6 +249,26 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             )}
           </button>
         </form>
+
+        {/* Guest Access Divider & Button */}
+        {onGuestAccess && (
+          <div className="mt-6 pt-4 border-t border-slate-800/80 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-px bg-slate-800" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Ou continue como visitante</span>
+              <div className="flex-1 h-px bg-slate-800" />
+            </div>
+            <button
+              type="button"
+              onClick={onGuestAccess}
+              className="w-full py-3 px-4 bg-slate-950 hover:bg-slate-850 hover:bg-slate-800/90 border border-slate-700/80 hover:border-sky-500/60 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer group"
+              id="btn-guest-login"
+            >
+              <Eye className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
+              <span>Entrar sem login (Apenas Visualização)</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

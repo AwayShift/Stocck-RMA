@@ -154,8 +154,18 @@ if (crossTabBus) {
           p => p.id === msg.item.id || 
             (p.registrationNumber && msg.item.registrationNumber && p.registrationNumber === msg.item.registrationNumber)
         );
-        if (idx >= 0) list[idx] = msg.item;
-        else list.unshift(msg.item);
+        if (idx >= 0) {
+          const existing = list[idx];
+          const incoming = { ...msg.item };
+          if (!incoming.registrationNumber || incoming.registrationNumber.trim().toUpperCase() === 'REG-S/N') {
+            if (existing?.registrationNumber && existing.registrationNumber.trim().toUpperCase() !== 'REG-S/N') {
+              incoming.registrationNumber = existing.registrationNumber;
+            }
+          }
+          list[idx] = incoming;
+        } else {
+          list.unshift(msg.item);
+        }
         memoryPendingItems = list;
         persistToStorage(CACHE_KEY_PENDING_ITEMS, list);
       }
@@ -234,7 +244,7 @@ const persistToStorage = <T>(key: string, data: T[]) => {
 const PRODUCT_COLUMNS = 'id, name, sku, voltage, description, image_url, images, images_product, images_box, images_accessories, accessories, brand, category, created_at, updated_at';
 const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration, exclude_from_daily_count';
 const INFLOW_COLUMNS = 'id, date, rma, estoque, openbox, es, total_dia, notes, source, created_at, updated_at';
-const PENDING_COLUMNS = 'id, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
+const PENDING_COLUMNS = 'id, registration_number, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
 
 // ============================================================================
 // 1. BASE PRODUCTS INCREMENTAL SYNC

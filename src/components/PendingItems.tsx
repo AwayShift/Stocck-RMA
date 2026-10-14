@@ -66,7 +66,8 @@ import {
   generatePendingRegistrationNumber, 
   validateUniqueOrderNumber, 
   ensurePendingRegistrationNumber,
-  healPendingItemRegistrationNumber
+  healPendingItemRegistrationNumber,
+  normalizeRegistrationNumber
 } from '../utils/pendingRegistrationHelper';
 import { findBaseProduct, getResolvedUnitProductName, getBaseProductImages } from '../utils/productImages';
 import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform, areOrdersMatching } from '../utils/orderPlatformHelper';
@@ -234,6 +235,8 @@ export default function PendingItems({
   enableSpreadsheetExport = true,
   onRefreshPending
 }: PendingItemsProps) {
+  const isReadOnly = userRole === 'viewer';
+
   // Filters & State
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'Todos' | PendingStatusType>('Todos');
@@ -528,7 +531,7 @@ export default function PendingItems({
 
   // Auto-recupera qualquer pendência com número de registro perdido ("REG-S/N")
   useEffect(() => {
-    if (!items || items.length === 0) return;
+    if (isReadOnly || !items || items.length === 0) return;
     const brokenItems = items.filter(i => 
       !i.registrationNumber || 
       i.registrationNumber.trim().toUpperCase() === 'REG-S/N' || 
@@ -551,7 +554,7 @@ export default function PendingItems({
         }
       }
     });
-  }, [items, units, onSavePending]);
+  }, [items, units, onSavePending, isReadOnly]);
 
   // Handle Quick Paste Click Button
   const handleTriggerClipboardPaste = async (target: 'form' | 'transfer') => {
@@ -710,6 +713,10 @@ export default function PendingItems({
 
   // Open Form for New Item
   const handleOpenNewModal = () => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode criar pendências.');
+      return;
+    }
     setEditingItem(null);
     const nextReg = generatePendingRegistrationNumber(items, units || []);
     setFormRegistrationNumber(nextReg);
@@ -743,6 +750,10 @@ export default function PendingItems({
 
   // Open Form for Editing Item
   const handleOpenEditModal = (item: PendingItem) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode editar pendências.');
+      return;
+    }
     setEditingItem(item);
     const reg = (item.registrationNumber && item.registrationNumber.trim().toUpperCase() !== 'REG-S/N' && item.registrationNumber.trim() !== '-')
       ? item.registrationNumber
@@ -792,6 +803,10 @@ export default function PendingItems({
 
   // Open Resolution Modal
   const handleInitiateResolve = (item: PendingItem) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode alterar o status de pendências.');
+      return;
+    }
     setResolvingItem(item);
     setResolutionReasonText(item.resolutionReason || '');
     setResolutionError(null);
@@ -960,6 +975,10 @@ export default function PendingItems({
 
   // Delete Modal Handlers
   const handleOpenDeleteModal = (item: PendingItem) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode excluir pendências.');
+      return;
+    }
     setDeleteConfirmItem(item);
     setDeleteError(null);
   };
@@ -1018,7 +1037,10 @@ export default function PendingItems({
         ? (formCustomPackageStatus.trim() || 'Descrever')
         : formPackageStatus;
 
-      const regNumber = formRegistrationNumber || generatePendingRegistrationNumber(items);
+      const rawReg = formRegistrationNumber && formRegistrationNumber.trim() && formRegistrationNumber.trim().toUpperCase() !== 'REG-S/N' && formRegistrationNumber.trim().toUpperCase() !== 'REG-NOVO'
+        ? normalizeRegistrationNumber(formRegistrationNumber)
+        : '';
+      const regNumber = rawReg || (editingItem?.registrationNumber ? normalizeRegistrationNumber(editingItem.registrationNumber) : '') || generatePendingRegistrationNumber(items, units || []);
       const pendingId = editingItem ? editingItem.id : `pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       
       const cleanSku = formSku.trim();
@@ -1161,6 +1183,10 @@ export default function PendingItems({
 
   // Open Transfer Modal with rich triage fields matching RmaEntry
   const handleOpenTransferModal = (item: PendingItem) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode liberar pendências para o estoque.');
+      return;
+    }
     if (isPendingItemAlreadyInStock(item, units)) {
       const linked = getLinkedStockUnit(item, units);
       const identifier = linked?.orderNumber 
@@ -1540,14 +1566,23 @@ export default function PendingItems({
               </button>
             )}
 
-            <button
-              onClick={handleOpenNewModal}
-              className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-sky-500/20 hover:scale-[1.02]"
-              id="btn-new-pendencia"
-            >
-              <Plus className="w-4 h-4 text-slate-950 stroke-[3]" />
-              <span>Nova Pendência</span>
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={handleOpenNewModal}
+                className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-sky-500/20 hover:scale-[1.02]"
+                id="btn-new-pendencia"
+              >
+                <Plus className="w-4 h-4 text-slate-950 stroke-[3]" />
+                <span>Nova Pendência</span>
+              </button>
+            )}
+
+            {isReadOnly && (
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-slate-300 border border-slate-700 rounded-xl text-xs font-semibold">
+                <Eye className="w-3.5 h-3.5 text-sky-400" />
+                <span>Modo Somente Leitura</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1881,33 +1916,39 @@ export default function PendingItems({
                     </div>
 
                     {/* Actions Dropdown / Icons */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => handleOpenEditModal(item)}
-                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                        title="Editar Pendência"
-                        id={`btn-edit-${item.id}`}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleOpenDeleteModal(item)}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                        title="Excluir Pendência"
-                        id={`btn-delete-${item.id}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => handleOpenEditModal(item)}
+                          className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          title="Editar Pendência"
+                          id={`btn-edit-${item.id}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleOpenDeleteModal(item)}
+                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                          title="Excluir Pendência"
+                          id={`btn-delete-${item.id}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Registration Number, SKU & Link Status */}
                   <div className="mb-2.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(() => {
-                        const effectiveReg = (item.registrationNumber && item.registrationNumber.trim().toUpperCase() !== 'REG-S/N' && item.registrationNumber.trim() !== '-')
+                        const directReg = (item.registrationNumber && item.registrationNumber.trim().toUpperCase() !== 'REG-S/N' && item.registrationNumber.trim() !== '-')
                           ? item.registrationNumber
-                          : (linkedUnit?.pendingRegistrationNumber || healPendingItemRegistrationNumber(item, items, units || []));
+                          : '';
+                        const linkedReg = (linkedUnit?.pendingRegistrationNumber && linkedUnit.pendingRegistrationNumber.trim().toUpperCase() !== 'REG-S/N' && linkedUnit.pendingRegistrationNumber.trim() !== '-')
+                          ? linkedUnit.pendingRegistrationNumber
+                          : '';
+                        const effectiveReg = directReg || linkedReg || healPendingItemRegistrationNumber(item, items, units || []);
                         return (
                           <span className="font-mono text-xs font-bold px-2 py-0.5 rounded border text-sky-400 bg-sky-500/10 border-sky-500/30 flex items-center gap-1" title="Número de Registro da Pendência">
                             <Hash className="w-3 h-3 text-sky-400" />
@@ -2165,58 +2206,76 @@ export default function PendingItems({
                       <span>Transferido para o Estoque (Ver Item)</span>
                       <MoveRight className="w-3.5 h-3.5 text-emerald-400 group-hover/btn:translate-x-0.5 transition-transform" />
                     </button>
-                  ) : (
-                    <>
-                      <select
-                        value={item.status}
-                        onChange={(e) => {
-                          const val = e.target.value as PendingStatusType;
-                          if (val === 'Resolvido') {
-                            handleInitiateResolve(item);
-                          } else {
-                            onUpdateStatus(item.id, val);
-                          }
-                        }}
-                        className="pending-status-select bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer"
-                        title="Alterar status da pendência"
-                      >
-                        <option value="Pendente">Pendente</option>
-                        <option value="Em Análise">Em Análise</option>
-                        <option value="Aguardando Peça">Aguardando Peça</option>
-                        <option value="Aguardando NF">Aguardando NF</option>
-                        <option value="Resolvido">Resolvido</option>
-                        <option value="Cancelado">Cancelado</option>
-                      </select>
-
-                      {alreadyInStock ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (onNavigateToStock) {
-                              onNavigateToStock(linkedUnit?.id || item.linkedUnitId || item.transferredUnitId || item.orderNumber);
+                    ) : isReadOnly ? (
+                      <div className="flex items-center justify-between w-full py-1">
+                        <span className="text-xs font-semibold text-slate-400">Status: {item.status}</span>
+                        {alreadyInStock && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onNavigateToStock) {
+                                onNavigateToStock(linkedUnit?.id || item.linkedUnitId || item.transferredUnitId || item.orderNumber);
+                              }
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Ver no Estoque</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <select
+                          value={item.status}
+                          onChange={(e) => {
+                            const val = e.target.value as PendingStatusType;
+                            if (val === 'Resolvido') {
+                              handleInitiateResolve(item);
+                            } else {
+                              onUpdateStatus(item.id, val);
                             }
                           }}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-950/90 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/50 hover:border-emerald-400 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm group/btn"
-                          title="Este produto já possui unidade cadastrada no estoque vinculada ao pedido. Não é possível liberar novamente. Clique para visualizar o produto no estoque."
-                          id={`btn-already-stock-${item.id}`}
+                          className="pending-status-select bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer"
+                          title="Alterar status da pendência"
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span className="truncate">Já no Estoque (Ver Item)</span>
-                          <MoveRight className="w-3 h-3 text-emerald-400 shrink-0 group-hover/btn:translate-x-0.5 transition-transform" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleOpenTransferModal(item)}
-                          className="pending-transfer-btn flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-900/20 hover:scale-[1.02]"
-                          title="Liberar item e enviar para o estoque físico"
-                          id={`btn-transfer-${item.id}`}
-                        >
-                          <span>Liberar p/ Estoque</span>
-                          <MoveRight className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </>
-                  )}
+                          <option value="Pendente">Pendente</option>
+                          <option value="Em Análise">Em Análise</option>
+                          <option value="Aguardando Peça">Aguardando Peça</option>
+                          <option value="Aguardando NF">Aguardando NF</option>
+                          <option value="Resolvido">Resolvido</option>
+                          <option value="Cancelado">Cancelado</option>
+                        </select>
+
+                        {alreadyInStock ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onNavigateToStock) {
+                                onNavigateToStock(linkedUnit?.id || item.linkedUnitId || item.transferredUnitId || item.orderNumber);
+                              }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-950/90 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/50 hover:border-emerald-400 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm group/btn"
+                            title="Este produto já possui unidade cadastrada no estoque vinculada ao pedido. Não é possível liberar novamente. Clique para visualizar o produto no estoque."
+                            id={`btn-already-stock-${item.id}`}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span className="truncate">Já no Estoque (Ver Item)</span>
+                            <MoveRight className="w-3 h-3 text-emerald-400 shrink-0 group-hover/btn:translate-x-0.5 transition-transform" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleOpenTransferModal(item)}
+                            className="pending-transfer-btn flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-900/20 hover:scale-[1.02]"
+                            title="Liberar item e enviar para o estoque físico"
+                            id={`btn-transfer-${item.id}`}
+                          >
+                            <span>Liberar p/ Estoque</span>
+                            <MoveRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </>
+                    )}
                 </div>
               </div>
             );
@@ -2264,9 +2323,13 @@ export default function PendingItems({
                       {/* Nº Registro */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {(() => {
-                          const effectiveReg = (item.registrationNumber && item.registrationNumber.trim().toUpperCase() !== 'REG-S/N' && item.registrationNumber.trim() !== '-')
+                          const directReg = (item.registrationNumber && item.registrationNumber.trim().toUpperCase() !== 'REG-S/N' && item.registrationNumber.trim() !== '-')
                             ? item.registrationNumber
-                            : (linkedUnit?.pendingRegistrationNumber || healPendingItemRegistrationNumber(item, items, units || []));
+                            : '';
+                          const linkedReg = (linkedUnit?.pendingRegistrationNumber && linkedUnit.pendingRegistrationNumber.trim().toUpperCase() !== 'REG-S/N' && linkedUnit.pendingRegistrationNumber.trim() !== '-')
+                            ? linkedUnit.pendingRegistrationNumber
+                            : '';
+                          const effectiveReg = directReg || linkedReg || healPendingItemRegistrationNumber(item, items, units || []);
                           return (
                             <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 border border-sky-500/25 px-2 py-0.5 rounded flex items-center gap-1 w-fit">
                               <Hash className="w-3 h-3 text-sky-400" />
@@ -2513,42 +2576,48 @@ export default function PendingItems({
                               <span>No Estoque</span>
                               <MoveRight className="w-2.5 h-2.5" />
                             </button>
-                          ) : !item.transferredToStock && (
-                            <button
-                              onClick={() => handleOpenTransferModal(item)}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-sm"
-                              title="Liberar para Estoque"
-                            >
-                              <span>Liberar</span>
-                              <MoveRight className="w-3 h-3" />
-                            </button>
+                          ) : isReadOnly ? (
+                            <span className="text-slate-500 text-[11px] italic pr-2">Apenas Leitura</span>
+                          ) : (
+                            <>
+                              {!item.transferredToStock && (
+                                <button
+                                  onClick={() => handleOpenTransferModal(item)}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-sm"
+                                  title="Liberar para Estoque"
+                                >
+                                  <span>Liberar</span>
+                                  <MoveRight className="w-3 h-3" />
+                                </button>
+                              )}
+                              {!isResolved && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleInitiateResolve(item)}
+                                  className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
+                                  title="Sinalizar como Resolvido"
+                                  id={`btn-tbl-resolve-${item.id}`}
+                                >
+                                  <CheckSquare className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleOpenEditModal(item)}
+                                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                title="Editar"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleOpenDeleteModal(item)}
+                                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="Excluir"
+                                id={`btn-table-delete-${item.id}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           )}
-                          {!isResolved && (
-                            <button
-                              type="button"
-                              onClick={() => handleInitiateResolve(item)}
-                              className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
-                              title="Sinalizar como Resolvido"
-                              id={`btn-tbl-resolve-${item.id}`}
-                            >
-                              <CheckSquare className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleOpenEditModal(item)}
-                            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                            title="Editar"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenDeleteModal(item)}
-                            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                            title="Excluir"
-                            id={`btn-table-delete-${item.id}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
                         </div>
                       </td>
                     </tr>

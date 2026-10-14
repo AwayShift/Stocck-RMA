@@ -50,7 +50,7 @@ interface BaseCatalogProps {
   onSaveProduct: (product: BaseProduct) => Promise<void>;
   onSaveBatchProducts?: (products: BaseProduct[]) => Promise<{ added: number; updated: number; savedProducts?: BaseProduct[] }>;
   onDeleteProduct: (id: string) => Promise<void>;
-  userRole?: 'admin' | 'operator' | null;
+  userRole?: 'admin' | 'operator' | 'viewer' | null;
   enableSpreadsheetImport?: boolean;
   enableSpreadsheetExport?: boolean;
   isLight?: boolean;
@@ -71,6 +71,8 @@ export default function BaseCatalog({
   enableSpreadsheetExport = true,
   isLight = false
 }: BaseCatalogProps) {
+  const isReadOnly = userRole === 'viewer';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedVoltage, setSelectedVoltage] = useState('Todas');
@@ -268,6 +270,10 @@ export default function BaseCatalog({
 
   // Handle opening form for adding a new product
   const handleAddClick = () => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode adicionar produtos.');
+      return;
+    }
     setEditingProduct(null);
     setName('');
     setSku('');
@@ -291,6 +297,10 @@ export default function BaseCatalog({
 
   // Handle opening form for editing a product
   const handleEditClick = (p: BaseProduct) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode editar produtos.');
+      return;
+    }
     setEditingProduct(p);
     setName(p.name);
     setSku(p.sku);
@@ -388,6 +398,10 @@ export default function BaseCatalog({
 
   // Handle deletion (using custom state-based confirmation)
   const handleDeleteClick = (id: string, productName: string) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode excluir produtos.');
+      return;
+    }
     setConfirmConfig({
       title: 'Excluir Produto do Catálogo',
       message: `Tem certeza de que deseja excluir o produto "${productName}" do Catálogo de Base? Isso removerá a referência permanente para triagens futuras.`,
@@ -489,7 +503,7 @@ export default function BaseCatalog({
           )}
 
           {/* Import Excel Spreadsheet Button (Matches user requirement) */}
-          {enableSpreadsheetImport && (
+          {enableSpreadsheetImport && !isReadOnly && (
             <button
               type="button"
               onClick={() => setIsExcelImportOpen(true)}
@@ -503,14 +517,23 @@ export default function BaseCatalog({
           )}
 
           {/* Manual Add Master Product */}
-          <button 
-            onClick={handleAddClick}
-            className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30 transition-all cursor-pointer"
-            id="btn-add-product"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Cadastrar Manual</span>
-          </button>
+          {!isReadOnly && (
+            <button 
+              onClick={handleAddClick}
+              className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-500/20 hover:shadow-sky-500/30 transition-all cursor-pointer"
+              id="btn-add-product"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Cadastrar Manual</span>
+            </button>
+          )}
+
+          {isReadOnly && (
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-slate-300 border border-slate-700 rounded-xl text-xs font-semibold">
+              <Eye className="w-3.5 h-3.5 text-sky-400" />
+              <span>Modo Somente Leitura</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -784,22 +807,26 @@ export default function BaseCatalog({
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
-                            <button 
-                              onClick={() => handleEditClick(product)}
-                              className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-800 transition-colors cursor-pointer"
-                              title="Editar produto"
-                              id={`btn-edit-${product.id}`}
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteClick(product.id, product.name)}
-                              className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-800 hover:border-rose-500/30 transition-colors cursor-pointer"
-                              title="Excluir produto"
-                              id={`btn-delete-${product.id}`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {!isReadOnly && (
+                              <>
+                                <button 
+                                  onClick={() => handleEditClick(product)}
+                                  className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-800 transition-colors cursor-pointer"
+                                  title="Editar produto"
+                                  id={`btn-edit-${product.id}`}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteClick(product.id, product.name)}
+                                  className="p-1.5 bg-slate-950 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-800 hover:border-rose-500/30 transition-colors cursor-pointer"
+                                  title="Excluir produto"
+                                  id={`btn-delete-${product.id}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -917,26 +944,28 @@ export default function BaseCatalog({
                               <span>Detalhes</span>
                             </button>
 
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleEditClick(product)}
-                                className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800 transition-colors cursor-pointer"
-                                title="Editar produto"
-                                id={`btn-edit-grid-${product.id}`}
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteClick(product.id, product.name)}
-                                className="p-2 bg-slate-900 hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 hover:border-rose-800/50 transition-colors cursor-pointer"
-                                title="Excluir produto"
-                                id={`btn-delete-grid-${product.id}`}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            {!isReadOnly && (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditClick(product)}
+                                  className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800 transition-colors cursor-pointer"
+                                  title="Editar produto"
+                                  id={`btn-edit-grid-${product.id}`}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteClick(product.id, product.name)}
+                                  className="p-2 bg-slate-900 hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 hover:border-rose-800/50 transition-colors cursor-pointer"
+                                  title="Excluir produto"
+                                  id={`btn-delete-grid-${product.id}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

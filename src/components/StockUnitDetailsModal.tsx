@@ -60,6 +60,7 @@ export interface StockUnitDetailsModalProps {
   onCheckout?: (id: string) => void;
   onRevertCheckout?: (id: string) => void;
   onOpenImageZoom?: (imageUrl: string, title: string, imagesList: string[], index: number) => void;
+  isReadOnly?: boolean;
 }
 
 export function StockUnitDetailsModal({
@@ -79,7 +80,8 @@ export function StockUnitDetailsModal({
   onDelete,
   onCheckout,
   onRevertCheckout,
-  onOpenImageZoom
+  onOpenImageZoom,
+  isReadOnly = false
 }: StockUnitDetailsModalProps) {
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [editingSector, setEditingSector] = useState<DestinationSectorType | ''>('');
@@ -245,15 +247,17 @@ export function StockUnitDetailsModal({
               <ArrowRight className="w-3.5 h-3.5 opacity-70 shrink-0" />
             </button>
 
-            <button 
-              type="button"
-              onClick={() => onStartEdit(unit)}
-              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-sky-600/20 flex items-center gap-1.5 cursor-pointer"
-              title="Editar imagens, descrição, SKU e especificações do produto"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              <span>Editar Produto</span>
-            </button>
+            {!isReadOnly && (
+              <button 
+                type="button"
+                onClick={() => onStartEdit(unit)}
+                className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-sky-600/20 flex items-center gap-1.5 cursor-pointer"
+                title="Editar imagens, descrição, SKU e especificações do produto"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Editar Produto</span>
+              </button>
+            )}
 
             <button 
               type="button"
@@ -785,8 +789,13 @@ export function StockUnitDetailsModal({
 
         {/* Modal Action Controls Bar */}
         <div className="px-6 py-4 bg-slate-950 border-t border-slate-800/60 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          {/* Left Side Actions: Re-route / Move Sector (only if active in stock) */}
-          {unit.status === 'Estoque' && onMoveSector ? (
+          {/* Left Side Actions: Re-route / Move Sector (only if active in stock and not read-only) */}
+          {isReadOnly ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs font-semibold">
+              <Eye className="w-3.5 h-3.5 text-sky-400" />
+              <span>Modo Somente Leitura (Alterações Bloqueadas)</span>
+            </div>
+          ) : unit.status === 'Estoque' && onMoveSector ? (
             <div className="flex items-center gap-2.5 w-full sm:w-auto">
               <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Mover de Setor:</span>
               <select 
@@ -843,7 +852,7 @@ export function StockUnitDetailsModal({
               <ArrowRight className="w-3.5 h-3.5 opacity-70" />
             </button>
 
-            {onDelete && (
+            {!isReadOnly && onDelete && (
               <button 
                 onClick={() => onDelete(unit.id)}
                 className="px-3.5 py-2 bg-slate-800 hover:bg-rose-600/20 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
@@ -854,26 +863,28 @@ export function StockUnitDetailsModal({
               </button>
             )}
 
-            {unit.status === 'Estoque' && onCheckout ? (
-              <button 
-                onClick={() => onCheckout(unit.id)}
-                className="px-4.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
-                id="btn-stock-checkout"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                Dar Baixa de Estoque
-              </button>
-            ) : onRevertCheckout ? (
-              <button 
-                onClick={() => onRevertCheckout(unit.id)}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-black shadow-lg shadow-amber-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
-                id="btn-stock-revert-checkout"
-                title="Reverter a baixa e retornar este produto para o estoque ativo"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Reverter Baixa
-              </button>
-            ) : null}
+            {!isReadOnly && (
+              unit.status === 'Estoque' && onCheckout ? (
+                <button 
+                  onClick={() => onCheckout(unit.id)}
+                  className="px-4.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                  id="btn-stock-checkout"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Dar Baixa de Estoque
+                </button>
+              ) : onRevertCheckout ? (
+                <button 
+                  onClick={() => onRevertCheckout(unit.id)}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-black shadow-lg shadow-amber-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                  id="btn-stock-revert-checkout"
+                  title="Reverter a baixa e retornar este produto para o estoque ativo"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Reverter Baixa
+                </button>
+              ) : null
+            )}
           </div>
         </div>
       </div>

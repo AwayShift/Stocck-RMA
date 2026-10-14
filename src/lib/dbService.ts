@@ -875,7 +875,9 @@ export const transferPendingItemToStock = async (
     createdAt: new Date().toISOString(),
     status: 'Estoque',
     excludeFromDailyCount: Boolean(triageDetails?.excludeFromDailyCount),
-    pendingRegistrationNumber: pendingItem.registrationNumber || undefined,
+    pendingRegistrationNumber: (pendingItem.registrationNumber && pendingItem.registrationNumber.trim() && pendingItem.registrationNumber.trim().toUpperCase() !== 'REG-S/N')
+      ? normalizeRegistrationNumber(pendingItem.registrationNumber)
+      : ensurePendingRegistrationNumber(pendingItem, getCachedPendingItems(), getCachedTriageUnits()),
     pendingItemId: pendingItem.id
   };
 
@@ -885,6 +887,7 @@ export const transferPendingItemToStock = async (
   // 2. Mark pending item as resolved and transferred using resilient savePendingItem
   const updatedPendingItem: PendingItem = {
     ...pendingItem,
+    registrationNumber: newUnit.pendingRegistrationNumber || pendingItem.registrationNumber,
     status: 'Resolvido',
     transferredToStock: true,
     transferredUnitId: newTriageId,
@@ -1580,7 +1583,29 @@ export const getInitialPendingItems = async (pageSize: number = 1000): Promise<P
       }
 
       if (!error && data) {
+        const currentCached = getCachedPendingItems();
+        const cachedTriage = getCachedTriageUnits();
         const list = data.map(mapSupabaseToPendingItem);
+        list.forEach(item => {
+          if (!item.registrationNumber || item.registrationNumber.trim().toUpperCase() === 'REG-S/N') {
+            const hit = currentCached.find(c => c.id === item.id);
+            if (hit?.registrationNumber && hit.registrationNumber.trim().toUpperCase() !== 'REG-S/N') {
+              item.registrationNumber = hit.registrationNumber;
+            } else {
+              const triageHit = cachedTriage.find(u => 
+                (u.pendingItemId && u.pendingItemId === item.id) || 
+                (item.orderNumber && u.orderNumber && u.orderNumber.trim() === item.orderNumber.trim()) ||
+                (item.transferredUnitId && u.id === item.transferredUnitId) ||
+                (item.linkedUnitId && u.id === item.linkedUnitId)
+              );
+              if (triageHit?.pendingRegistrationNumber && triageHit.pendingRegistrationNumber.trim().toUpperCase() !== 'REG-S/N') {
+                item.registrationNumber = triageHit.pendingRegistrationNumber;
+              } else {
+                item.registrationNumber = ensurePendingRegistrationNumber(item, currentCached, cachedTriage);
+              }
+            }
+          }
+        });
         updateWholeCollectionCache('pending_items', list);
         return list;
       }

@@ -77,6 +77,7 @@ interface RmaEntryProps {
     email?: string;
     name?: string;
   } | null;
+  userRole?: 'admin' | 'operator' | 'viewer' | null;
 }
 
 export default function RmaEntry({ 
@@ -88,8 +89,11 @@ export default function RmaEntry({
   onSaveTriage, 
   onNavigateToStock, 
   isLight = false,
-  currentUser = null
+  currentUser = null,
+  userRole
 }: RmaEntryProps) {
+  const isReadOnly = userRole === 'viewer';
+
   // Current active user for attribution
   const [activeUser, setActiveUser] = useState<{ uid?: string; email?: string; name?: string } | null>(currentUser || null);
 
@@ -1007,6 +1011,10 @@ export default function RmaEntry({
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode criar novas entradas de RMA.');
+      return;
+    }
     setErrorMessage('');
     setSuccessMessage('');
 
@@ -1284,6 +1292,12 @@ export default function RmaEntry({
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6" id="rma-entry-form">
+          {isReadOnly && (
+            <div className="flex items-center gap-2.5 p-4 bg-sky-500/10 border border-sky-500/30 rounded-xl text-sky-300 text-xs font-semibold" id="rma-readonly-banner">
+              <Eye className="w-5 h-5 text-sky-400 shrink-0" />
+              <span>Modo Visitante (Apenas Visualização): Você pode explorar os campos e simular o fluxo de triagem, mas a gravação e criação de entradas de RMA estão bloqueadas.</span>
+            </div>
+          )}
           {errorMessage && (
             <div className="flex items-start gap-2.5 p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-sm font-semibold">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -2688,11 +2702,20 @@ export default function RmaEntry({
                 <div>
                   <button 
                     type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-3 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    disabled={isSubmitting || isReadOnly}
+                    className={`w-full py-3 rounded-xl text-xs font-bold shadow-lg flex items-center justify-center gap-2 transition-all ${
+                      isReadOnly 
+                        ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed'
+                        : 'bg-sky-500 hover:bg-sky-400 text-white shadow-sky-500/20 disabled:opacity-50 cursor-pointer'
+                    }`}
                     id="btn-save-triage"
                   >
-                    {isSubmitting ? (
+                    {isReadOnly ? (
+                      <>
+                        <Eye className="w-4 h-4 text-slate-400" />
+                        <span>Criação Desabilitada (Modo Visitante)</span>
+                      </>
+                    ) : isSubmitting ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin" />
                         <span>Gravando triagem...</span>

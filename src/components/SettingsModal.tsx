@@ -59,7 +59,7 @@ interface SettingsModalProps {
   onOpenBackupModal?: (tab?: 'export' | 'restore') => void;
   onOpenDbSwitcherModal?: () => void;
   onLogout?: () => void;
-  userRole?: 'admin' | 'operator' | null;
+  userRole?: 'admin' | 'operator' | 'viewer' | null;
   userEmail?: string;
 }
 
@@ -124,6 +124,13 @@ export default function SettingsModal({
       }).catch(() => {});
     }
   }, [isOpen]);
+
+  // Ensure visitor cannot stay on restricted tabs
+  useEffect(() => {
+    if (userRole === 'viewer' && (activeTab === 'cloudinary' || activeTab === 'database')) {
+      setActiveTab('general');
+    }
+  }, [userRole, activeTab]);
 
   const handleTestCloudinary = async () => {
     if (!cloudNameInput.trim() || !uploadPresetInput.trim()) {
@@ -254,34 +261,38 @@ export default function SettingsModal({
             <span>Geral & Tema</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('cloudinary')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all cursor-pointer border-b-2 whitespace-nowrap ${
-              activeTab === 'cloudinary'
-                ? isLight ? 'text-sky-700 border-sky-600 bg-white font-bold' : 'text-sky-400 border-sky-400 bg-slate-900 font-bold'
-                : isLight ? 'text-slate-600 border-transparent hover:text-slate-950 hover:bg-white/60' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
-            }`}
-            id="tab-btn-cloudinary"
-          >
-            <Cloud className="w-3.5 h-3.5" />
-            <span>Cloudinary</span>
-            <span className={`w-1.5 h-1.5 rounded-full ${isConfigured ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-          </button>
+          {userRole !== 'viewer' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('cloudinary')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all cursor-pointer border-b-2 whitespace-nowrap ${
+                activeTab === 'cloudinary'
+                  ? isLight ? 'text-sky-700 border-sky-600 bg-white font-bold' : 'text-sky-400 border-sky-400 bg-slate-900 font-bold'
+                  : isLight ? 'text-slate-600 border-transparent hover:text-slate-950 hover:bg-white/60' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
+              }`}
+              id="tab-btn-cloudinary"
+            >
+              <Cloud className="w-3.5 h-3.5" />
+              <span>Cloudinary</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${isConfigured ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('database')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all cursor-pointer border-b-2 whitespace-nowrap ${
-              activeTab === 'database'
-                ? isLight ? 'text-sky-700 border-sky-600 bg-white font-bold' : 'text-sky-400 border-sky-400 bg-slate-900 font-bold'
-                : isLight ? 'text-slate-600 border-transparent hover:text-slate-950 hover:bg-white/60' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
-            }`}
-            id="tab-btn-database"
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>Banco & Backup</span>
-          </button>
+          {userRole !== 'viewer' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('database')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all cursor-pointer border-b-2 whitespace-nowrap ${
+                activeTab === 'database'
+                  ? isLight ? 'text-sky-700 border-sky-600 bg-white font-bold' : 'text-sky-400 border-sky-400 bg-slate-900 font-bold'
+                  : isLight ? 'text-slate-600 border-transparent hover:text-slate-950 hover:bg-white/60' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
+              }`}
+              id="tab-btn-database"
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>Banco & Backup</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -465,7 +476,7 @@ export default function SettingsModal({
           )}
 
           {/* TAB 2: CLOUDINARY CDN */}
-          {activeTab === 'cloudinary' && (
+          {activeTab === 'cloudinary' && userRole !== 'viewer' && (
             <div className="space-y-3.5 animate-in fade-in duration-150">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -590,7 +601,7 @@ export default function SettingsModal({
           )}
 
           {/* TAB 3: BANCO & BACKUP */}
-          {activeTab === 'database' && (
+          {activeTab === 'database' && userRole !== 'viewer' && (
             <div className="space-y-3 animate-in fade-in duration-150">
               {/* Supabase Status Card */}
               <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
@@ -764,9 +775,11 @@ export default function SettingsModal({
                   <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${
                     userRole === 'admin' 
                       ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30' 
-                      : 'bg-slate-800 text-slate-300'
+                      : userRole === 'viewer'
+                        ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                        : 'bg-slate-800 text-slate-300'
                   }`}>
-                    {userRole === 'admin' ? 'Administrador' : 'Operador'}
+                    {userRole === 'admin' ? 'Administrador' : userRole === 'viewer' ? 'Visitante (Somente Leitura)' : 'Operador'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-1">

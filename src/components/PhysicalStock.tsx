@@ -105,6 +105,7 @@ interface PhysicalStockProps {
   initialPendingSkuFilter?: boolean;
   onClearInitialFilters?: () => void;
   currentTab?: 'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement';
+  userRole?: 'admin' | 'operator' | 'viewer' | null;
 }
 
 const stripHtml = (html?: string): string => {
@@ -169,8 +170,10 @@ export default function PhysicalStock({
   initialSearchTerm,
   initialPendingSkuFilter,
   onClearInitialFilters,
-  currentTab = 'stock'
+  currentTab = 'stock',
+  userRole
 }: PhysicalStockProps) {
+  const isReadOnly = userRole === 'viewer';
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm || '');
   const [selectedBrand, setSelectedBrand] = useState<string>('Todas');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
@@ -545,6 +548,10 @@ export default function PhysicalStock({
   };
 
   const handleStartEdit = (unit: TriageUnit) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode editar unidades.');
+      return;
+    }
     setSelectedUnitId(unit.id);
     setIsEditingUnit(true);
   };
@@ -1034,6 +1041,10 @@ export default function PhysicalStock({
 
   // Action: Dar Baixa (with custom confirmation)
   const handleCheckout = (id: string) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode dar baixa em itens.');
+      return;
+    }
     setConfirmConfig({
       title: 'Confirmar Baixa de Estoque',
       message: 'Confirmar saída física do produto? Esta ação dará baixa e arquivará a unidade permanentemente no histórico de baixas.',
@@ -1055,6 +1066,10 @@ export default function PhysicalStock({
 
   // Action: Reverter Baixa (with custom confirmation)
   const handleRevertCheckout = (id: string) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode reverter baixas.');
+      return;
+    }
     setConfirmConfig({
       title: 'Reverter Baixa de Estoque',
       message: 'Deseja reverter a baixa deste produto e retornar a unidade para o estoque ativo?',
@@ -1078,6 +1093,10 @@ export default function PhysicalStock({
 
   // Action: Move Sector (with custom confirmation, mandatory STI for Openbox, and photo strategy options for Principal)
   const handleMoveSector = (unit: TriageUnit, newSector: DestinationSectorType) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode mover unidades de setor.');
+      return;
+    }
     if (unit.destinationSector === newSector) return;
 
     // If moving to Openbox, require STI code via dedicated confirmation modal
@@ -1290,6 +1309,10 @@ export default function PhysicalStock({
 
   // Action: Delete Triage Unit (with custom confirmation)
   const handleDelete = (id: string) => {
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode excluir registros.');
+      return;
+    }
     setConfirmConfig({
       title: 'Excluir Registro Permanentemente',
       message: 'Tem certeza absoluta de que deseja EXCLUIR este laudo de triagem e remover o registro permanentemente? Esta ação é irreversível.',
@@ -1425,7 +1448,7 @@ export default function PhysicalStock({
             </button>
           )}
 
-          {enableSpreadsheetImport && (
+          {enableSpreadsheetImport && !isReadOnly && (
             <button
               onClick={() => setIsExcelModalOpen(true)}
               className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-2 cursor-pointer shrink-0"
@@ -1435,6 +1458,13 @@ export default function PhysicalStock({
               <FileSpreadsheet className="w-4.5 h-4.5 text-white" />
               <span>Importar Tabela Excel (OpenBox)</span>
             </button>
+          )}
+
+          {isReadOnly && (
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 text-slate-300 border border-slate-700 rounded-xl text-xs font-semibold shrink-0">
+              <Eye className="w-3.5 h-3.5 text-sky-400" />
+              <span>Modo Somente Leitura</span>
+            </div>
           )}
         </div>
       </div>
@@ -1612,20 +1642,30 @@ export default function PhysicalStock({
                   )}
 
                   <button
-                    onClick={handleBatchCheckout}
-                    className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2 cursor-pointer animate-in fade-in"
+                    onClick={isReadOnly ? undefined : handleBatchCheckout}
+                    disabled={isReadOnly}
+                    className={`px-3.5 py-2 font-bold rounded-xl text-xs transition-all flex items-center gap-2 animate-in fade-in ${
+                      isReadOnly 
+                        ? 'bg-slate-800/60 text-slate-500 border border-slate-700/60 cursor-not-allowed opacity-60' 
+                        : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20 cursor-pointer'
+                    }`}
                     id="btn-batch-checkout"
-                    title="Dar baixa do estoque para todas as unidades selecionadas"
+                    title={isReadOnly ? "Ação bloqueada no Modo Visitante (Apenas Visualização)" : "Dar baixa do estoque para todas as unidades selecionadas"}
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Baixa em Lote ({selectedUnitIds.length})</span>
                   </button>
 
                   <button
-                    onClick={handleBatchDelete}
-                    className="px-3.5 py-2 bg-slate-800 hover:bg-rose-950 text-rose-300 hover:text-rose-200 border border-rose-800/40 hover:border-rose-600 font-bold rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer animate-in fade-in"
+                    onClick={isReadOnly ? undefined : handleBatchDelete}
+                    disabled={isReadOnly}
+                    className={`px-3.5 py-2 font-bold rounded-xl text-xs transition-all flex items-center gap-2 animate-in fade-in ${
+                      isReadOnly 
+                        ? 'bg-slate-850/60 text-slate-500 border border-slate-800 cursor-not-allowed opacity-60' 
+                        : 'bg-slate-800 hover:bg-rose-950 text-rose-300 hover:text-rose-200 border border-rose-800/40 hover:border-rose-600 cursor-pointer'
+                    }`}
                     id="btn-batch-delete"
-                    title="Excluir permanentemente do estoque todas as unidades selecionadas"
+                    title={isReadOnly ? "Ação bloqueada no Modo Visitante (Apenas Visualização)" : "Excluir permanentemente do estoque todas as unidades selecionadas"}
                   >
                     <Trash2 className="w-4 h-4 text-rose-400" />
                     <span>Excluir ({selectedUnitIds.length})</span>
@@ -2573,18 +2613,33 @@ export default function PhysicalStock({
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${sectorClass}`}>
                           {unit.destinationSector}
                         </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEdit(unit);
-                          }}
-                          className="px-2 py-0.5 bg-slate-800 hover:bg-sky-600/30 text-sky-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/50 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                          title="Editar nome, fotos, descrição e laudo do produto"
-                        >
-                          <Pencil className="w-3 h-3" />
-                          <span>Editar</span>
-                        </button>
+                        {isReadOnly ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedUnitId(unit.id);
+                            }}
+                            className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Visualizar laudo e fotos do produto"
+                          >
+                            <Eye className="w-3 h-3 text-sky-400" />
+                            <span>Ver</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEdit(unit);
+                            }}
+                            className="px-2 py-0.5 bg-slate-800 hover:bg-sky-600/30 text-sky-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/50 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Editar nome, fotos, descrição e laudo do produto"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>Editar</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2924,18 +2979,20 @@ export default function PhysicalStock({
                           Pedido Selecionado
                         </span>
                       )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEdit(unit);
-                        }}
-                        className="px-2.5 py-1 bg-slate-800 hover:bg-sky-600/30 text-sky-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/50 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Editar ficha e fotos do produto"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        <span>Editar</span>
-                      </button>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEdit(unit);
+                          }}
+                          className="px-2.5 py-1 bg-slate-800 hover:bg-sky-600/30 text-sky-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/50 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Editar ficha e fotos do produto"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Editar</span>
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -3013,6 +3070,7 @@ export default function PhysicalStock({
           products={products}
           units={units}
           isLight={isLight}
+          isReadOnly={isReadOnly}
           enableSpreadsheetExport={enableSpreadsheetExport}
           onStartEdit={(unit) => handleStartEdit(unit)}
           onGoToStock={(unit) => handleGoToStock(unit)}

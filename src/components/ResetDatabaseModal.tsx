@@ -33,7 +33,7 @@ interface ResetDatabaseModalProps {
   isOpen: boolean;
   onClose: () => void;
   userEmail: string;
-  userRole: 'admin' | 'operator' | null;
+  userRole: 'admin' | 'operator' | 'viewer' | null;
   onSuccess: () => void;
   target?: ResetTargetType;
   itemCount?: number;
@@ -244,11 +244,24 @@ export default function ResetDatabaseModal({
             </div>
             <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
               <span className="text-slate-400">Privilégio Atual:</span>
-              <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${userRole === 'admin' ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20' : 'bg-slate-800 text-slate-300'}`}>
-                {userRole === 'admin' ? 'Administrador' : 'Logística (Operador)'}
+              <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                userRole === 'admin' 
+                  ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20' 
+                  : userRole === 'viewer'
+                    ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                    : 'bg-slate-800 text-slate-300'
+              }`}>
+                {userRole === 'admin' ? 'Administrador' : userRole === 'viewer' ? 'Visitante (Bloqueado)' : 'Logística (Operador)'}
               </span>
             </div>
           </div>
+
+          {userRole === 'viewer' && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs text-amber-300">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>Visitantes em modo de visualização não possuem autorização para reiniciar ou limpar bancos de dados.</div>
+            </div>
+          )}
 
           {/* Error Message */}
           {errorMessage && (
@@ -314,7 +327,7 @@ export default function ResetDatabaseModal({
             
             <button
               type="submit"
-              disabled={isLoading || !password.trim()}
+              disabled={isLoading || !password.trim() || userRole === 'viewer'}
               className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-950/50 disabled:opacity-50 disabled:cursor-not-allowed"
               id="btn-confirm-reset-db-submit"
             >

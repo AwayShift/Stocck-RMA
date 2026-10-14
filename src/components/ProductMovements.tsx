@@ -26,7 +26,8 @@ import {
   RotateCcw,
   Clock,
   ArrowUpRight,
-  Sun
+  Sun,
+  Eye
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, DailyInflowRecord, isMigrationUnit } from '../types';
 import ExcelInflowImportModal from './ExcelInflowImportModal';
@@ -49,7 +50,7 @@ interface ProductMovementsProps {
   onSaveBatchDailyInflows?: (records: DailyInflowRecord[]) => Promise<number>;
   onDeleteDailyInflow?: (id: string) => Promise<void>;
   onSaveTriage: (unit: TriageUnit) => Promise<void>;
-  userRole: 'admin' | 'operator' | null;
+  userRole: 'admin' | 'operator' | 'viewer' | null;
   enableSpreadsheetImport?: boolean;
   enableSpreadsheetExport?: boolean;
   isLight?: boolean;
@@ -70,6 +71,8 @@ export default function ProductMovements({
   isLight = false,
   onNavigateToStockUnit
 }: ProductMovementsProps) {
+  const isReadOnly = userRole === 'viewer';
+
   // Navigation & View mode
   const [activeView, setActiveView] = useState<'spreadsheet' | 'visual'>('spreadsheet');
 
@@ -924,16 +927,22 @@ export default function ProductMovements({
       setEditingInflow(null);
       setDefaultEntryDate(targetDate);
     }
+    if (isReadOnly) {
+      alert('Modo apenas leitura: você está no modo visitante e não pode criar ou editar entradas.');
+      return;
+    }
     setIsManualModalOpen(true);
   };
 
   const handleSaveInflowRecord = async (record: DailyInflowRecord) => {
+    if (isReadOnly) return;
     if (onSaveDailyInflow) {
       await onSaveDailyInflow(record);
     }
   };
 
   const handleDeleteInflowRecord = async (id: string) => {
+    if (isReadOnly) return;
     if (onDeleteDailyInflow) {
       await onDeleteDailyInflow(id);
     }
@@ -1035,7 +1044,7 @@ export default function ProductMovements({
           </div>
 
           {/* Action: Excel Import */}
-          {enableSpreadsheetImport && (
+          {enableSpreadsheetImport && !isReadOnly && (
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
@@ -1044,6 +1053,13 @@ export default function ProductMovements({
               <FileSpreadsheet className="w-4 h-4" />
               <span>Importar Planilha</span>
             </button>
+          )}
+
+          {isReadOnly && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 border border-slate-700 text-xs font-semibold">
+              <Eye className="w-3.5 h-3.5 text-sky-400" />
+              <span>Modo Somente Leitura</span>
+            </div>
           )}
 
           {/* Action: Export Excel */}

@@ -23,7 +23,8 @@ import {
   Settings,
   HardDriveDownload,
   Clock,
-  Zap
+  Zap,
+  Eye
 } from 'lucide-react';
 
 import { BaseProduct, TriageUnit, DailyInflowRecord, PendingItem, PendingStatusType, DestinationSectorType, PlatformType } from './types';
@@ -79,7 +80,7 @@ import BackupModal from './components/BackupModal';
 import DatabaseSwitcherModal from './components/DatabaseSwitcherModal';
 import { checkAndRunScheduledBackups } from './lib/backupService';
 import { getSupabaseClient } from './lib/supabase';
-import { subscribeToSupabaseAuth, signOutSupabase } from './lib/supabaseAuth';
+import { subscribeToSupabaseAuth, signOutSupabase, setCachedAuthUser } from './lib/supabaseAuth';
 import { normalizeStiCode } from './utils/stiFormatter';
 import { areOrdersMatching } from './utils/orderPlatformHelper';
 import { ThemeMode, getSavedTheme, applyTheme } from './lib/theme';
@@ -102,9 +103,24 @@ export default function App() {
   };
   
   // Auth state
-  const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<'admin' | 'operator' | null>(null);
-  const [userName, setUserName] = useState<string>('');
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('stocckrma_guest_mode') === 'true') {
+      return { id: 'guest', email: 'visitante@stocckrma.local', displayName: 'Visitante' };
+    }
+    return null;
+  });
+  const [userRole, setUserRole] = useState<'admin' | 'operator' | 'viewer' | null>(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('stocckrma_guest_mode') === 'true') {
+      return 'viewer';
+    }
+    return null;
+  });
+  const [userName, setUserName] = useState<string>(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('stocckrma_guest_mode') === 'true') {
+      return 'Visitante';
+    }
+    return '';
+  });
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // Database states initialized instantly from local cache (0ms blocking time)
@@ -178,6 +194,7 @@ export default function App() {
 
     const unsubscribeAuth = subscribeToSupabaseAuth(async (currentUser, profile) => {
       if (currentUser) {
+        localStorage.removeItem('stocckrma_guest_mode');
         setUser(currentUser);
 
         if (profile) {
@@ -190,9 +207,17 @@ export default function App() {
         }
         setIsAuthLoading(false);
       } else {
-        setUser(null);
-        setUserRole(null);
-        setUserName('');
+        if (localStorage.getItem('stocckrma_guest_mode') === 'true') {
+          const guestUser = { id: 'guest', email: 'visitante@stocckrma.local', displayName: 'Visitante' };
+          setUser(guestUser);
+          setUserRole('viewer');
+          setUserName('Visitante');
+          setCachedAuthUser({ uid: 'guest', email: 'visitante@stocckrma.local', name: 'Visitante' });
+        } else {
+          setUser(null);
+          setUserRole(null);
+          setUserName('');
+        }
         setIsAuthLoading(false);
       }
     });
@@ -729,8 +754,20 @@ export default function App() {
     setTriageUnits(prev => prev.map(u => u.id === id ? (updated || { ...u, status: 'Estoque', checkoutDate: undefined }) : u));
   };
 
+  const handleGuestAccess = () => {
+    localStorage.setItem('stocckrma_guest_mode', 'true');
+    const guestUser = { id: 'guest', email: 'visitante@stocckrma.local', displayName: 'Visitante' };
+    setUser(guestUser);
+    setUserRole('viewer');
+    setUserName('Visitante');
+    setCachedAuthUser({ uid: 'guest', email: 'visitante@stocckrma.local', name: 'Visitante' });
+    setActiveTab('dashboard');
+    loadInitialData();
+  };
+
   const handleLogout = async () => {
     try {
+      localStorage.removeItem('stocckrma_guest_mode');
       await signOutSupabase();
       setUser(null);
       setUserRole(null);
@@ -870,7 +907,12 @@ export default function App() {
 
   // Render Login screen if not authenticated
   if (!user) {
-    return <Login onLoginSuccess={() => setActiveTab('dashboard')} />;
+    return (
+      <Login 
+        onLoginSuccess={() => setActiveTab('dashboard')} 
+        onGuestAccess={handleGuestAccess} 
+      />
+    );
   }
 
   return (
@@ -990,6 +1032,21 @@ export default function App() {
 
             {/* Unified Settings & System Control */}
             <div className="flex items-center gap-2 shrink-0">
+              {userRole === 'viewer' && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-semibold" id="header-guest-badge">
+                  <Eye className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="hidden md:inline text-[11px] font-bold">Visitante (Leitura)</span>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="ml-1 px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer shadow-xs"
+                    title="Encerrar visualização e entrar com login corporativo"
+                    id="btn-guest-header-login"
+                  >
+                    Fazer Login
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setIsSettingsModalOpen(true)}
@@ -1005,6 +1062,27 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {/* Guest Mode Informational Banner */}
+      {userRole === 'viewer' && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-3 sm:px-6 py-2 text-xs text-amber-200" id="guest-mode-banner">
+          <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                <strong>Modo Visitante:</strong> Você está navegando em modo protegido de apenas visualização. Gravação, edição e exclusão estão desabilitadas.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="text-xs font-bold text-amber-300 hover:text-white underline cursor-pointer shrink-0"
+            >
+              Fazer Login com Conta Corporativa
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Secondary Navigation Tabs (for screens under XL) */}
       <div className="xl:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-3 sm:px-4 flex gap-1.5 shadow-inner items-center" id="mobile-navigation">
@@ -1135,6 +1213,7 @@ export default function App() {
                 onNavigateToPending={() => setActiveTab('pending')}
                 currentUser={user ? { uid: user.id, email: user.email || '', name: userName || user.displayName || '' } : null}
                 userName={userName}
+                userRole={userRole}
               />
             )}
 
@@ -1167,6 +1246,7 @@ export default function App() {
                 onNavigateToStock={() => handleSwitchTab('stock')}
                 isLight={isLight}
                 currentUser={user ? { uid: user.id, email: user.email || '', name: userName || user.displayName || '' } : null}
+                userRole={userRole}
               />
             )}
 
@@ -1194,6 +1274,7 @@ export default function App() {
                 initialSearchTerm={initialStockFilters?.searchTerm}
                 initialPendingSkuFilter={Boolean(initialStockFilters?.pendingSku)}
                 onClearInitialFilters={() => setInitialStockFilters(null)}
+                userRole={userRole}
               />
             </div>
 
