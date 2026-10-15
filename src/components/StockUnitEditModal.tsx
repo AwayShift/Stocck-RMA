@@ -1030,6 +1030,11 @@ export function StockUnitEditModal({
                   type="text" 
                   value={editForm.serialNumber || ''} 
                   onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} 
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                    }
+                  }}
                   className={`w-full rounded-lg p-2.5 text-xs font-bold font-mono focus:outline-none transition-colors border ${
                     isLight 
                       ? 'bg-white border-slate-300 text-slate-900 focus:border-sky-500 shadow-2xs' 
@@ -1114,6 +1119,11 @@ export function StockUnitEditModal({
                       const formatted = formatStiInput(e.target.value);
                       setEditForm({ ...editForm, trackingCode: formatted });
                     }} 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                      }
+                    }}
                     maxLength={9}
                     className={`w-full bg-slate-900 rounded-lg p-2.5 text-xs font-bold font-mono focus:outline-none border transition-colors ${
                       isValidStiCode(editForm.trackingCode)
@@ -1162,6 +1172,11 @@ export function StockUnitEditModal({
                   value={editForm.orderNumber || ''} 
                   onChange={(e) => handleEditOrderNumberChange(e.target.value)} 
                   onBlur={handleEditOrderNumberBlur}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                    }
+                  }}
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-slate-200 font-mono focus:outline-none focus:border-sky-500" 
                   placeholder="Ex: 2000018084300220"
                 />
@@ -1355,6 +1370,11 @@ export function StockUnitEditModal({
                         const formatted = formatStiInput(e.target.value);
                         setEditForm({ ...editForm, trackingCode: formatted });
                       }} 
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                        }
+                      }}
                       maxLength={9}
                       className={`w-full rounded-lg p-2.5 text-xs font-mono font-bold focus:outline-none border transition-colors ${
                         isValidStiCode(editForm.trackingCode)

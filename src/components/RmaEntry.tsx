@@ -1683,6 +1683,9 @@ export default function RmaEntry({
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
+                              if (idx === serials.length - 1 && serialVal.trim()) {
+                                handleAddSerialLine();
+                              }
                             }
                           }}
                           className={`flex-1 px-3 py-1.5 rounded text-xs font-mono transition-colors focus:outline-none ${
@@ -1860,6 +1863,11 @@ export default function RmaEntry({
                             setErrorMessage('');
                           }
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                          }
+                        }}
                         maxLength={9}
                         className={`w-full px-3 h-[38px] rounded-lg text-xs font-mono transition-all focus:outline-none focus:ring-1 ${
                           isLight 
@@ -1889,6 +1897,11 @@ export default function RmaEntry({
                         onChange={(e) => {
                           const formatted = formatStiInput(e.target.value);
                           setTrackingCode(formatted);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                          }
                         }}
                         maxLength={9}
                         className={`w-full px-3 h-[38px] rounded-lg text-xs font-mono transition-all focus:outline-none focus:ring-1 ${
@@ -1940,11 +1953,16 @@ export default function RmaEntry({
                       )}
                     </div>
                     <input 
-                      type="text"
+                      type="text" 
                       placeholder={platform === 'Outros' ? 'Sem vínculo de pedido (opcional)' : 'Ex: 2000018084300220'}
                       value={orderNumber}
                       onChange={(e) => handleOrderNumberChange(e.target.value)}
                       onBlur={handleOrderNumberBlur}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                        }
+                      }}
                       className={`w-full px-3 h-[38px] rounded-lg text-xs font-mono transition-all focus:outline-none ${
                         isLight
                           ? 'bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-sky-500 shadow-2xs font-medium'

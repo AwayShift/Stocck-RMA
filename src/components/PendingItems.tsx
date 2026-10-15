@@ -2934,6 +2934,11 @@ export default function PendingItems({
                     type="text"
                     value={formTrackingCode}
                     onChange={(e) => setFormTrackingCode(formatStiInput(e.target.value))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                      }
+                    }}
                     placeholder="Ex: STI134920"
                     maxLength={9}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
@@ -2976,6 +2981,11 @@ export default function PendingItems({
                     value={formOrderNumber}
                     onChange={(e) => handleFormOrderNumberChange(e.target.value)}
                     onBlur={handleFormOrderNumberBlur}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                      }
+                    }}
                     placeholder="Ex: 2000018084300220"
                     className={`w-full bg-slate-950 border rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none transition-colors ${
                       orderDuplicateWarning 
@@ -2999,6 +3009,11 @@ export default function PendingItems({
                     type="text"
                     value={formSerial}
                     onChange={(e) => setFormSerial(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                      }
+                    }}
                     placeholder="Ex: SN-88392014"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
                   />
@@ -3510,6 +3525,11 @@ export default function PendingItems({
                             type="text"
                             value={formTrackingCode}
                             onChange={(e) => setFormTrackingCode(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                              }
+                            }}
                             placeholder="Ex: STI134920 ou código de rastreio..."
                             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
                             id="input-stock-entry-tracking"
@@ -4011,6 +4031,11 @@ export default function PendingItems({
                           setTransferSti(formatted);
                           if (formatted.trim()) setTransferError(null);
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                          }
+                        }}
                         placeholder="Ex: STI134920"
                         maxLength={9}
                         className={`w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-all ${
@@ -4045,6 +4070,11 @@ export default function PendingItems({
                           const formatted = formatStiInput(e.target.value);
                           setTransferSti(formatted);
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                          }
+                        }}
                         placeholder="Ex: STI134920 (opcional)"
                         maxLength={9}
                         className="w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 border border-indigo-500/40 focus:outline-none focus:border-indigo-400"
@@ -4063,6 +4093,11 @@ export default function PendingItems({
                         type="text"
                         value={transferSerialNumber}
                         onChange={(e) => setTransferSerialNumber(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                          }
+                        }}
                         placeholder="Ex: SN-99882244"
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                       />
@@ -4104,6 +4139,11 @@ export default function PendingItems({
                         value={transferOrderNumber}
                         onChange={(e) => handleTransferOrderNumberChange(e.target.value)}
                         onBlur={handleTransferOrderNumberBlur}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                          }
+                        }}
                         placeholder="Ex: 2000018084300220"
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                       />
