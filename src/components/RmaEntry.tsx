@@ -1119,8 +1119,8 @@ export default function RmaEntry({
     let finalPhotosBox = [...photosBox];
     let finalPhotosAccessories = [...photosAccessories];
 
-    // For items in Estoque Principal or Outros, reuse the base product's already registered image without extra storage
-    if ((destinationSector === 'Principal' || destinationSector === 'Outros') && refProduct && !isUnregisteredSkuMode) {
+    // For items in Estoque Principal strictly, reuse the base product's already registered image without extra storage
+    if (destinationSector === 'Principal' && refProduct && !isUnregisteredSkuMode) {
       const baseImgs = getBaseProductImages(refProduct);
       if (finalPhotosProduct.length === 0 && baseImgs.productPhotos.length > 0) {
         finalPhotosProduct = baseImgs.productPhotos;

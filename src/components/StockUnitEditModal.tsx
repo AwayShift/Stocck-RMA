@@ -213,10 +213,50 @@ export function StockUnitEditModal({
   // Fill basic information from base catalog product into the unit being edited
   const handleSelectEditBaseProduct = (p: BaseProduct) => {
     if (!editForm) return;
+    const isPrincipal = (editForm.destinationSector || '').trim().toLowerCase() === 'principal';
     const baseImgs = getBaseProductImages(p);
-    const hasPhotosProduct = (editForm.photosProduct?.length || 0) > 0;
-    const hasPhotosBox = (editForm.photosBox?.length || 0) > 0;
-    const hasPhotosAccessories = (editForm.photosAccessories?.length || 0) > 0;
+    const oldBaseProduct = matchedBaseProductInEdit || findBaseProduct(editForm, products);
+    const oldBaseImgs = getBaseProductImages(oldBaseProduct);
+
+    const currentProductPhotos = editForm.photosProduct || [];
+    const isProductPhotosFromOldBase = currentProductPhotos.length > 0 && oldBaseImgs.productPhotos.length > 0 &&
+      currentProductPhotos.every(url => oldBaseImgs.productPhotos.includes(url) || url === oldBaseProduct?.imageUrl);
+
+    const currentBoxPhotos = editForm.photosBox || [];
+    const isBoxPhotosFromOldBase = currentBoxPhotos.length > 0 && oldBaseImgs.boxPhotos.length > 0 &&
+      currentBoxPhotos.every(url => oldBaseImgs.boxPhotos.includes(url));
+
+    const currentAccPhotos = editForm.photosAccessories || [];
+    const isAccPhotosFromOldBase = currentAccPhotos.length > 0 && oldBaseImgs.accessoriesPhotos.length > 0 &&
+      currentAccPhotos.every(url => oldBaseImgs.accessoriesPhotos.includes(url));
+
+    let updatedPhotosProduct = editForm.photosProduct;
+    let updatedPhotosBox = editForm.photosBox;
+    let updatedPhotosAccessories = editForm.photosAccessories;
+
+    if (isPrincipal) {
+      if ((currentProductPhotos.length === 0 || isProductPhotosFromOldBase) && baseImgs.productPhotos.length > 0) {
+        updatedPhotosProduct = [...baseImgs.productPhotos];
+      }
+      if ((currentBoxPhotos.length === 0 || isBoxPhotosFromOldBase) && baseImgs.boxPhotos.length > 0) {
+        updatedPhotosBox = [...baseImgs.boxPhotos];
+      }
+      if ((currentAccPhotos.length === 0 || isAccPhotosFromOldBase) && baseImgs.accessoriesPhotos.length > 0) {
+        updatedPhotosAccessories = [...baseImgs.accessoriesPhotos];
+      }
+    } else {
+      // In all other sectors (Openbox, RMA, Outros), NEVER add base product photos!
+      // If photos were previously populated from old base product, remove them to keep clean
+      if (isProductPhotosFromOldBase) {
+        updatedPhotosProduct = [];
+      }
+      if (isBoxPhotosFromOldBase) {
+        updatedPhotosBox = [];
+      }
+      if (isAccPhotosFromOldBase) {
+        updatedPhotosAccessories = [];
+      }
+    }
 
     setEditForm({
       ...editForm,
@@ -228,15 +268,9 @@ export function StockUnitEditModal({
       skuRegistrationPending: false,
       unregisteredSku: undefined,
       unregisteredProductName: undefined,
-      photosProduct: !hasPhotosProduct && baseImgs.productPhotos.length > 0 
-        ? [...baseImgs.productPhotos] 
-        : editForm.photosProduct,
-      photosBox: !hasPhotosBox && baseImgs.boxPhotos.length > 0
-        ? [...baseImgs.boxPhotos]
-        : editForm.photosBox,
-      photosAccessories: !hasPhotosAccessories && baseImgs.accessoriesPhotos.length > 0
-        ? [...baseImgs.accessoriesPhotos]
-        : editForm.photosAccessories,
+      photosProduct: updatedPhotosProduct,
+      photosBox: updatedPhotosBox,
+      photosAccessories: updatedPhotosAccessories,
     });
     setEditSkuSearchTerm(p.sku);
     setIsEditSkuDropdownOpen(false);
@@ -882,22 +916,12 @@ export function StockUnitEditModal({
                     onChange={(e) => {
                       const val = e.target.value;
                       setEditSkuSearchTerm(val);
-                      setEditForm({ ...editForm, baseProductSku: val });
+                      setEditForm(prev => prev ? { ...prev, baseProductSku: val } : null);
                       setIsEditSkuDropdownOpen(true);
                       const clean = val.trim().toLowerCase();
                       const exact = products.find(p => p.sku && p.sku.toLowerCase() === clean);
                       if (exact) {
-                        setEditForm(prev => prev ? {
-                          ...prev,
-                          baseProductId: exact.id,
-                          baseProductSku: exact.sku,
-                          baseProductName: exact.name,
-                          baseProductVoltage: (exact.voltage && exact.voltage !== 'N/A' ? exact.voltage : (prev.baseProductVoltage || 'Bivolt')),
-                          needsSkuRegistration: false,
-                          skuRegistrationPending: false,
-                          unregisteredSku: undefined,
-                          unregisteredProductName: undefined,
-                        } : null);
+                        handleSelectEditBaseProduct(exact);
                       }
                     }} 
                     onFocus={() => setIsEditSkuDropdownOpen(true)}
@@ -1333,7 +1357,46 @@ export function StockUnitEditModal({
                 </label>
                 <select 
                   value={editForm.destinationSector} 
-                  onChange={(e) => setEditForm({ ...editForm, destinationSector: e.target.value as DestinationSectorType })} 
+                  onChange={(e) => {
+                    const newSector = e.target.value as DestinationSectorType;
+                    const isNowPrincipal = (newSector || '').trim().toLowerCase() === 'principal';
+                    const baseImgs = getBaseProductImages(matchedBaseProductInEdit || undefined);
+                    let newProd = editForm.photosProduct;
+                    let newBox = editForm.photosBox;
+                    let newAcc = editForm.photosAccessories;
+
+                    if (!isNowPrincipal) {
+                      // Switching away from Principal: if photos were purely base product photos, clean them up
+                      if (baseImgs.productPhotos.length > 0 && newProd?.length > 0 && newProd.every(url => baseImgs.productPhotos.includes(url) || url === matchedBaseProductInEdit?.imageUrl)) {
+                        newProd = [];
+                      }
+                      if (baseImgs.boxPhotos.length > 0 && newBox?.length > 0 && newBox.every(url => baseImgs.boxPhotos.includes(url))) {
+                        newBox = [];
+                      }
+                      if (baseImgs.accessoriesPhotos.length > 0 && newAcc?.length > 0 && newAcc.every(url => baseImgs.accessoriesPhotos.includes(url))) {
+                        newAcc = [];
+                      }
+                    } else {
+                      // Switching to Principal: if empty, load base product photos
+                      if ((!newProd || newProd.length === 0) && baseImgs.productPhotos.length > 0) {
+                        newProd = [...baseImgs.productPhotos];
+                      }
+                      if ((!newBox || newBox.length === 0) && baseImgs.boxPhotos.length > 0) {
+                        newBox = [...baseImgs.boxPhotos];
+                      }
+                      if ((!newAcc || newAcc.length === 0) && baseImgs.accessoriesPhotos.length > 0) {
+                        newAcc = [...baseImgs.accessoriesPhotos];
+                      }
+                    }
+
+                    setEditForm({
+                      ...editForm,
+                      destinationSector: newSector,
+                      photosProduct: newProd,
+                      photosBox: newBox,
+                      photosAccessories: newAcc
+                    });
+                  }} 
                   className={`w-full border rounded-lg p-2.5 text-xs font-bold focus:outline-none focus:border-sky-500 cursor-pointer ${
                     isLight 
                       ? 'bg-white border-slate-300 text-slate-900 shadow-2xs' 
