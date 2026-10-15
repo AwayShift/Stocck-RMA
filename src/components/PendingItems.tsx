@@ -447,6 +447,17 @@ export default function PendingItems({
       // Only process when one of the modals is open
       if (!isFormModalOpen && !isTransferModalOpen) return;
 
+      // Don't intercept paste if user is focused inside an input, textarea, or contenteditable
+      const activeEl = document.activeElement;
+      if (activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.getAttribute('contenteditable') === 'true' || 
+        Boolean(activeEl.closest('[contenteditable="true"]'))
+      )) {
+        return;
+      }
+
       const clipboardData = e.clipboardData;
       if (!clipboardData) return;
 

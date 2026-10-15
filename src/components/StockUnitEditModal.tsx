@@ -115,13 +115,21 @@ export function StockUnitEditModal({
   const [isEditSkuDropdownOpen, setIsEditSkuDropdownOpen] = useState(false);
   const [editSkuSearchTerm, setEditSkuSearchTerm] = useState('');
   const editSkuDropdownRef = useRef<HTMLDivElement>(null);
+  const lastUnitIdRef = useRef<string | null>(null);
 
   // Initialize form state when unit changes or modal opens
   useEffect(() => {
     if (!isOpen || !unit) {
       setEditForm(null);
+      lastUnitIdRef.current = null;
       return;
     }
+
+    // If modal is already open and initialized for this exact unit, preserve existing form edits across background re-renders
+    if (lastUnitIdRef.current === unit.id) {
+      return;
+    }
+    lastUnitIdRef.current = unit.id;
 
     const catalogProduct = products.find(p => (unit.baseProductId && p.id === unit.baseProductId) || (unit.baseProductSku && p.sku === unit.baseProductSku));
     const resolvedSku = unit.baseProductSku || (unit as any).sku || catalogProduct?.sku || '';
@@ -344,23 +352,27 @@ export function StockUnitEditModal({
   }, [editForm?.orderNumber, editForm?.platform]);
 
   const handleEditOrderNumberChange = (raw: string) => {
-    if (!editForm) return;
-    const detection = inspectOrderNumber(raw, editForm.platform);
-    setEditForm({
-      ...editForm,
-      orderNumber: raw,
-      platform: (detection ? detection.platform : editForm.platform) as any
+    setEditForm(prev => {
+      if (!prev) return null;
+      const detection = inspectOrderNumber(raw, prev.platform);
+      return {
+        ...prev,
+        orderNumber: raw,
+        platform: (detection ? detection.platform : prev.platform) as any
+      };
     });
   };
 
   const handleEditOrderNumberBlur = () => {
-    if (!editForm) return;
-    const normalized = normalizeOrderNumberForPlatform(editForm.orderNumber || '', editForm.platform);
-    const detected = detectPlatformFromOrderNumber(normalized, editForm.platform);
-    setEditForm({
-      ...editForm,
-      orderNumber: normalized,
-      platform: (detected ? detected : editForm.platform) as any
+    setEditForm(prev => {
+      if (!prev) return null;
+      const normalized = normalizeOrderNumberForPlatform(prev.orderNumber || '', prev.platform);
+      const detected = detectPlatformFromOrderNumber(normalized, prev.platform);
+      return {
+        ...prev,
+        orderNumber: normalized,
+        platform: (detected ? detected : prev.platform) as any
+      };
     });
   };
 
@@ -496,6 +508,17 @@ export function StockUnitEditModal({
   useEffect(() => {
     if (!isOpen || !editForm) return;
     const handleGlobalPaste = (e: ClipboardEvent) => {
+      // Don't intercept paste if user is focused inside an input, textarea or rich text editor
+      const activeEl = document.activeElement;
+      if (activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.getAttribute('contenteditable') === 'true' || 
+        Boolean(activeEl.closest('[contenteditable="true"]'))
+      )) {
+        return;
+      }
+
       const items = e.clipboardData?.items ? (Array.from(e.clipboardData.items) as DataTransferItem[]) : [];
       const hasImage = items.some(item => item.type.startsWith('image/'));
       
@@ -508,7 +531,7 @@ export function StockUnitEditModal({
     return () => {
       window.removeEventListener('paste', handleGlobalPaste);
     };
-  }, [isOpen, urlInputCategory, editForm]);
+  }, [isOpen, urlInputCategory, Boolean(editForm)]);
 
   const handleAddPhotoUrl = async (category: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
     if (!editForm || !imageUrlInput.trim()) return;

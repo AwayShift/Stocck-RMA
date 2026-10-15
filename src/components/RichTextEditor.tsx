@@ -356,6 +356,13 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
                 onChange(editorRef.current.innerHTML);
               }
             }}
+            onPaste={() => {
+              setTimeout(() => {
+                if (editorRef.current) {
+                  onChange(editorRef.current.innerHTML);
+                }
+              }, 0);
+            }}
             onBlur={() => {
               if (editorRef.current) {
                 onChange(editorRef.current.innerHTML);

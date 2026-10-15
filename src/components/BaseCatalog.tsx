@@ -207,9 +207,14 @@ export default function BaseCatalog({
     if (!isFormOpen) return;
 
     const handleGlobalPaste = (e: ClipboardEvent) => {
-      // Don't intercept if the active element is inside the description editor
+      // Don't intercept if the active element is inside an input, textarea or contenteditable editor
       const activeEl = document.activeElement;
-      if (activeEl && (activeEl.getAttribute('contenteditable') === 'true' || activeEl.closest('[contenteditable="true"]'))) {
+      if (activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.getAttribute('contenteditable') === 'true' || 
+        Boolean(activeEl.closest('[contenteditable="true"]'))
+      )) {
         return;
       }
 
