@@ -982,14 +982,14 @@ export default function ExcelImportModal({
                                   type="text"
                                   value={row.sti || ''}
                                   onChange={(e) => handleUpdateRowField(row.id, 'sti', e.target.value)}
-                                  placeholder="STI134920"
-                                  maxLength={9}
+                                  placeholder="1234"
+                                  maxLength={4}
                                   className={`w-full px-2 py-1 rounded text-xs font-mono font-bold border transition-colors excel-input-sti ${
                                     isStiDup
                                       ? 'bg-rose-950/70 text-rose-200 border-rose-500 ring-1 ring-rose-500/50 excel-input-sti-dup'
                                       : 'bg-sky-950/50 text-sky-300 border-sky-500/40 focus:border-sky-400 focus:bg-sky-950/80'
                                   }`}
-                                  title={isStiDup ? `STI repetido: ${row.duplicateInfo.detail}` : 'Código STI / Rastreio da Devolução (Coluna A - Ex: STI134920)'}
+                                  title={isStiDup ? `Código repetido: ${row.duplicateInfo.detail}` : 'Código / Rastreio da Devolução (Coluna A - Ex: 1234)'}
                                 />
                                 {isStiDup && (
                                   <span className="text-[9px] text-rose-400 font-bold block excel-warn-sti">

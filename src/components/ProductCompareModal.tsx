@@ -466,8 +466,8 @@ export default function ProductCompareModal({
                     <span className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold border flex items-center gap-1 ${
                       isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300'
                     }`}>
-                      <span className="text-slate-400 font-sans font-semibold">Código STI:</span>
-                      <span className="text-sky-400">{selectedProduct.trackingCode}</span>
+                      <span className="text-slate-400 font-sans font-semibold">Código:</span>
+                      <span className="text-sky-400">#{selectedProduct.trackingCode}</span>
                     </span>
                   )}
                   {selectedProduct.registrationNumber && (

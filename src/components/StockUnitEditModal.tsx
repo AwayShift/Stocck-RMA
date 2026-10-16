@@ -49,6 +49,7 @@ import {
   isValidStiCode, 
   normalizeStiCode 
 } from '../utils/stiFormatter';
+import { StiCodeInput } from './StiCodeInput';
 import { 
   validatePendingItemLink, 
   findPendingItemByRegistrationNumber 
@@ -652,7 +653,7 @@ export function StockUnitEditModal({
           return;
         }
         if (!isValidStiCode(normSti)) {
-          setActionError('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
+          setActionError('Código inválido. O formato obrigatório são 4 números (Ex: 1234).');
           setIsSavingEdit(false);
           setTimeout(() => setActionError(null), 5000);
           return;
@@ -663,7 +664,7 @@ export function StockUnitEditModal({
           normalizeStiCode(u.trackingCode) === normSti
         );
         if (isDuplicate) {
-          setActionError(`O Código STI "${normSti}" já está cadastrado em outra unidade ativa no estoque.`);
+          setActionError(`O Código "${normSti}" já está cadastrado em outra unidade ativa no estoque.`);
           setIsSavingEdit(false);
           setTimeout(() => setActionError(null), 5000);
           return;
@@ -1144,40 +1145,23 @@ export function StockUnitEditModal({
                 <div className="animate-in fade-in duration-200">
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[11px] font-bold text-amber-800 dark:text-amber-400 flex items-center gap-1">
-                      <span>Código STI / Rastreio</span>
+                      <span>Código STI (Openbox)</span>
                       <span className="text-rose-600 dark:text-rose-400 font-bold">* (Obrigatório)</span>
                     </label>
-                    {editForm.trackingCode && (
-                      isValidStiCode(editForm.trackingCode) ? (
-                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">
-                          <Check className="w-2.5 h-2.5 stroke-[3]" /> Válido
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded">
-                          STI + 6 dígitos
-                        </span>
-                      )
-                    )}
                   </div>
-                  <input 
-                    type="text" 
-                    value={editForm.trackingCode || ''} 
-                    onChange={(e) => {
-                      const formatted = formatStiInput(e.target.value);
-                      setEditForm({ ...editForm, trackingCode: formatted });
-                    }} 
+                  <StiCodeInput
+                    value={editForm.trackingCode || ''}
+                    onChange={(formatted) => setEditForm({ ...editForm, trackingCode: formatted })}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                       }
                     }}
-                    maxLength={9}
-                    className={`w-full bg-slate-900 rounded-lg p-2.5 text-xs font-bold font-mono focus:outline-none border transition-colors ${
-                      isValidStiCode(editForm.trackingCode)
-                        ? 'border-emerald-500 text-emerald-800 dark:text-emerald-200 focus:border-emerald-600'
-                        : 'border-amber-500 text-amber-900 dark:text-amber-200 placeholder-amber-500/60 focus:border-amber-600'
-                    }`}
-                    placeholder="Ex: STI134920"
+                    placeholder="1234"
+                    variant="amber"
+                    isLight={isLight}
+                    size="sm"
+                    required
                   />
                 </div>
               )}
@@ -1439,44 +1423,33 @@ export function StockUnitEditModal({
                         <span className={`text-[10px] font-bold border px-1.5 py-0.5 rounded flex items-center gap-1 ${
                           isLight ? 'bg-emerald-100 border-emerald-400 text-emerald-950 font-black' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
                         }`}>
-                          <Check className="w-3 h-3 stroke-[3]" /> STI Válido
+                          <Check className="w-3 h-3 stroke-[3]" /> Código Válido
                         </span>
                       ) : (
                         <span className={`text-[10px] font-bold border px-1.5 py-0.5 rounded ${
                           isLight ? 'bg-rose-100 border-rose-300 text-rose-900 font-black' : 'bg-rose-500/15 border-rose-500/30 text-rose-400'
                         }`}>
-                          Obrigatório (STI + 6 dígitos)
+                          Obrigatório (4 dígitos)
                         </span>
                       )}
                     </div>
-                    <input 
-                      type="text" 
+                    <StiCodeInput 
                       value={editForm.trackingCode || ''} 
-                      onChange={(e) => {
-                        const formatted = formatStiInput(e.target.value);
-                        setEditForm({ ...editForm, trackingCode: formatted });
-                      }} 
+                      onChange={(formatted) => setEditForm({ ...editForm, trackingCode: formatted })} 
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
                         }
                       }}
-                      maxLength={9}
-                      className={`w-full rounded-lg p-2.5 text-xs font-mono font-bold focus:outline-none border transition-colors ${
-                        isValidStiCode(editForm.trackingCode)
-                          ? isLight 
-                            ? 'bg-white border-2 border-emerald-500 text-emerald-950 focus:border-emerald-600 shadow-2xs' 
-                            : 'bg-slate-900 border-emerald-500 text-emerald-300 focus:border-emerald-600'
-                          : isLight 
-                          ? 'bg-white border-2 border-amber-500 text-amber-950 placeholder-amber-700/60 focus:border-amber-600 shadow-2xs' 
-                          : 'bg-slate-900 border-amber-500 text-amber-200 placeholder-amber-600/50 focus:border-amber-600'
-                      }`}
-                      placeholder="Ex: STI134920"
+                      placeholder="1234"
+                      variant="amber"
+                      isLight={isLight}
+                      required
                     />
                     <p className={`text-[10.5px] font-medium ${
                       isLight ? 'text-amber-900' : 'text-amber-300/80'
                     }`}>
-                      Produtos no Openbox obrigatoriamente exigem o código STI no formato <strong className={isLight ? 'text-amber-950 font-black' : 'text-amber-200 font-bold'}>STI + 6 números</strong>.
+                      Produtos no Openbox obrigatoriamente exigem o código no formato de <strong className={isLight ? 'text-amber-950 font-black' : 'text-amber-200 font-bold'}>4 números</strong>.
                     </p>
                   </div>
                 )}

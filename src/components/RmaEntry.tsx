@@ -38,6 +38,7 @@ import { getBaseProductImages } from '../utils/productImages';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { getCurrentActiveAuthUser } from '../lib/supabaseAuth';
 import { formatStiInput, isValidStiCode, normalizeStiCode } from '../utils/stiFormatter';
+import { StiCodeInput } from './StiCodeInput';
 import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
 import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform } from '../utils/orderPlatformHelper';
 
@@ -1067,7 +1068,7 @@ export default function RmaEntry({
         ? normalizeStiCode(trackingCode) || trackingCode.trim() 
         : '';
 
-    // Mandatory STI check for Openbox products (strictly STI + 6 numbers)
+    // Mandatory STI check for Openbox products (strictly STI + 4 numbers)
     if (destinationSector === 'Openbox') {
       if (!finalTrackingCode) {
         setErrorMessage('O Código STI é obrigatório para cadastrar produtos no setor OpenBox.');
@@ -1075,7 +1076,7 @@ export default function RmaEntry({
         return;
       }
       if (!isValidStiCode(finalTrackingCode)) {
-        setErrorMessage('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
+        setErrorMessage('Código inválido. O formato obrigatório são 4 números (Ex: 1234).');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
@@ -1852,12 +1853,10 @@ export default function RmaEntry({
                           isLight ? 'bg-amber-100 text-amber-950 border border-amber-300 font-black' : 'bg-amber-500/20 text-amber-300'
                         }`}>Obrigatório</span>
                       </label>
-                      <input 
-                        type="text"
-                        placeholder="Ex: STI134920"
+                      <StiCodeInput
+                        id="input-tracking-code"
                         value={trackingCode}
-                        onChange={(e) => {
-                          const formatted = formatStiInput(e.target.value);
+                        onChange={(formatted) => {
                           setTrackingCode(formatted);
                           if (errorMessage && isValidStiCode(formatted)) {
                             setErrorMessage('');
@@ -1868,13 +1867,9 @@ export default function RmaEntry({
                             e.preventDefault();
                           }
                         }}
-                        maxLength={9}
-                        className={`w-full px-3 h-[38px] rounded-lg text-xs font-mono transition-all focus:outline-none focus:ring-1 ${
-                          isLight 
-                            ? 'bg-white border-2 border-amber-500 text-slate-900 font-bold placeholder-slate-400 focus:border-amber-600 focus:ring-amber-500/20 shadow-2xs'
-                            : 'bg-slate-950 border border-amber-500/60 text-amber-200 placeholder-amber-500/40 focus:ring-amber-400/40'
-                        }`}
-                        id="input-tracking-code"
+                        placeholder="1234"
+                        variant="amber"
+                        isLight={isLight}
                         required
                       />
                     </div>
@@ -1890,26 +1885,18 @@ export default function RmaEntry({
                           isLight ? 'bg-indigo-100 text-indigo-950 border border-indigo-300 font-bold' : 'bg-indigo-500/20 text-indigo-300'
                         }`}>Opcional</span>
                       </label>
-                      <input 
-                        type="text"
-                        placeholder="Ex: STI134920 (opcional)"
+                      <StiCodeInput
+                        id="input-tracking-code-outros"
                         value={trackingCode}
-                        onChange={(e) => {
-                          const formatted = formatStiInput(e.target.value);
-                          setTrackingCode(formatted);
-                        }}
+                        onChange={(formatted) => setTrackingCode(formatted)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
                           }
                         }}
-                        maxLength={9}
-                        className={`w-full px-3 h-[38px] rounded-lg text-xs font-mono transition-all focus:outline-none focus:ring-1 ${
-                          isLight 
-                            ? 'bg-white border-2 border-indigo-400 text-slate-900 font-bold placeholder-slate-400 focus:border-indigo-600 focus:ring-indigo-500/20 shadow-2xs'
-                            : 'bg-slate-950 border border-indigo-500/40 text-indigo-200 placeholder-indigo-400/40 focus:ring-indigo-400/40'
-                        }`}
-                        id="input-tracking-code-outros"
+                        placeholder="1234"
+                        variant="indigo"
+                        isLight={isLight}
                       />
                     </div>
                   )}

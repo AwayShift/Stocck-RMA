@@ -1,102 +1,76 @@
 /**
- * Utility functions for formatting and validating STI tracking codes.
- *
- * Requirements:
- * 1. Automatic correction to uppercase 'STI' directly adjacent to numbers (e.g. 'STI134920').
- * 2. Strictly accepts ONLY the combination of 'STI' + exactly 6 digits (regex: /^STI\d{6}$/).
+ * Funções utilitárias para formatação e validação de código numérico de 4 dígitos.
+ * 
+ * Regra:
+ * O código não contém mais 'STI', apenas os 4 números (ex: '1234').
  */
 
 /**
- * Formats user input dynamically as they type, paste, or edit.
- * - Forces uppercase 'STI'.
- * - Removes spaces, hashes, hyphens, and non-alphanumeric separators.
- * - Joins 'STI' directly with numbers.
- * - Limits to exactly 6 digits after 'STI' (9 characters total).
- * - Automatically prefixes raw numeric inputs with 'STI' (e.g., '134920' -> 'STI134920').
+ * Extrai apenas os dígitos numéricos (até 4) de qualquer string recebida ou colada.
+ * Ex: 'STI1234' -> '1234', '1234' -> '1234', '#STI-1234' -> '1234', '#1234' -> '1234'
+ */
+export function extractStiDigits(code?: string | null): string {
+  if (!code) return '';
+  const trimmed = code.trim().replace(/^[#\s\-_]+/, '');
+  // Remove qualquer prefixo legado 'STI' se vier de dados antigos ou colado
+  const withoutPrefix = trimmed.replace(/^STI/i, '');
+  // Extrai somente números, limitando a 4 dígitos
+  return withoutPrefix.replace(/\D/g, '').slice(0, 4);
+}
+
+/**
+ * Converte dígitos limpos em código padrão de 4 números.
+ * Ex: '1234' -> '1234', '' -> ''
+ */
+export function formatStiFromDigits(digits?: string | null): string {
+  if (!digits) return '';
+  return extractStiDigits(digits);
+}
+
+/**
+ * Formata a entrada do usuário em tempo real enquanto digita ou cola.
+ * - Não insere 'STI', mantendo exclusivamente os 4 números.
+ * - Remove espaços, caracteres especiais e letras.
+ * - Limita rigorosamente a no máximo 4 dígitos numéricos.
  */
 export function formatStiInput(input: string): string {
   if (!input) return '';
-
-  // Remove leading hashes, spaces, hyphens, underscores
-  let cleaned = input.trim().replace(/^[#\s\-_]+/, '');
-  // Remove any internal spaces, hyphens, underscores
-  cleaned = cleaned.replace(/[\s\-_]+/g, '');
-
-  const upper = cleaned.toUpperCase();
-
-  // If user typed/pasted starting with 'STI'
-  if (upper.startsWith('STI')) {
-    const digits = upper.slice(3).replace(/\D/g, '').slice(0, 6);
-    return `STI${digits}`;
-  }
-
-  // If user is currently typing the initial letters 'S' or 'ST'
-  if (upper === 'S' || upper === 'ST') {
-    return upper;
-  }
-
-  // If user entered raw numbers directly (e.g., '134920' or '134')
-  const digitsOnly = cleaned.replace(/\D/g, '').slice(0, 6);
-  if (digitsOnly.length > 0) {
-    return `STI${digitsOnly}`;
-  }
-
-  // Fallback: keep uppercase alphanumeric characters, capped at 9 chars
-  return upper.replace(/[^A-Z0-9]/g, '').slice(0, 9);
+  return extractStiDigits(input);
 }
 
 /**
- * Validates if the string strictly conforms to 'STI' + exactly 6 digits.
- * Example: 'STI134920' -> true, 'STI13491' -> false, 'STI1349201' -> false
+ * Valida se a string atende rigorosamente aos 4 dígitos numéricos.
+ * Ex: '1234' -> true, 'STI1234' -> true (após normalização), '123' -> false, '12345' -> false
  */
 export function isValidStiCode(code?: string | null): boolean {
   if (!code) return false;
-  const trimmed = code.trim().replace(/^#/, '').trim();
-  return /^STI\d{6}$/.test(trimmed);
+  const digits = extractStiDigits(code);
+  return digits.length === 4;
 }
 
 /**
- * Normalizes any stored, legacy, or imported STI string into standard 'STI' + 6 numbers.
- * E.g., 'sti 134919' -> 'STI134919', '#sti 134919' -> 'STI134919', '134920' -> 'STI134920'.
+ * Normaliza qualquer código legado, colado ou digitado para o padrão exclusivo de 4 números.
+ * Ex: 'STI1234' -> '1234', '#STI 1234' -> '1234', '1234' -> '1234', '#1234' -> '1234'.
  */
 export function normalizeStiCode(code?: string | null): string {
   if (!code) return '';
   const trimmed = code.trim().replace(/^#/, '').trim();
+  const digits = extractStiDigits(trimmed);
 
-  // Already strictly valid: STI + 6 digits
-  if (/^STI\d{6}$/.test(trimmed)) {
-    return trimmed;
+  if (digits.length === 4) {
+    return digits;
   }
 
-  // 'sti' (any case) followed by optional spaces/hyphens and 6 digits
-  const matchSti6 = trimmed.match(/^sti[\s\-_]*(\d{6})$/i);
-  if (matchSti6) {
-    return `STI${matchSti6[1]}`;
-  }
-
-  // Exactly 6 digits
-  if (/^\d{6}$/.test(trimmed)) {
-    return `STI${trimmed}`;
-  }
-
-  // 'sti' followed by any digits
-  const matchStiAny = trimmed.match(/^sti[\s\-_]*(\d+)$/i);
-  if (matchStiAny) {
-    return `STI${matchStiAny[1].slice(0, 6)}`;
-  }
-
-  // General fallback: uppercase and remove spaces
-  const upper = trimmed.toUpperCase().replace(/[\s\-_]+/g, '');
-  if (upper.startsWith('STI')) {
-    const digits = upper.slice(3).replace(/\D/g, '').slice(0, 6);
-    return `STI${digits}`;
+  // Se já for apenas dígitos de outro tamanho legado
+  if (digits.length > 0) {
+    return digits;
   }
 
   return trimmed;
 }
 
 /**
- * Formats a tracking code for badge presentation, ensuring '#STI134920' format.
+ * Formata o código para exibição em badges visuais (ex: '#1234').
  */
 export function formatStiBadge(code?: string | null): string {
   if (!code) return '';

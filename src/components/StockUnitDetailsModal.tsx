@@ -40,6 +40,7 @@ import {
   findBaseProduct, 
   getResolvedUnitProductName 
 } from '../utils/productImages';
+import { normalizeStiCode } from '../utils/stiFormatter';
 import { isUnitPendingSkuRegistration, isRealStockTransfer } from './PhysicalStock';
 
 export interface StockUnitDetailsModalProps {
@@ -102,10 +103,9 @@ export function StockUnitDetailsModal({
   };
 
   const resolvedCurrentUnitSti = (() => {
-    const rawSti = (unit as any).sti;
-    if (typeof rawSti === 'string' && rawSti.trim()) return rawSti.trim();
-    if (unit.trackingCode && unit.trackingCode.trim().toUpperCase().startsWith('STI')) {
-      return unit.trackingCode.trim().toUpperCase();
+    const rawSti = (unit as any).sti || unit.trackingCode;
+    if (typeof rawSti === 'string' && rawSti.trim()) {
+      return normalizeStiCode(rawSti);
     }
     return '';
   })();
@@ -514,14 +514,14 @@ export function StockUnitDetailsModal({
               )}
               {Boolean(resolvedCurrentUnitSti) && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-slate-400 font-semibold text-[11px]">Código STI:</span>
+                  <span className="text-slate-400 font-semibold text-[11px]">Código:</span>
                   <button
                     type="button"
                     onClick={(e) => handleCopyCode(resolvedCurrentUnitSti, 'sti-sub', e)}
                     className="font-mono text-[11px] font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 rounded transition-colors cursor-pointer group flex items-center gap-1"
-                    title="Clique para copiar Código STI"
+                    title="Clique para copiar Código"
                   >
-                    <span>{resolvedCurrentUnitSti}</span>
+                    <span>#{resolvedCurrentUnitSti}</span>
                     <Copy className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
                   </button>
                 </div>

@@ -65,6 +65,7 @@ import { CategoryBadge } from './CategoryBadge';
 import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
 import { RichTextEditor } from './RichTextEditor';
 import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
+import { StiCodeInput } from './StiCodeInput';
 import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
 import QuickRegisterSkuModal from './QuickRegisterSkuModal';
 import { StockUnitEditModal } from './StockUnitEditModal';
@@ -1187,12 +1188,12 @@ export default function PhysicalStock({
     if (!isValidStiCode(cleanSti)) {
       setOpenboxMoveModalData(prev => prev ? {
         ...prev,
-        error: 'Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).'
+        error: 'Código inválido. O formato obrigatório são 4 números (Ex: 1234).'
       } : null);
       return;
     }
 
-    // Verify if this STI is already used by another active unit in stock
+    // Verify if this code is already used by another active unit in stock
     const isDuplicate = units.some(u => 
       u.id !== unit.id && 
       u.status === 'Estoque' && 
@@ -1201,7 +1202,7 @@ export default function PhysicalStock({
     if (isDuplicate) {
       setOpenboxMoveModalData(prev => prev ? {
         ...prev,
-        error: `O Código STI "${cleanSti}" já está cadastrado em outra unidade ativa no estoque.`
+        error: `O Código "${cleanSti}" já está cadastrado em outra unidade ativa no estoque.`
       } : null);
       return;
     }
@@ -1224,7 +1225,7 @@ export default function PhysicalStock({
       await onUpdateUnit(updated);
       setOpenboxMoveModalData(null);
       setEditingSector('');
-      setActionSuccess(`Produto movido para o Openbox com sucesso! Código STI: ${cleanSti}`);
+      setActionSuccess(`Produto movido para o Openbox com sucesso! Código: #${cleanSti}`);
       setTimeout(() => setActionSuccess(null), 3500);
     } catch (err: any) {
       console.error('Error moving to Openbox:', err);
@@ -3323,7 +3324,7 @@ export default function PhysicalStock({
               <div>
                 <strong className="text-amber-950 dark:text-amber-200">Exigência Obrigatória do Setor Openbox:</strong>
                 <p className="mt-0.5 text-amber-800 dark:text-amber-300/90 text-[11.5px]">
-                  Para transferir este item para o armazém do Openbox, é obrigatório informar o código STI válido no formato <strong>STI + 6 dígitos</strong> (ex: STI134920).
+                  Para transferir este item para o armazém do Openbox, é obrigatório informar o código válido com <strong>4 números</strong> (ex: 1234).
                 </p>
               </div>
             </div>
@@ -3372,54 +3373,29 @@ export default function PhysicalStock({
                   <span>Código STI do Produto</span>
                   <span className="text-rose-600 dark:text-rose-400 font-bold">* (Obrigatório)</span>
                 </label>
-                {openboxMoveModalData.stiCode && (
-                  isValidStiCode(openboxMoveModalData.stiCode) ? (
-                    <span className="text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-md">
-                      <Check className="w-3 h-3 stroke-[3]" /> Formato Válido
-                    </span>
-                  ) : (
-                    <span className="text-[10.5px] font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1 bg-rose-500/10 border border-rose-500/30 px-2 py-0.5 rounded-md">
-                      STI + 6 dígitos obrigatório
-                    </span>
-                  )
-                )}
               </div>
 
-              <div className="relative">
-                <input 
-                  type="text"
-                  autoFocus
-                  maxLength={9}
-                  value={openboxMoveModalData.stiCode}
-                  onChange={(e) => {
-                    const formatted = formatStiInput(e.target.value);
-                    setOpenboxMoveModalData(prev => prev ? {
-                      ...prev,
-                      stiCode: formatted,
-                      error: null
-                    } : null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleConfirmOpenboxMove();
-                    }
-                  }}
-                  placeholder="Ex: STI134920"
-                  className={`w-full bg-slate-950 rounded-xl px-4 py-3 text-sm font-mono font-bold focus:outline-none border-2 transition-all ${
-                    isValidStiCode(openboxMoveModalData.stiCode)
-                      ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 focus:border-emerald-600 shadow-sm shadow-emerald-500/10'
-                      : openboxMoveModalData.stiCode
-                        ? 'border-amber-500 text-amber-800 dark:text-amber-200 focus:border-amber-600'
-                        : 'border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:border-amber-500'
-                  }`}
-                  id="input-openbox-sti-code"
-                />
-              </div>
-
-              <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                Pode ser digitado diretamente com ou sem prefixo STI (Ex: digite <strong className="text-amber-800 dark:text-amber-300 font-mono">134920</strong> ou <strong className="text-amber-800 dark:text-amber-300 font-mono">STI134920</strong>).
-              </p>
+              <StiCodeInput
+                id="input-openbox-sti-code"
+                autoFocus
+                value={openboxMoveModalData.stiCode}
+                onChange={(formatted) => {
+                  setOpenboxMoveModalData(prev => prev ? {
+                    ...prev,
+                    stiCode: formatted,
+                    error: null
+                  } : null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleConfirmOpenboxMove();
+                  }
+                }}
+                placeholder="1234"
+                variant="amber"
+                required
+              />
             </div>
 
             {/* Error Message if any */}

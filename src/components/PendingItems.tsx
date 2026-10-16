@@ -62,6 +62,7 @@ import { PlatformSelector } from './PlatformSelector';
 import { uploadFileToStorage, saveTriageUnit } from '../lib/dbService';
 import { syncPendingItemsIncrementally } from '../lib/syncCacheService';
 import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
+import { StiCodeInput } from './StiCodeInput';
 import { 
   generatePendingRegistrationNumber, 
   validateUniqueOrderNumber, 
@@ -1026,7 +1027,7 @@ export default function PendingItems({
 
     const cleanTracking = formTrackingCode.trim() ? normalizeStiCode(formTrackingCode) : '';
     if (cleanTracking && !isValidStiCode(cleanTracking)) {
-      setFormError('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
+      setFormError('Código inválido. O formato obrigatório são 4 números (Ex: 1234).');
       return;
     }
 
@@ -1261,15 +1262,15 @@ export default function PendingItems({
     if (transferDestination === 'Openbox') {
       const cleanSti = normalizeStiCode(transferSti);
       if (!cleanSti) {
-        setTransferError('Para movimentar este item para o estoque do Openbox, é obrigatório preencher o Código STI. Por favor, marque/informe o STI no campo indicado para prosseguir com a movimentação.');
+        setTransferError('Para movimentar este item para o estoque do Openbox, é obrigatório preencher o Código. Por favor, marque/informe o código no campo indicado para prosseguir com a movimentação.');
         return;
       }
       if (!isValidStiCode(cleanSti)) {
-        setTransferError('Código STI inválido. O formato obrigatório é a combinação de STI + 6 números (Ex: STI134920).');
+        setTransferError('Código inválido. O formato obrigatório são 4 números (Ex: 1234).');
         return;
       }
       if (units && units.some(u => u.status === 'Estoque' && normalizeStiCode(u.trackingCode) === cleanSti)) {
-        setTransferError(`O Código STI "${cleanSti}" já está cadastrado em outro produto ativo no estoque.`);
+        setTransferError(`O Código "${cleanSti}" já está cadastrado em outro produto ativo no estoque.`);
         return;
       }
     }
@@ -1994,7 +1995,7 @@ export default function PendingItems({
                             {linkedUnit.orderNumber 
                               ? `Pedido: ${linkedUnit.orderNumber}` 
                               : (linkedUnit.destinationSector === 'Openbox' && linkedUnit.trackingCode)
-                              ? `STI: ${normalizeStiCode(linkedUnit.trackingCode).replace(/^STI/i, '')}` 
+                              ? `#${normalizeStiCode(linkedUnit.trackingCode)}` 
                               : (linkedUnit.pendingRegistrationNumber || (linkedUnit.trackingCode ? linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim() : ''))
                               ? `Reg: ${linkedUnit.pendingRegistrationNumber || linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim()}`
                               : 'No Estoque'}
@@ -2361,7 +2362,7 @@ export default function PendingItems({
                             title={`Ir para o produto no estoque (${linkedUnit.orderNumber ? `Pedido ${linkedUnit.orderNumber}` : (linkedUnit.trackingCode || 'Estoque')})`}
                           >
                             <Link2 className="w-2.5 h-2.5 group-hover/tbllink:rotate-45 transition-transform" />
-                            <span>{linkedUnit.orderNumber ? `Ped: ${linkedUnit.orderNumber}` : (linkedUnit.destinationSector === 'Openbox' && linkedUnit.trackingCode) ? `STI: ${normalizeStiCode(linkedUnit.trackingCode).replace(/^STI/i, '')}` : (linkedUnit.pendingRegistrationNumber || (linkedUnit.trackingCode ? linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim() : '')) ? `Reg: ${linkedUnit.pendingRegistrationNumber || linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim()}` : 'No Estoque'}</span>
+                            <span>{linkedUnit.orderNumber ? `Ped: ${linkedUnit.orderNumber}` : (linkedUnit.destinationSector === 'Openbox' && linkedUnit.trackingCode) ? `#${normalizeStiCode(linkedUnit.trackingCode)}` : (linkedUnit.pendingRegistrationNumber || (linkedUnit.trackingCode ? linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim() : '')) ? `Reg: ${linkedUnit.pendingRegistrationNumber || linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim()}` : 'No Estoque'}</span>
                             <MoveRight className="w-2.5 h-2.5 group-hover/tbllink:translate-x-0.5 transition-transform" />
                           </button>
                         ) : (item.linkedUnitId || item.transferredToStock || item.linkedUnitTrackingCode) ? (
@@ -2426,12 +2427,12 @@ export default function PendingItems({
                               className="font-mono text-slate-300 hover:text-white hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer"
                               title="Clique para ir até este item no Estoque"
                             >
-                              <span>STI: {normalizeStiCode(item.trackingCode).replace(/^STI/i, '')}</span>
+                              <span>#{normalizeStiCode(item.trackingCode)}</span>
                               <MoveRight className="w-2.5 h-2.5 text-slate-400 shrink-0" />
                             </button>
                           ) : (
                             <div className="font-mono text-slate-300 font-semibold text-xs">
-                              STI: {normalizeStiCode(item.trackingCode).replace(/^STI/i, '')}
+                              #{normalizeStiCode(item.trackingCode)}
                             </div>
                           )
                         )}
@@ -2941,18 +2942,17 @@ export default function PendingItems({
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Código STI / Rastreio
                   </label>
-                  <input
-                    type="text"
+                  <StiCodeInput
                     value={formTrackingCode}
-                    onChange={(e) => setFormTrackingCode(formatStiInput(e.target.value))}
+                    onChange={(formatted) => setFormTrackingCode(formatted)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                       }
                     }}
-                    placeholder="Ex: STI134920"
-                    maxLength={9}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+                    placeholder="1234"
+                    variant="sky"
+                    showHelper={false}
                   />
                 </div>
 
@@ -3541,7 +3541,7 @@ export default function PendingItems({
                                 e.preventDefault();
                               }
                             }}
-                            placeholder="Ex: STI134920 ou código de rastreio..."
+                            placeholder="Ex: 1234 ou código de rastreio..."
                             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
                             id="input-stock-entry-tracking"
                           />
@@ -4034,11 +4034,10 @@ export default function PendingItems({
                         )}
                       </div>
 
-                      <input
-                        type="text"
+                      <StiCodeInput
+                        id="input-transfer-sti"
                         value={transferSti}
-                        onChange={(e) => {
-                          const formatted = formatStiInput(e.target.value);
+                        onChange={(formatted) => {
                           setTransferSti(formatted);
                           if (formatted.trim()) setTransferError(null);
                         }}
@@ -4047,16 +4046,10 @@ export default function PendingItems({
                             e.preventDefault();
                           }
                         }}
-                        placeholder="Ex: STI134920"
-                        maxLength={9}
-                        className={`w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-all ${
-                          transferError && !transferSti.trim()
-                            ? 'border-2 border-rose-500 focus:border-rose-400 shadow-sm shadow-rose-500/20'
-                            : !transferSti.trim()
-                            ? 'border border-amber-500 focus:border-amber-600'
-                            : 'border border-slate-300 dark:border-slate-800 focus:border-emerald-400'
-                        }`}
-                        id="input-transfer-sti"
+                        placeholder="1234"
+                        variant="amber"
+                        error={transferError && !transferSti.trim()}
+                        required
                       />
                     </div>
                   )}
@@ -4074,22 +4067,17 @@ export default function PendingItems({
                         </span>
                       </div>
 
-                      <input
-                        type="text"
+                      <StiCodeInput
+                        id="input-transfer-sti-outros"
                         value={transferSti}
-                        onChange={(e) => {
-                          const formatted = formatStiInput(e.target.value);
-                          setTransferSti(formatted);
-                        }}
+                        onChange={(formatted) => setTransferSti(formatted)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
                           }
                         }}
-                        placeholder="Ex: STI134920 (opcional)"
-                        maxLength={9}
-                        className="w-full bg-slate-950 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-500 border border-indigo-500/40 focus:outline-none focus:border-indigo-400"
-                        id="input-transfer-sti-outros"
+                        placeholder="1234"
+                        variant="indigo"
                       />
                     </div>
                   )}
@@ -4627,7 +4615,7 @@ export default function PendingItems({
                   )}
                   {resolvingItem.trackingCode && (
                     <span className="text-slate-300">
-                      STI: {normalizeStiCode(resolvingItem.trackingCode)}
+                      Cód: #{normalizeStiCode(resolvingItem.trackingCode)}
                     </span>
                   )}
                   {resolvingItem.registrationNumber && (
