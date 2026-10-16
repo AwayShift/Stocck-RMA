@@ -61,7 +61,15 @@ import ProductCompareModal from './ProductCompareModal';
 import { PlatformSelector } from './PlatformSelector';
 import { uploadFileToStorage, saveTriageUnit } from '../lib/dbService';
 import { syncPendingItemsIncrementally } from '../lib/syncCacheService';
-import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
+import { 
+  formatStiInput, 
+  isValidStiCode, 
+  normalizeStiCode, 
+  formatStiBadge, 
+  isLegacyStiCode,
+  isExactHashStiSearch,
+  matchesExactHashSti
+} from '../utils/stiFormatter';
 import { StiCodeInput } from './StiCodeInput';
 import { 
   generatePendingRegistrationNumber, 
@@ -660,19 +668,24 @@ export default function PendingItems({
       }
 
       const term = searchTerm.toLowerCase().trim();
-      const matchesSearch = 
-        !term ||
-        (item.registrationNumber && item.registrationNumber.toLowerCase().includes(term)) ||
-        (item.sku && item.sku.toLowerCase().includes(term)) ||
-        (item.productName && item.productName.toLowerCase().includes(term)) ||
-        (item.serialNumber && item.serialNumber.toLowerCase().includes(term)) ||
-        (item.trackingCode && item.trackingCode.toLowerCase().includes(term)) ||
-        (item.orderNumber && item.orderNumber.toLowerCase().includes(term)) ||
-        (item.pendingReason && item.pendingReason.toLowerCase().includes(term)) ||
-        (item.resolutionReason && item.resolutionReason.toLowerCase().includes(term)) ||
-        (item.detailedNotes && item.detailedNotes.toLowerCase().includes(term)) ||
-        (item.platform && item.platform.toLowerCase().includes(term)) ||
-        (item.priority && item.priority.toLowerCase().includes(term));
+      const isHashSearch = isExactHashStiSearch(searchTerm);
+      const matchesSearch = !term ? true : (
+        isHashSearch
+          ? matchesExactHashSti(item.trackingCode, searchTerm)
+          : (
+            (item.registrationNumber && item.registrationNumber.toLowerCase().includes(term)) ||
+            (item.sku && item.sku.toLowerCase().includes(term)) ||
+            (item.productName && item.productName.toLowerCase().includes(term)) ||
+            (item.serialNumber && item.serialNumber.toLowerCase().includes(term)) ||
+            (item.trackingCode && item.trackingCode.toLowerCase().includes(term)) ||
+            (item.orderNumber && item.orderNumber.toLowerCase().includes(term)) ||
+            (item.pendingReason && item.pendingReason.toLowerCase().includes(term)) ||
+            (item.resolutionReason && item.resolutionReason.toLowerCase().includes(term)) ||
+            (item.detailedNotes && item.detailedNotes.toLowerCase().includes(term)) ||
+            (item.platform && item.platform.toLowerCase().includes(term)) ||
+            (item.priority && item.priority.toLowerCase().includes(term))
+          )
+      );
 
       const matchesStatus = statusFilter === 'Todos' || item.status === statusFilter;
       const matchesPlatform = platformFilter === 'Todas' || item.platform === platformFilter;
@@ -4021,15 +4034,19 @@ export default function PendingItems({
                       <div className="flex items-center justify-between">
                         <label className="block text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
                           <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                          <span>Código STI / Rastreio (Obrigatório para Openbox) *</span>
+                          <span>Código / Rastreio (Obrigatório para Openbox) *</span>
                         </label>
                         {!transferSti.trim() ? (
                           <span className="text-[10px] font-bold text-amber-800 dark:text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
                             Pendente de preenchimento
                           </span>
+                        ) : isLegacyStiCode(transferSti) ? (
+                          <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded-full border border-purple-500/40 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Código Antigo Mantido
+                          </span>
                         ) : (
                           <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 flex items-center gap-1">
-                            <Check className="w-3 h-3" /> Preenchido
+                            <Check className="w-3 h-3" /> Preenchido (4 dígitos)
                           </span>
                         )}
                       </div>

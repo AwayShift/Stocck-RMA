@@ -47,7 +47,8 @@ import { RichTextEditor } from './RichTextEditor';
 import { 
   formatStiInput, 
   isValidStiCode, 
-  normalizeStiCode 
+  normalizeStiCode,
+  isLegacyStiCode
 } from '../utils/stiFormatter';
 import { StiCodeInput } from './StiCodeInput';
 import { 
@@ -1421,9 +1422,11 @@ export function StockUnitEditModal({
                       </label>
                       {isValidStiCode(editForm.trackingCode) ? (
                         <span className={`text-[10px] font-bold border px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                          isLight ? 'bg-emerald-100 border-emerald-400 text-emerald-950 font-black' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                          isLegacyStiCode(editForm.trackingCode)
+                            ? (isLight ? 'bg-purple-100 border-purple-400 text-purple-950 font-black' : 'bg-purple-500/15 border-purple-500/30 text-purple-300')
+                            : (isLight ? 'bg-emerald-100 border-emerald-400 text-emerald-950 font-black' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400')
                         }`}>
-                          <Check className="w-3 h-3 stroke-[3]" /> Código Válido
+                          <Check className="w-3 h-3 stroke-[3]" /> {isLegacyStiCode(editForm.trackingCode) ? 'Código Antigo Mantido' : 'Código Válido'}
                         </span>
                       ) : (
                         <span className={`text-[10px] font-bold border px-1.5 py-0.5 rounded ${
@@ -1449,7 +1452,7 @@ export function StockUnitEditModal({
                     <p className={`text-[10.5px] font-medium ${
                       isLight ? 'text-amber-900' : 'text-amber-300/80'
                     }`}>
-                      Produtos no Openbox obrigatoriamente exigem o código no formato de <strong className={isLight ? 'text-amber-950 font-black' : 'text-amber-200 font-bold'}>4 números</strong>.
+                      Para novos produtos, informe apenas os <strong className={isLight ? 'text-amber-950 font-black' : 'text-amber-200 font-bold'}>4 números</strong>. Produtos com código antigo mantêm o código original para evitar conflitos.
                     </p>
                   </div>
                 )}

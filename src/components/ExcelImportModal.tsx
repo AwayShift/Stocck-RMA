@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, DestinationSectorType, PlatformType, PackageStatusType } from '../types';
 import { parseStockInventoryExcelFile, downloadStockInventoryTemplate } from '../utils/excelHelpers';
-import { formatStiInput, normalizeStiCode, isValidStiCode } from '../utils/stiFormatter';
+import { formatStiInput, normalizeStiCode, isValidStiCode, isExactHashStiSearch, matchesExactHashSti } from '../utils/stiFormatter';
 import { detectPlatformFromOrderNumber } from '../utils/orderPlatformHelper';
 
 interface ExcelImportModalProps {
@@ -481,6 +481,9 @@ export default function ExcelImportModal({
 
       // 2. Search query filter
       if (searchFilter.trim() !== '') {
+        if (isExactHashStiSearch(searchFilter)) {
+          return matchesExactHashSti(row.sti, searchFilter);
+        }
         const query = searchFilter.toLowerCase().trim();
         const matchSku = row.sku.toLowerCase().includes(query);
         const matchSti = row.sti.toLowerCase().includes(query);
@@ -983,7 +986,7 @@ export default function ExcelImportModal({
                                   value={row.sti || ''}
                                   onChange={(e) => handleUpdateRowField(row.id, 'sti', e.target.value)}
                                   placeholder="1234"
-                                  maxLength={4}
+                                  maxLength={20}
                                   className={`w-full px-2 py-1 rounded text-xs font-mono font-bold border transition-colors excel-input-sti ${
                                     isStiDup
                                       ? 'bg-rose-950/70 text-rose-200 border-rose-500 ring-1 ring-rose-500/50 excel-input-sti-dup'

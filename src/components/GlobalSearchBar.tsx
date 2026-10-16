@@ -17,7 +17,7 @@ import {
   X
 } from 'lucide-react';
 import { TriageUnit, PendingItem, BaseProduct } from '../types';
-import { normalizeStiCode } from '../utils/stiFormatter';
+import { normalizeStiCode, isExactHashStiSearch, matchesExactHashSti } from '../utils/stiFormatter';
 import { areOrdersMatching, normalizeOrderComparable } from '../utils/orderPlatformHelper';
 
 interface GlobalSearchBarProps {
@@ -124,6 +124,21 @@ export function GlobalSearchBar({
     const trimmed = query.trim();
     if (!trimmed) {
       return { units: [], pending: [], catalog: [], total: 0 };
+    }
+
+    // Se a busca começar com '#' (ex: #1234), busca estritamente o código STI correspondente,
+    // sem buscar demais números (pedidos, seriais, skus) que contenham a mesma sequência
+    if (isExactHashStiSearch(trimmed)) {
+      const matchedUnits = units.filter(unit => matchesExactHashSti(unit.trackingCode, trimmed)).slice(0, 10);
+      const matchedPending = pendingItems.filter(item => matchesExactHashSti(item.trackingCode, trimmed)).slice(0, 8);
+      const matchedCatalog: BaseProduct[] = [];
+      const total = matchedUnits.length + matchedPending.length;
+      return {
+        units: matchedUnits,
+        pending: matchedPending,
+        catalog: matchedCatalog,
+        total
+      };
     }
 
     const lower = trimmed.toLowerCase();

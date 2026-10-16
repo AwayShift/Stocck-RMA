@@ -64,7 +64,14 @@ import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 import { CategoryBadge } from './CategoryBadge';
 import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
 import { RichTextEditor } from './RichTextEditor';
-import { formatStiInput, isValidStiCode, normalizeStiCode, formatStiBadge } from '../utils/stiFormatter';
+import { 
+  formatStiInput, 
+  isValidStiCode, 
+  normalizeStiCode, 
+  formatStiBadge,
+  isExactHashStiSearch,
+  matchesExactHashSti 
+} from '../utils/stiFormatter';
 import { StiCodeInput } from './StiCodeInput';
 import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
 import QuickRegisterSkuModal from './QuickRegisterSkuModal';
@@ -833,7 +840,10 @@ export default function PhysicalStock({
         }
       }
 
-      // 4. Search filter (supports SKU, Name, STI, Serial, Order, Registration, Platform, Notes, Reason, etc.)
+      // 4. Search filter:
+      // Se for inserido o caractere '#' antes do número (ex: #1234), busca exclusivamente o código STI exato,
+      // sem buscar outros números que contenham a mesma sequência (pedidos, seriais, skus, notas, etc.)
+      const isHashSearch = isExactHashStiSearch(searchTerm);
       const term = searchTerm.toLowerCase().trim();
       const cleanTerm = term.replace(/^[#]/, '').trim();
       const brandName = (baseProd?.brand || '').toLowerCase();
@@ -847,25 +857,30 @@ export default function PhysicalStock({
         .replace(/\[EXCLUDE_DAILY_COUNT\]/g, '')
         .toLowerCase();
 
-      const matchesSearch = !term ||
-        (unit.baseProductName || '').toLowerCase().includes(term) ||
-        (unit.baseProductSku || '').toLowerCase().includes(term) ||
-        baseProdName.includes(term) ||
-        baseProdSku.includes(term) ||
-        brandName.includes(term) ||
-        categoryName.includes(term) ||
-        (unit.trackingCode || '').toLowerCase().includes(term) ||
-        (Boolean(cleanTerm) && (unit.trackingCode || '').toLowerCase().includes(cleanTerm)) ||
-        (unit.orderNumber || '').toLowerCase().includes(term) ||
-        (Boolean(cleanTerm) && (unit.orderNumber || '').toLowerCase().includes(cleanTerm)) ||
-        (unit.serialNumber || '').toLowerCase().includes(term) ||
-        (Boolean(cleanTerm) && (unit.serialNumber || '').toLowerCase().includes(cleanTerm)) ||
-        (unit.pendingRegistrationNumber || '').toLowerCase().includes(term) ||
-        (Boolean(cleanTerm) && (unit.pendingRegistrationNumber || '').toLowerCase().includes(cleanTerm)) ||
-        (unit.platform || '').toLowerCase().includes(term) ||
-        (unit.customerReason || '').toLowerCase().includes(term) ||
-        (unit.destinationSector || '').toLowerCase().includes(term) ||
-        cleanNotesText.includes(term);
+      const matchesSearch = !searchTerm.trim() ? true : (
+        isHashSearch
+          ? matchesExactHashSti(unit.trackingCode, searchTerm)
+          : (
+            (unit.baseProductName || '').toLowerCase().includes(term) ||
+            (unit.baseProductSku || '').toLowerCase().includes(term) ||
+            baseProdName.includes(term) ||
+            baseProdSku.includes(term) ||
+            brandName.includes(term) ||
+            categoryName.includes(term) ||
+            (unit.trackingCode || '').toLowerCase().includes(term) ||
+            (Boolean(cleanTerm) && (unit.trackingCode || '').toLowerCase().includes(cleanTerm)) ||
+            (unit.orderNumber || '').toLowerCase().includes(term) ||
+            (Boolean(cleanTerm) && (unit.orderNumber || '').toLowerCase().includes(cleanTerm)) ||
+            (unit.serialNumber || '').toLowerCase().includes(term) ||
+            (Boolean(cleanTerm) && (unit.serialNumber || '').toLowerCase().includes(cleanTerm)) ||
+            (unit.pendingRegistrationNumber || '').toLowerCase().includes(term) ||
+            (Boolean(cleanTerm) && (unit.pendingRegistrationNumber || '').toLowerCase().includes(cleanTerm)) ||
+            (unit.platform || '').toLowerCase().includes(term) ||
+            (unit.customerReason || '').toLowerCase().includes(term) ||
+            (unit.destinationSector || '').toLowerCase().includes(term) ||
+            cleanNotesText.includes(term)
+          )
+      );
 
       // 5. Tab sector filter
       if (activeTab === 'Todos') {
@@ -1100,12 +1115,47 @@ export default function PhysicalStock({
     }
     if (unit.destinationSector === newSector) return;
 
-    // If moving to Openbox, require STI code via dedicated confirmation modal
+    // If moving to Openbox:
+    // Para produtos que já possuem código (inclusive código antigo STI), mantém o código e NÃO pede o novo para não dar conflito!
     if (newSector === 'Openbox') {
+      const existingCode = (unit.trackingCode || '').trim();
+      if (existingCode) {
+        setConfirmConfig({
+          title: 'Mover para Openbox',
+          message: `Deseja mover este produto para o setor "Openbox"? O código atual (${existingCode}) será mantido.`,
+          type: 'info',
+          onConfirm: async () => {
+            const transferMoment = new Date().toISOString();
+            const previousInitialDate = unit.initialEntryDate || unit.createdAt;
+            const updated: TriageUnit = {
+              ...unit,
+              destinationSector: 'Openbox',
+              trackingCode: existingCode,
+              originSector: unit.destinationSector,
+              initialEntryDate: previousInitialDate,
+              transferredAt: transferMoment,
+              createdAt: transferMoment,
+              updatedAt: transferMoment,
+              excludeFromDailyCount: false
+            };
+            try {
+              await onUpdateUnit(updated);
+              setActionSuccess(`Produto movido para o Openbox com sucesso! Código mantido: ${formatStiBadge(existingCode)}`);
+              setTimeout(() => setActionSuccess(null), 3500);
+            } catch (err: any) {
+              setActionError(err.message || 'Erro ao mover produto para o Openbox');
+              setTimeout(() => setActionError(null), 4000);
+            }
+          }
+        });
+        return;
+      }
+
+      // Se NÃO possui código, solicita o novo código de 4 números
       setEditingSector('Openbox');
       setOpenboxMoveModalData({
         unit,
-        stiCode: unit.trackingCode ? formatStiInput(unit.trackingCode) : '',
+        stiCode: '',
         error: null
       });
       return;

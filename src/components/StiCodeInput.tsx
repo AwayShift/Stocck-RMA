@@ -1,6 +1,6 @@
 import React, { useId } from 'react';
-import { Hash, Check, X } from 'lucide-react';
-import { extractStiDigits, isValidStiCode } from '../utils/stiFormatter';
+import { Hash, Check, X, ShieldAlert, History } from 'lucide-react';
+import { extractStiDigits, isValidStiCode, isLegacyStiCode } from '../utils/stiFormatter';
 
 export interface StiCodeInputProps {
   value: string;
@@ -38,22 +38,36 @@ export const StiCodeInput: React.FC<StiCodeInputProps> = ({
   const generatedId = useId();
   const inputId = id || generatedId;
 
-  // Extrai exclusivamente os 4 números
-  const digits = extractStiDigits(value);
-  const isValid = isValidStiCode(digits);
+  // Identifica se o valor já existente é um código antigo/legado (ex: 'STI135638')
+  const isLegacy = isLegacyStiCode(value);
+
+  // Extrai exclusivamente os 4 números se não for legado
+  const digits = isLegacy ? value : extractStiDigits(value);
+  const isValid = isValidStiCode(value);
   const hasError = Boolean(error);
 
-  const handleDigitsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    const cleanDigits = extractStiDigits(raw);
-    onChange(cleanDigits);
+    if (isLegacy) {
+      // Se estava com código antigo e o operador apagou ou editou, converte para digitação de 4 números
+      const cleanDigits = extractStiDigits(raw);
+      onChange(cleanDigits);
+    } else {
+      const cleanDigits = extractStiDigits(raw);
+      onChange(cleanDigits);
+    }
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pastedText = e.clipboardData.getData('text');
-    const cleanDigits = extractStiDigits(pastedText);
-    onChange(cleanDigits);
+    if (isLegacyStiCode(pastedText)) {
+      // Se colar um código antigo já existente
+      onChange(pastedText.trim().replace(/^#/, '').trim().toUpperCase());
+    } else {
+      const cleanDigits = extractStiDigits(pastedText);
+      onChange(cleanDigits);
+    }
   };
 
   const handleClear = (e: React.MouseEvent) => {
@@ -64,6 +78,15 @@ export const StiCodeInput: React.FC<StiCodeInputProps> = ({
 
   // Color schemes based on variant and light/dark theme
   const getVariantStyles = () => {
+    if (isLegacy) {
+      return {
+        prefixBg: isLight ? 'bg-purple-100 text-purple-950 border-purple-300' : 'bg-purple-950/80 text-purple-300 border-purple-500/40',
+        prefixIcon: isLight ? 'text-purple-700' : 'text-purple-400',
+        containerBorder: isLight ? 'border-purple-300 ring-purple-500/20' : 'border-purple-500/40 ring-purple-500/20',
+        inputBg: isLight ? 'bg-white text-purple-950 placeholder-slate-400' : 'bg-slate-950 text-purple-200 placeholder-purple-400/30',
+      };
+    }
+
     if (variant === 'indigo') {
       return {
         prefixBg: isLight ? 'bg-indigo-100 text-indigo-950 border-indigo-300' : 'bg-indigo-950/80 text-indigo-300 border-indigo-500/40',
@@ -126,25 +149,34 @@ export const StiCodeInput: React.FC<StiCodeInputProps> = ({
           isLight ? 'shadow-2xs' : ''
         }`}
       >
-        {/* Badge numérico de 4 dígitos (sem STI) */}
+        {/* Badge: se for código antigo, mostra indicador de Legado; caso contrário, badge # dos 4 números */}
         <div 
           className={`flex items-center gap-1 px-2.5 border-r font-mono font-bold text-xs select-none shrink-0 ${styles.prefixBg}`}
-          title="Código numérico de 4 dígitos"
+          title={isLegacy ? "Código STI antigo mantido para evitar conflitos" : "Código numérico de 4 dígitos"}
         >
-          <Hash className={`w-3.5 h-3.5 ${styles.prefixIcon}`} />
-          <span className="font-mono text-[11px] tracking-wider">#</span>
+          {isLegacy ? (
+            <>
+              <History className={`w-3.5 h-3.5 ${styles.prefixIcon}`} />
+              <span className="font-sans text-[11px] font-bold tracking-tight">Antigo</span>
+            </>
+          ) : (
+            <>
+              <Hash className={`w-3.5 h-3.5 ${styles.prefixIcon}`} />
+              <span className="font-mono text-[11px] tracking-wider">#</span>
+            </>
+          )}
         </div>
 
-        {/* Campo de entrada de 4 dígitos */}
+        {/* Campo de entrada */}
         <div className="relative flex-1 flex items-center min-w-0">
           <input
             id={inputId}
             type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={4}
-            value={digits}
-            onChange={handleDigitsChange}
+            inputMode={isLegacy ? "text" : "numeric"}
+            pattern={isLegacy ? undefined : "[0-9]*"}
+            maxLength={isLegacy ? 20 : 4}
+            value={isLegacy ? value : digits}
+            onChange={handleInputChange}
             onPaste={handlePaste}
             onKeyDown={onKeyDown}
             placeholder={placeholder}
@@ -156,7 +188,7 @@ export const StiCodeInput: React.FC<StiCodeInputProps> = ({
 
           {/* Indicadores de status e botão de limpar */}
           <div className="flex items-center gap-1.5 pr-2.5 shrink-0 pointer-events-auto">
-            {digits.length > 0 && (
+            {(digits.length > 0 || isLegacy) && (
               <button
                 type="button"
                 onClick={handleClear}
@@ -164,13 +196,21 @@ export const StiCodeInput: React.FC<StiCodeInputProps> = ({
                 className={`p-0.5 rounded-full transition-colors cursor-pointer ${
                   isLight ? 'hover:bg-slate-200 text-slate-400 hover:text-slate-700' : 'hover:bg-slate-800 text-slate-500 hover:text-white'
                 }`}
-                title="Limpar código"
+                title={isLegacy ? "Limpar e digitar novo código de 4 números" : "Limpar código"}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
 
-            {digits.length === 4 ? (
+            {isLegacy ? (
+              <span 
+                className="flex items-center gap-1 text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded select-none"
+                title="Código antigo preservado para evitar conflitos"
+              >
+                <Check className="w-3 h-3 stroke-[3]" />
+                <span>Legado</span>
+              </span>
+            ) : digits.length === 4 ? (
               <span 
                 className="flex items-center gap-1 text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded select-none"
                 title="Código completo com 4 números"
@@ -192,12 +232,18 @@ export const StiCodeInput: React.FC<StiCodeInputProps> = ({
 
       {showHelper && (
         <div className="flex items-center justify-between text-[10.5px]">
-          <span className={`${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-            Digite apenas os <strong className="font-semibold">4 números</strong> do código (Ex: <span className="font-mono">{placeholder}</span>).
-          </span>
+          {isLegacy ? (
+            <span className={`${isLight ? 'text-purple-800' : 'text-purple-300'}`}>
+              Código antigo mantido. Não é necessário alterar para não gerar conflito.
+            </span>
+          ) : (
+            <span className={`${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Digite apenas os <strong className="font-semibold">4 números</strong> do código (Ex: <span className="font-mono">{placeholder}</span>).
+            </span>
+          )}
           {digits.length > 0 && (
-            <span className="font-mono font-bold text-sky-600 dark:text-sky-400">
-              #{digits}
+            <span className={`font-mono font-bold ${isLegacy ? 'text-purple-600 dark:text-purple-400' : 'text-sky-600 dark:text-sky-400'}`}>
+              {isLegacy ? value : `#${digits}`}
             </span>
           )}
         </div>

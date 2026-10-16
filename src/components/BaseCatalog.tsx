@@ -39,6 +39,7 @@ import { CategoryFormSelector } from './CategoryFormSelector';
 import { CategoryBadge } from './CategoryBadge';
 import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
 import { getOptimizedThumbnailUrl } from '../utils/productImages';
+import { isExactHashStiSearch } from '../utils/stiFormatter';
 
 interface BaseCatalogProps {
   products: BaseProduct[];
@@ -444,6 +445,8 @@ export default function BaseCatalog({
 
   // Filter products by SKU or Name/Model, Category (Macro or Subcategory), and Voltage
   const filteredProducts = products.filter(p => {
+    // Busca restrita por # (código STI da unidade física): catálogo base não possui código STI individual
+    if (isExactHashStiSearch(searchTerm)) return false;
     const term = searchTerm.toLowerCase();
     const matchesTerm = p.name.toLowerCase().includes(term) || p.sku.toLowerCase().includes(term);
     const matchesCategory = checkCategoryFilterMatch(p.category, selectedCategory);

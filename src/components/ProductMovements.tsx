@@ -40,7 +40,7 @@ import {
   groupRecordsByWeek 
 } from '../utils/excelHelpers';
 import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
-import { formatStiBadge } from '../utils/stiFormatter';
+import { formatStiBadge, isExactHashStiSearch, matchesExactHashSti } from '../utils/stiFormatter';
 
 interface ProductMovementsProps {
   products: BaseProduct[];
@@ -798,6 +798,9 @@ export default function ProductMovements({
 
       // Search query
       if (searchQuery.trim() !== '') {
+        if (isExactHashStiSearch(searchQuery)) {
+          return matchesExactHashSti(u.trackingCode, searchQuery);
+        }
         const query = searchQuery.toLowerCase();
         const matchesSku = u.baseProductSku?.toLowerCase().includes(query);
         const matchesName = u.baseProductName?.toLowerCase().includes(query);

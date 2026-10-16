@@ -1377,7 +1377,7 @@ export default function App() {
                     setInitialStockFilters({
                       platform: null,
                       sector: null,
-                      searchTerm: rawTarget.replace(/^[#]/, '').trim()
+                      searchTerm: rawTarget.trim()
                     });
                     setActiveTab('stock');
                   } else {
