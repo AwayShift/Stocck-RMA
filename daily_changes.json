@@ -1,0 +1,55 @@
+{
+  "currentDate": "2026-10-18",
+  "todayFiles": [
+    {
+      "file": "src/utils/stiFormatter.ts",
+      "summary": "Implementação das funções de código 4 dígitos, validação, compatibilidade legado e busca estrita '#' (isExactHashStiSearch, matchesExactHashSti)"
+    },
+    {
+      "file": "src/components/PhysicalStock.tsx",
+      "summary": "Preservação de código antigo na movimentação para Openbox sem pedir novo código e filtro estrito por '#' no estoque"
+    },
+    {
+      "file": "src/components/GlobalSearchBar.tsx",
+      "summary": "Suporte a busca estrita com prefixo '#' isolando exclusivamente unidades com o código STI correspondente"
+    },
+    {
+      "file": "src/components/PendingItems.tsx",
+      "summary": "Preservação do código legado na transferência para Openbox e busca restrita por '#' nas pendências"
+    },
+    {
+      "file": "src/components/ExcelImportModal.tsx",
+      "summary": "Ajuste de maxLength para códigos legados e filtro estrito por '#' na tabela de importação"
+    },
+    {
+      "file": "src/components/ProductMovements.tsx",
+      "summary": "Filtro estrito de código STI com prefixo '#' na aba de movimentações diárias"
+    },
+    {
+      "file": "src/components/BaseCatalog.tsx",
+      "summary": "Isolamento de busca estrita '#' no catálogo base de produtos"
+    },
+    {
+      "file": "src/components/StiCodeInput.tsx",
+      "summary": "Suporte visual e funcional para preservar códigos legados STI sem truncar, além de digitação de novos códigos de 4 dígitos"
+    },
+    {
+      "file": "src/components/StockUnitEditModal.tsx",
+      "summary": "Exibição de status 'Código Antigo Mantido' e preservação de códigos legados sem exigir 4 dígitos ao editar"
+    },
+    {
+      "file": "src/App.tsx",
+      "summary": "Preservação do caractere '#' ao encaminhar pesquisa global diretamente para o estoque físico"
+    }
+  ],
+  "history": {
+    "2026-10-16": [
+      "src/utils/stiFormatter.ts",
+      "src/components/StiCodeInput.tsx",
+      "src/components/StockUnitEditModal.tsx",
+      "src/components/PhysicalStock.tsx",
+      "src/components/PendingItems.tsx",
+      "src/components/ExcelImportModal.tsx"
+    ]
+  }
+}
