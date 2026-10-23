@@ -1178,7 +1178,7 @@ export default function PhysicalStock({
 
     setConfirmConfig({
       title: 'Mover Setor de Estoque',
-      message: `Deseja alterar o setor de destino desta unidade para "${newSector}"?${newSector === 'Principal' && baseImgs.main ? ' (As imagens oficiais do produto base serão vinculadas automaticamente).' : ''}`,
+      message: `Deseja alterar o setor de destino desta unidade para "${newSector}"?${unit.trackingCode ? ` (O código STI ${formatStiBadge(unit.trackingCode)} será mantido como registro do produto).` : ''}${newSector === 'Principal' && baseImgs.main ? ' (As imagens oficiais do produto base serão vinculadas automaticamente).' : ''}`,
       type: 'info',
       onConfirm: async () => {
         let finalPhotosProduct = unit.photosProduct || [];
@@ -1195,8 +1195,8 @@ export default function PhysicalStock({
         const updated: TriageUnit = {
           ...unit,
           destinationSector: newSector,
-          // When moving away from Openbox, clear trackingCode unless moving to Outros with existing code
-          trackingCode: newSector === 'Outros' ? (unit.trackingCode || '') : '',
+          // Ao mover do Openbox para qualquer outro estoque, mantém o código STI como registro do produto
+          trackingCode: unit.trackingCode || '',
           originSector: unit.destinationSector,
           initialEntryDate: previousInitialDate,
           transferredAt: transferMoment,
@@ -1332,7 +1332,8 @@ export default function PhysicalStock({
     const updated: TriageUnit = {
       ...unit,
       destinationSector: targetSector,
-      trackingCode: targetSector === 'Openbox' ? unit.trackingCode : '',
+      // Ao mover do Openbox para qualquer outro estoque, mantém o código STI como registro do produto
+      trackingCode: unit.trackingCode || '',
       originSector: unit.destinationSector,
       initialEntryDate: previousInitialDate,
       transferredAt: transferMoment,
@@ -2465,14 +2466,15 @@ export default function PhysicalStock({
                         )}
                       </div>
                       {(() => {
-                        const isSti = unit.destinationSector === 'Openbox';
-                        const code = isSti 
-                          ? (unit.trackingCode ? normalizeStiCode(unit.trackingCode) : '') 
-                          : (unit.pendingRegistrationNumber || (unit.trackingCode ? unit.trackingCode.replace(/^#?STI\s*/i, '').trim() : ''));
+                        const hasSti = Boolean(unit.trackingCode && unit.trackingCode.trim());
+                        const isSti = hasSti;
+                        const code = hasSti 
+                          ? normalizeStiCode(unit.trackingCode) 
+                          : (unit.pendingRegistrationNumber ? unit.pendingRegistrationNumber.replace(/^#/, '').trim() : '');
                         if (!code) return null;
-                        const display = isSti ? formatStiBadge(unit.trackingCode) : code;
-                        const copyTitle = isSti ? "Clique para copiar o Código STI" : "Clique para copiar o Nº de Registro";
-                        const copyKey = isSti ? `sti-${unit.id}` : `reg-${unit.id}`;
+                        const display = hasSti ? formatStiBadge(unit.trackingCode) : code;
+                        const copyTitle = hasSti ? "Clique para copiar o Código STI (Registro do Produto)" : "Clique para copiar o Nº de Registro";
+                        const copyKey = hasSti ? `sti-${unit.id}` : `reg-${unit.id}`;
 
                         return (
                           <button
@@ -2825,14 +2827,15 @@ export default function PhysicalStock({
                           </button>
                         )}
                         {(() => {
-                          const isSti = unit.destinationSector === 'Openbox';
-                          const code = isSti 
-                            ? (unit.trackingCode ? normalizeStiCode(unit.trackingCode) : '') 
-                            : (unit.pendingRegistrationNumber || (unit.trackingCode ? unit.trackingCode.replace(/^#?STI\s*/i, '').trim() : ''));
+                          const hasSti = Boolean(unit.trackingCode && unit.trackingCode.trim());
+                          const isSti = hasSti;
+                          const code = hasSti 
+                            ? normalizeStiCode(unit.trackingCode) 
+                            : (unit.pendingRegistrationNumber ? unit.pendingRegistrationNumber.replace(/^#/, '').trim() : '');
                           if (!code) return null;
-                          const display = isSti ? formatStiBadge(unit.trackingCode) : code;
-                          const copyTitle = isSti ? "Clique para copiar o Código STI" : "Clique para copiar o Nº de Registro";
-                          const copyKey = isSti ? `sti-list-${unit.id}` : `reg-list-${unit.id}`;
+                          const display = hasSti ? formatStiBadge(unit.trackingCode) : code;
+                          const copyTitle = hasSti ? "Clique para copiar o Código STI (Registro do Produto)" : "Clique para copiar o Nº de Registro";
+                          const copyKey = hasSti ? `sti-list-${unit.id}` : `reg-list-${unit.id}`;
 
                           return (
                             <button

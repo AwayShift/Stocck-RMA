@@ -671,11 +671,12 @@ export function StockUnitEditModal({
           return;
         }
         updatedForm.trackingCode = normSti;
-      } else if (updatedForm.destinationSector === 'Outros') {
-        const normSti = updatedForm.trackingCode ? normalizeStiCode(updatedForm.trackingCode) : '';
-        updatedForm.trackingCode = normSti || (updatedForm.trackingCode ? updatedForm.trackingCode.trim() : '');
       } else {
-        updatedForm.trackingCode = '';
+        // Ao mover do Openbox para qualquer outro estoque (Principal, RMA, Outros, etc.),
+        // mantém o código STI como registro histórico do produto
+        const existingSti = updatedForm.trackingCode || unit?.trackingCode || '';
+        const normSti = existingSti ? normalizeStiCode(existingSti) : '';
+        updatedForm.trackingCode = normSti || existingSti.trim();
       }
 
       const originalSector = unit?.destinationSector;
@@ -1453,6 +1454,40 @@ export function StockUnitEditModal({
                       isLight ? 'text-amber-900' : 'text-amber-300/80'
                     }`}>
                       Para novos produtos, informe apenas os <strong className={isLight ? 'text-amber-950 font-black' : 'text-amber-200 font-bold'}>4 números</strong>. Produtos com código antigo mantêm o código original para evitar conflitos.
+                    </p>
+                  </div>
+                )}
+
+                {/* Exibe o registro do Código STI preservado quando o produto está em outro estoque (ex: veio do Openbox) */}
+                {editForm.destinationSector !== 'Openbox' && Boolean(editForm.trackingCode || unit?.trackingCode) && (
+                  <div className={`mt-2.5 p-3 rounded-xl border space-y-1.5 animate-in fade-in duration-200 ${
+                    isLight ? 'bg-sky-50 border-sky-300' : 'bg-sky-500/10 border-sky-500/30'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <label className={`text-[11px] font-bold flex items-center gap-1.5 ${
+                        isLight ? 'text-sky-950' : 'text-sky-300'
+                      }`}>
+                        <Tag className={`w-3.5 h-3.5 ${isLight ? 'text-sky-700' : 'text-sky-400'}`} />
+                        <span>Código STI (Registro do Produto)</span>
+                      </label>
+                      <span className={`text-[10px] font-bold border px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                        isLight ? 'bg-sky-100 border-sky-400 text-sky-950 font-black' : 'bg-sky-500/15 border-sky-500/30 text-sky-300'
+                      }`}>
+                        <Check className="w-3 h-3 stroke-[3]" /> Registro Preservado
+                      </span>
+                    </div>
+                    <StiCodeInput 
+                      value={editForm.trackingCode || unit?.trackingCode || ''} 
+                      onChange={(formatted) => setEditForm({ ...editForm, trackingCode: formatted })} 
+                      placeholder="1234"
+                      variant="sky"
+                      isLight={isLight}
+                      showHelper={false}
+                    />
+                    <p className={`text-[10.5px] font-medium ${
+                      isLight ? 'text-sky-900' : 'text-sky-300/80'
+                    }`}>
+                      Código STI mantido como registro deste produto após a movimentação de estoque.
                     </p>
                   </div>
                 )}

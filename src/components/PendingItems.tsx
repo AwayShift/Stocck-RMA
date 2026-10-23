@@ -2007,10 +2007,10 @@ export default function PendingItems({
                           <span>
                             {linkedUnit.orderNumber 
                               ? `Pedido: ${linkedUnit.orderNumber}` 
-                              : (linkedUnit.destinationSector === 'Openbox' && linkedUnit.trackingCode)
+                              : (linkedUnit.trackingCode)
                               ? `#${normalizeStiCode(linkedUnit.trackingCode)}` 
-                              : (linkedUnit.pendingRegistrationNumber || (linkedUnit.trackingCode ? linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim() : ''))
-                              ? `Reg: ${linkedUnit.pendingRegistrationNumber || linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim()}`
+                              : (linkedUnit.pendingRegistrationNumber || '')
+                              ? `Reg: ${linkedUnit.pendingRegistrationNumber}`
                               : 'No Estoque'}
                           </span>
                           <MoveRight className="w-3 h-3 text-emerald-400 group-hover/link:translate-x-0.5 transition-transform" />
@@ -2375,7 +2375,7 @@ export default function PendingItems({
                             title={`Ir para o produto no estoque (${linkedUnit.orderNumber ? `Pedido ${linkedUnit.orderNumber}` : (linkedUnit.trackingCode || 'Estoque')})`}
                           >
                             <Link2 className="w-2.5 h-2.5 group-hover/tbllink:rotate-45 transition-transform" />
-                            <span>{linkedUnit.orderNumber ? `Ped: ${linkedUnit.orderNumber}` : (linkedUnit.destinationSector === 'Openbox' && linkedUnit.trackingCode) ? `#${normalizeStiCode(linkedUnit.trackingCode)}` : (linkedUnit.pendingRegistrationNumber || (linkedUnit.trackingCode ? linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim() : '')) ? `Reg: ${linkedUnit.pendingRegistrationNumber || linkedUnit.trackingCode.replace(/^#?STI\s*/i, '').trim()}` : 'No Estoque'}</span>
+                            <span>{linkedUnit.orderNumber ? `Ped: ${linkedUnit.orderNumber}` : (linkedUnit.trackingCode) ? `#${normalizeStiCode(linkedUnit.trackingCode)}` : (linkedUnit.pendingRegistrationNumber || '') ? `Reg: ${linkedUnit.pendingRegistrationNumber}` : 'No Estoque'}</span>
                             <MoveRight className="w-2.5 h-2.5 group-hover/tbllink:translate-x-0.5 transition-transform" />
                           </button>
                         ) : (item.linkedUnitId || item.transferredToStock || item.linkedUnitTrackingCode) ? (

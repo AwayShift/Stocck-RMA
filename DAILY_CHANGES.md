@@ -5,24 +5,29 @@ Quando a data muda, a seção **Arquivos Alterados no Dia** é atualizada confor
 
 ---
 
-## 📅 Data Atual: 2026-10-18
-- **Total de arquivos alterados hoje:** 10 arquivos
+## 📅 Data Atual: 2026-10-23
+- **Total de arquivos alterados hoje:** 3 arquivos
 
 ### Lista de Arquivos Alterados Hoje:
-1. `src/utils/stiFormatter.ts` - Implementação das funções de código 4 dígitos, validação, compatibilidade legado e busca estrita '#' (isExactHashStiSearch, matchesExactHashSti)
-2. `src/components/PhysicalStock.tsx` - Preservação de código antigo na movimentação para Openbox sem pedir novo código e filtro estrito por '#' no estoque
-3. `src/components/GlobalSearchBar.tsx` - Suporte a busca estrita com prefixo '#' isolando exclusivamente unidades com o código STI correspondente
-4. `src/components/PendingItems.tsx` - Preservação do código legado na transferência para Openbox e busca restrita por '#' nas pendências
-5. `src/components/ExcelImportModal.tsx` - Ajuste de maxLength para códigos legados e filtro estrito por '#' na tabela de importação
-6. `src/components/ProductMovements.tsx` - Filtro estrito de código STI com prefixo '#' na aba de movimentações diárias
-7. `src/components/BaseCatalog.tsx` - Isolamento de busca estrita '#' no catálogo base de produtos
-8. `src/components/StiCodeInput.tsx` - Suporte visual e funcional para preservar códigos legados STI sem truncar, além de digitação de novos códigos de 4 dígitos
-9. `src/components/StockUnitEditModal.tsx` - Exibição de status 'Código Antigo Mantido' e preservação de códigos legados sem exigir 4 dígitos ao editar
-10. `src/App.tsx` - Preservação do caractere '#' ao encaminhar pesquisa global diretamente para o estoque físico
+1. `src/components/PhysicalStock.tsx` - Preservação do código STI como registro do produto ao mover do Openbox para qualquer outro estoque
+2. `src/components/StockUnitEditModal.tsx` - Manutenção e exibição do registro de código STI ao transferir unidade do Openbox para outros estoques
+3. `src/components/PendingItems.tsx` - Exibição do código STI em unidades vinculadas independentemente do setor atual
 
 ---
 
 ## 🗄️ Histórico de Alterações por Data
+
+### 📅 2026-10-18
+- `src/utils/stiFormatter.ts`
+- `src/components/PhysicalStock.tsx`
+- `src/components/GlobalSearchBar.tsx`
+- `src/components/PendingItems.tsx`
+- `src/components/ExcelImportModal.tsx`
+- `src/components/ProductMovements.tsx`
+- `src/components/BaseCatalog.tsx`
+- `src/components/StiCodeInput.tsx`
+- `src/components/StockUnitEditModal.tsx`
+- `src/App.tsx`
 
 ### 📅 2026-10-16
 - `src/utils/stiFormatter.ts`
