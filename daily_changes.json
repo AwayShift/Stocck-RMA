@@ -1,17 +1,17 @@
 {
-  "currentDate": "2026-10-23",
+  "currentDate": "2026-10-26",
   "todayFiles": [
     {
-      "file": "src/components/PhysicalStock.tsx",
-      "summary": "Preservação do código STI como registro do produto ao mover do Openbox para qualquer outro estoque"
+      "file": "src/components/PendingItems.tsx",
+      "summary": "Removido fallback que gerava código STI aleatório com número de registro ao dar entrada no RMA"
     },
     {
       "file": "src/components/StockUnitEditModal.tsx",
-      "summary": "Manutenção e exibição do registro de código STI ao transferir unidade do Openbox para outros estoques"
+      "summary": "Sanitização de STIs espúrios herdados de registros no RMA e correção no campo de edição"
     },
     {
-      "file": "src/components/PendingItems.tsx",
-      "summary": "Exibição do código STI em unidades vinculadas independentemente do setor atual"
+      "file": "src/components/PhysicalStock.tsx",
+      "summary": "Ignora falsos STIs originados de números de registro no RMA"
     }
   ],
   "history": {
@@ -34,6 +34,11 @@
       "src/components/StiCodeInput.tsx",
       "src/components/StockUnitEditModal.tsx",
       "src/App.tsx"
+    ],
+    "2026-10-23": [
+      "src/components/PhysicalStock.tsx",
+      "src/components/StockUnitEditModal.tsx",
+      "src/components/PendingItems.tsx"
     ]
   }
 }

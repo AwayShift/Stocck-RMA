@@ -5,17 +5,22 @@ Quando a data muda, a seção **Arquivos Alterados no Dia** é atualizada confor
 
 ---
 
-## 📅 Data Atual: 2026-10-23
+## 📅 Data Atual: 2026-10-26
 - **Total de arquivos alterados hoje:** 3 arquivos
 
 ### Lista de Arquivos Alterados Hoje:
-1. `src/components/PhysicalStock.tsx` - Preservação do código STI como registro do produto ao mover do Openbox para qualquer outro estoque
-2. `src/components/StockUnitEditModal.tsx` - Manutenção e exibição do registro de código STI ao transferir unidade do Openbox para outros estoques
-3. `src/components/PendingItems.tsx` - Exibição do código STI em unidades vinculadas independentemente do setor atual
+1. `src/components/PendingItems.tsx` - Removido fallback que gerava código STI aleatório com número de registro ao dar entrada no RMA
+2. `src/components/StockUnitEditModal.tsx` - Sanitização de STIs espúrios herdados de registros no RMA e correção no campo de edição
+3. `src/components/PhysicalStock.tsx` - Ignora falsos STIs originados de números de registro no RMA
 
 ---
 
 ## 🗄️ Histórico de Alterações por Data
+
+### 📅 2026-10-23
+- `src/components/PhysicalStock.tsx`
+- `src/components/StockUnitEditModal.tsx`
+- `src/components/PendingItems.tsx`
 
 ### 📅 2026-10-18
 - `src/utils/stiFormatter.ts`

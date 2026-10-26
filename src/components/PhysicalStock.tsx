@@ -355,6 +355,14 @@ export default function PhysicalStock({
     if (!currentUnit) return '';
     const rawSti = (currentUnit.trackingCode || '').trim();
     if (rawSti) {
+      if (
+        currentUnit.destinationSector === 'RMA' &&
+        currentUnit.originSector !== 'Openbox' &&
+        currentUnit.pendingRegistrationNumber &&
+        normalizeStiCode(rawSti) === normalizeStiCode(currentUnit.pendingRegistrationNumber)
+      ) {
+        return '';
+      }
       return normalizeStiCode(rawSti) || rawSti;
     }
     // Fallback: check if linked pending item has an STI/trackingCode
@@ -2466,7 +2474,14 @@ export default function PhysicalStock({
                         )}
                       </div>
                       {(() => {
-                        const hasSti = Boolean(unit.trackingCode && unit.trackingCode.trim());
+                        const isFakeStiFromReg = Boolean(
+                          unit.destinationSector === 'RMA' &&
+                          unit.originSector !== 'Openbox' &&
+                          unit.pendingRegistrationNumber &&
+                          unit.trackingCode &&
+                          normalizeStiCode(unit.trackingCode) === normalizeStiCode(unit.pendingRegistrationNumber)
+                        );
+                        const hasSti = Boolean(unit.trackingCode && unit.trackingCode.trim() && !isFakeStiFromReg);
                         const isSti = hasSti;
                         const code = hasSti 
                           ? normalizeStiCode(unit.trackingCode) 
@@ -2827,7 +2842,14 @@ export default function PhysicalStock({
                           </button>
                         )}
                         {(() => {
-                          const hasSti = Boolean(unit.trackingCode && unit.trackingCode.trim());
+                          const isFakeStiFromReg = Boolean(
+                            unit.destinationSector === 'RMA' &&
+                            unit.originSector !== 'Openbox' &&
+                            unit.pendingRegistrationNumber &&
+                            unit.trackingCode &&
+                            normalizeStiCode(unit.trackingCode) === normalizeStiCode(unit.pendingRegistrationNumber)
+                          );
+                          const hasSti = Boolean(unit.trackingCode && unit.trackingCode.trim() && !isFakeStiFromReg);
                           const isSti = hasSti;
                           const code = hasSti 
                             ? normalizeStiCode(unit.trackingCode) 

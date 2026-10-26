@@ -1092,9 +1092,11 @@ export default function PendingItems({
       let createdUnit: TriageUnit | null = null;
 
       if (shouldCreateStock) {
-        const newTriageId = `tr-pend-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        // Entrada exclusiva no setor RMA. Se o rastreio estiver vazio, utiliza o número de registro da pendência
-        const finalTracking = cleanTracking || formTrackingCode.trim() || regNumber;
+        // Entrada exclusiva no setor RMA. O código STI NUNCA deve ser gerado aleatoriamente ou preenchido com o número de registro (regNumber).
+        // Apenas se o código STI já existir na pendência ou for informado pelo operador ele deve ser preservado.
+        const existingSti = cleanTracking || formTrackingCode.trim() || editingItem?.trackingCode || '';
+        const finalTracking = existingSti ? (normalizeStiCode(existingSti) || existingSti.trim()) : '';
+        const newTriageId = editingItem?.linkedUnitId || `triage-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
         createdUnit = {
           id: newTriageId,
@@ -1369,9 +1371,9 @@ export default function PendingItems({
         serialNumber: transferSerialNumber.trim(),
         trackingCode: transferDestination === 'Openbox' 
           ? normalizeStiCode(transferSti) 
-          : (transferDestination === 'Outros' && transferSti.trim() 
-              ? normalizeStiCode(transferSti) || transferSti.trim() 
-              : ''),
+          : (transferSti.trim() 
+              ? (normalizeStiCode(transferSti) || transferSti.trim()) 
+              : (itemToTransfer.trackingCode ? (normalizeStiCode(itemToTransfer.trackingCode) || itemToTransfer.trackingCode) : '')),
         orderNumber: transferOrderNumber.trim(),
         customerReason: transferCustomerReason.trim() || itemToTransfer.pendingReason || 'Liberado de Pendências',
         deviceStatus: finalDeviceStatus,

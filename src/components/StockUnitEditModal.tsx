@@ -138,8 +138,22 @@ export function StockUnitEditModal({
     const resolvedName = getResolvedUnitProductName(unit, products);
     const sanitizedOriginSector = isRealStockTransfer(unit.originSector) ? unit.originSector : undefined;
 
+    // Se a unidade está no RMA, nunca veio do Openbox, e o trackingCode coincide com o pendingRegistrationNumber (ex: '0004'),
+    // limpa o trackingCode para sanear registros afetados pela cópia automática indevida do regNumber
+    let sanitizedTrackingCode = unit.trackingCode || '';
+    if (
+      unit.destinationSector === 'RMA' &&
+      unit.originSector !== 'Openbox' &&
+      unit.pendingRegistrationNumber &&
+      sanitizedTrackingCode &&
+      normalizeStiCode(sanitizedTrackingCode) === normalizeStiCode(unit.pendingRegistrationNumber)
+    ) {
+      sanitizedTrackingCode = '';
+    }
+
     setEditForm({
       ...unit,
+      trackingCode: sanitizedTrackingCode,
       originSector: sanitizedOriginSector,
       baseProductName: resolvedName,
       baseProductSku: resolvedSku,
@@ -1459,7 +1473,7 @@ export function StockUnitEditModal({
                 )}
 
                 {/* Exibe o registro do Código STI preservado quando o produto está em outro estoque (ex: veio do Openbox) */}
-                {editForm.destinationSector !== 'Openbox' && Boolean(editForm.trackingCode || unit?.trackingCode) && (
+                {editForm.destinationSector !== 'Openbox' && Boolean(editForm.trackingCode && editForm.trackingCode.trim()) && (
                   <div className={`mt-2.5 p-3 rounded-xl border space-y-1.5 animate-in fade-in duration-200 ${
                     isLight ? 'bg-sky-50 border-sky-300' : 'bg-sky-500/10 border-sky-500/30'
                   }`}>
@@ -1477,7 +1491,7 @@ export function StockUnitEditModal({
                       </span>
                     </div>
                     <StiCodeInput 
-                      value={editForm.trackingCode || unit?.trackingCode || ''} 
+                      value={editForm.trackingCode || ''} 
                       onChange={(formatted) => setEditForm({ ...editForm, trackingCode: formatted })} 
                       placeholder="1234"
                       variant="sky"
