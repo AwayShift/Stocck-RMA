@@ -1,17 +1,17 @@
 {
-  "currentDate": "2026-10-26",
+  "currentDate": "2026-11-04",
   "todayFiles": [
     {
-      "file": "src/components/PendingItems.tsx",
-      "summary": "Removido fallback que gerava código STI aleatório com número de registro ao dar entrada no RMA"
+      "file": "src/lib/dbService.ts",
+      "summary": "Suporte a opções includeInDailyCount ao reverter baixa de unidades no estoque"
     },
     {
-      "file": "src/components/StockUnitEditModal.tsx",
-      "summary": "Sanitização de STIs espúrios herdados de registros no RMA e correção no campo de edição"
+      "file": "src/App.tsx",
+      "summary": "Propagação da opção de inclusão na contagem diária na reversão de baixa"
     },
     {
       "file": "src/components/PhysicalStock.tsx",
-      "summary": "Ignora falsos STIs originados de números de registro no RMA"
+      "summary": "Modal de confirmação com opção interativa para incluir ou não na contagem diária ao reverter baixa de um produto/pedido"
     }
   ],
   "history": {
@@ -39,6 +39,11 @@
       "src/components/PhysicalStock.tsx",
       "src/components/StockUnitEditModal.tsx",
       "src/components/PendingItems.tsx"
+    ],
+    "2026-10-26": [
+      "src/components/PendingItems.tsx",
+      "src/components/StockUnitEditModal.tsx",
+      "src/components/PhysicalStock.tsx"
     ]
   }
 }

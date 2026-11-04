@@ -2182,7 +2182,11 @@ export const checkoutTriageUnitsBatch = async (ids: string[]): Promise<void> => 
   }
 };
 
-export const revertCheckoutTriageUnit = async (id: string, trackingCode?: string): Promise<TriageUnit | null> => {
+export const revertCheckoutTriageUnit = async (
+  id: string, 
+  trackingCode?: string,
+  options?: { includeInDailyCount?: boolean }
+): Promise<TriageUnit | null> => {
   const cleanId = (id || '').trim();
   if (!cleanId) return null;
 
@@ -2193,22 +2197,76 @@ export const revertCheckoutTriageUnit = async (id: string, trackingCode?: string
   const existing = currentCached.find(u => u.id === cleanId);
   if (!existing) return null;
 
+  const includeInDaily = options?.includeInDailyCount !== undefined ? Boolean(options.includeInDailyCount) : true;
+  const previousInitialDate = existing.initialEntryDate || existing.createdAt;
+
+  // Handle note tags for exclusion if needed
+  let rawNotes = existing.notes || '';
+  if (!includeInDaily) {
+    if (!rawNotes.includes('[EXCLUDE_DAILY_COUNT]')) {
+      rawNotes = rawNotes ? `${rawNotes}\n[EXCLUDE_DAILY_COUNT]` : '[EXCLUDE_DAILY_COUNT]';
+    }
+  } else {
+    rawNotes = rawNotes.replace(/\[EXCLUDE_DAILY_COUNT\]\s*/g, '').trim();
+  }
+
   const updatedUnit: TriageUnit = {
     ...existing,
     status: 'Estoque',
     checkoutDate: null,
-    updatedAt: now
+    initialEntryDate: previousInitialDate,
+    createdAt: includeInDaily ? now : existing.createdAt,
+    updatedAt: now,
+    excludeFromDailyCount: !includeInDaily,
+    notes: rawNotes
   };
 
   updateLocalCacheItem('triage_units', updatedUnit);
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    const { error } = await supabase.from('triage_units').update({
+    const updatePayload: any = {
       status: 'Estoque',
       checkout_date: null,
-      updated_at: now
-    }).eq('id', cleanId);
+      updated_at: now,
+      notes: rawNotes
+    };
+
+    if (includeInDaily) {
+      updatePayload.created_at = now;
+      if (getHasExcludeDailyCol() !== false) {
+        updatePayload.exclude_from_daily_count = false;
+      }
+    } else {
+      if (getHasExcludeDailyCol() !== false) {
+        updatePayload.exclude_from_daily_count = true;
+      }
+    }
+
+    if (previousInitialDate && getHasTriageTransferCols() !== false) {
+      updatePayload.initial_entry_date = previousInitialDate;
+    }
+
+    let { error } = await supabase.from('triage_units').update(updatePayload).eq('id', cleanId);
+
+    // If failed due to missing column (e.g. exclude_from_daily_count or initial_entry_date), retry without them
+    if (error && (
+      error.message?.includes('exclude_from_daily_count') || 
+      error.message?.includes('initial_entry_date') || 
+      error.code === 'PGRST204' || 
+      error.code === '42703'
+    )) {
+      if (error.message?.includes('exclude_from_daily_count')) {
+        setHasExcludeDailyCol(false);
+        delete updatePayload.exclude_from_daily_count;
+      }
+      if (error.message?.includes('initial_entry_date')) {
+        setHasTriageTransferCols(false);
+        delete updatePayload.initial_entry_date;
+      }
+      const retryResult = await supabase.from('triage_units').update(updatePayload).eq('id', cleanId);
+      error = retryResult.error;
+    }
 
     if (error) {
       console.error('Supabase revert checkout error:', error);
@@ -2217,7 +2275,8 @@ export const revertCheckoutTriageUnit = async (id: string, trackingCode?: string
 
     recordDbOperation('write', 1);
     try {
-      await createAuditLog('REVERT_CHECKOUT', `Reverteu baixa e retornou ao estoque o RMA (Supabase): ${trackingCode || cleanId}`);
+      const dailyMsg = includeInDaily ? ' (Incluído na contagem diária)' : ' (Não incluído na contagem diária)';
+      await createAuditLog('REVERT_CHECKOUT', `Reverteu baixa e retornou ao estoque o RMA (Supabase): ${trackingCode || cleanId}${dailyMsg}`);
     } catch (e) {
       console.warn('Audit log write error:', e);
     }

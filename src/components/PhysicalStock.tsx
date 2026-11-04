@@ -41,6 +41,8 @@ import {
   RotateCcw,
   Undo2,
   Calendar,
+  CalendarPlus,
+  CalendarX2,
   ShoppingCart,
   User,
   Hash,
@@ -97,7 +99,7 @@ interface PhysicalStockProps {
   onUpdateUnit: (unit: TriageUnit) => Promise<void>;
   onDeleteUnit: (id: string) => Promise<void>;
   onCheckoutUnit: (id: string) => Promise<void>;
-  onRevertCheckoutUnit?: (id: string) => Promise<void>;
+  onRevertCheckoutUnit?: (id: string, options?: { includeInDailyCount?: boolean }) => Promise<void>;
   initialSelectedUnit?: TriageUnit | null;
   openModalOnInitialSelect?: boolean;
   onClearSelectedUnit?: () => void;
@@ -343,6 +345,13 @@ export default function PhysicalStock({
     stiCode: string;
     error: string | null;
   } | null>(null);
+
+  // Revert checkout modal state (asking whether to include in daily count)
+  const [revertCheckoutModalData, setRevertCheckoutModalData] = useState<{
+    unit: TriageUnit;
+    includeInDailyCount: boolean;
+  } | null>(null);
+  const [isRevertingCheckout, setIsRevertingCheckout] = useState(false);
 
   // Base Product Comparison Modal state (for units not in Estoque Principal)
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
@@ -1088,31 +1097,45 @@ export default function PhysicalStock({
     });
   };
 
-  // Action: Reverter Baixa (with custom confirmation)
+  // Action: Reverter Baixa (Abre modal para perguntar se deseja incluir na contagem diária)
   const handleRevertCheckout = (id: string) => {
     if (isReadOnly) {
       alert('Modo apenas leitura: você está no modo visitante e não pode reverter baixas.');
       return;
     }
-    setConfirmConfig({
-      title: 'Reverter Baixa de Estoque',
-      message: 'Deseja reverter a baixa deste produto e retornar a unidade para o estoque ativo?',
-      type: 'warning',
-      onConfirm: async () => {
-        try {
-          if (onRevertCheckoutUnit) {
-            await onRevertCheckoutUnit(id);
-          }
-          setActionSuccess('Baixa revertida com sucesso! O produto retornou ao estoque ativo.');
-          setTimeout(() => setActionSuccess(null), 3000);
-          handleCloseDetails();
-        } catch (err) {
-          console.error(err);
-          setActionError('Erro ao reverter baixa.');
-          setTimeout(() => setActionError(null), 3000);
-        }
-      }
+    const targetUnit = units.find(u => u.id === id);
+    if (!targetUnit) return;
+
+    setRevertCheckoutModalData({
+      unit: targetUnit,
+      includeInDailyCount: true // Padrão: incluir na contagem diária de hoje
     });
+  };
+
+  // Action: Confirmar Reversão de Baixa com opção de inclusão/exclusão da contagem diária
+  const handleConfirmRevertCheckout = async () => {
+    if (!revertCheckoutModalData) return;
+    const { unit, includeInDailyCount } = revertCheckoutModalData;
+    setIsRevertingCheckout(true);
+    try {
+      if (onRevertCheckoutUnit) {
+        await onRevertCheckoutUnit(unit.id, { includeInDailyCount });
+      }
+      const prodName = getResolvedUnitProductName(unit, products);
+      const msg = includeInDailyCount
+        ? `Baixa revertida! O produto "${prodName}" retornou ao estoque ativo e foi incluído na contagem diária de hoje.`
+        : `Baixa revertida! O produto "${prodName}" retornou ao estoque ativo (não contabilizado na contagem diária).`;
+      setActionSuccess(msg);
+      setTimeout(() => setActionSuccess(null), 4000);
+      setRevertCheckoutModalData(null);
+      handleCloseDetails();
+    } catch (err) {
+      console.error(err);
+      setActionError('Erro ao reverter baixa e retornar produto ao estoque.');
+      setTimeout(() => setActionError(null), 3000);
+    } finally {
+      setIsRevertingCheckout(false);
+    }
   };
 
   // Action: Move Sector (with custom confirmation, mandatory STI for Openbox, and photo strategy options for Principal)
@@ -2708,6 +2731,20 @@ export default function PhysicalStock({
                             <span>Editar</span>
                           </button>
                         )}
+                        {!isReadOnly && unit.status === 'Baixado' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRevertCheckout(unit.id);
+                            }}
+                            className="px-2 py-0.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 hover:text-amber-300 border border-amber-500/30 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                            title="Reverter baixa e retornar produto ao estoque ativo"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Retornar</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -3067,6 +3104,21 @@ export default function PhysicalStock({
                         >
                           <Pencil className="w-3.5 h-3.5" />
                           <span>Editar</span>
+                        </button>
+                      )}
+
+                      {!isReadOnly && unit.status === 'Baixado' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRevertCheckout(unit.id);
+                          }}
+                          className="px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 hover:text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                          title="Reverter a baixa e retornar ao estoque ativo"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Retornar ao Estoque</span>
                         </button>
                       )}
 
@@ -3556,6 +3608,220 @@ export default function PhysicalStock({
                 }`}
               >
                 Confirmar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal de Reversão de Baixa / Retorno ao Estoque com Opção de Contagem Diária */}
+      {revertCheckoutModalData && createPortal(
+        <div 
+          className="fixed inset-0 z-[120] bg-black/85 flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isRevertingCheckout) {
+              setRevertCheckoutModalData(null);
+            }
+          }}
+          id="modal-revert-checkout"
+        >
+          <div 
+            className={`w-full max-w-lg border rounded-2xl shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150 ${
+              isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className={`flex items-start justify-between gap-3 border-b pb-3.5 ${
+              isLight ? 'border-slate-200' : 'border-slate-800/80'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className={`text-base font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                    Retornar ao Estoque (Reverter Baixa)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Este item sairá do Histórico de Baixas e voltará a ficar ativo no estoque.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={isRevertingCheckout}
+                onClick={() => setRevertCheckoutModalData(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                title="Fechar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Product Summary Card */}
+            <div className={`p-3.5 rounded-xl border space-y-2 ${
+              isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/70 border-slate-800/80'
+            }`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                    {revertCheckoutModalData.unit.baseProductSku}
+                  </span>
+                  <h4 className={`text-sm font-bold mt-1 line-clamp-1 ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                    {getResolvedUnitProductName(revertCheckoutModalData.unit, products)}
+                  </h4>
+                </div>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${getSectorBadgeClass(revertCheckoutModalData.unit.destinationSector)}`}>
+                  Setor: {revertCheckoutModalData.unit.destinationSector}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                {revertCheckoutModalData.unit.orderNumber && (
+                  <div className="font-mono">
+                    <span className="text-slate-500 block text-[10px]">Nº Pedido:</span>
+                    <span className="font-semibold text-slate-300">#{revertCheckoutModalData.unit.orderNumber}</span>
+                  </div>
+                )}
+                {revertCheckoutModalData.unit.serialNumber && (
+                  <div className="font-mono">
+                    <span className="text-slate-500 block text-[10px]">Serial (S/N):</span>
+                    <span className="font-semibold text-slate-300">{revertCheckoutModalData.unit.serialNumber}</span>
+                  </div>
+                )}
+                {revertCheckoutModalData.unit.trackingCode && (
+                  <div className="font-mono">
+                    <span className="text-slate-500 block text-[10px]">STI / Rastreio:</span>
+                    <span className="font-semibold text-emerald-400">#{normalizeStiCode(revertCheckoutModalData.unit.trackingCode) || revertCheckoutModalData.unit.trackingCode}</span>
+                  </div>
+                )}
+                {revertCheckoutModalData.unit.platform && (
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">Plataforma:</span>
+                    <span className="font-semibold text-slate-300">{revertCheckoutModalData.unit.platform}</span>
+                  </div>
+                )}
+                {getDischargeDate(revertCheckoutModalData.unit) && (
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">Data da Baixa:</span>
+                    <span className="font-semibold text-rose-400">
+                      {formatDischargeDateTime(getDischargeDate(revertCheckoutModalData.unit))}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Core Question & Option Selector */}
+            <div className="space-y-2.5 pt-1">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                Opção de Contagem Diária:
+              </label>
+
+              <div className="space-y-2">
+                {/* Opção 1: Incluir na contagem diária */}
+                <div
+                  onClick={() => setRevertCheckoutModalData(prev => prev ? { ...prev, includeInDailyCount: true } : null)}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                    revertCheckoutModalData.includeInDailyCount
+                      ? 'bg-emerald-500/10 border-emerald-500/50 ring-1 ring-emerald-500/30'
+                      : isLight 
+                        ? 'bg-slate-50 border-slate-200 hover:border-slate-300' 
+                        : 'bg-slate-950/40 border-slate-800 hover:border-slate-700'
+                  }`}
+                  id="opt-include-daily-count"
+                >
+                  <input
+                    type="radio"
+                    name="revert-daily-count"
+                    checked={revertCheckoutModalData.includeInDailyCount === true}
+                    onChange={() => setRevertCheckoutModalData(prev => prev ? { ...prev, includeInDailyCount: true } : null)}
+                    className="mt-0.5 text-emerald-500 focus:ring-emerald-400 cursor-pointer"
+                  />
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <CalendarPlus className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span className={`text-xs font-bold ${revertCheckoutModalData.includeInDailyCount ? 'text-emerald-300' : (isLight ? 'text-slate-800' : 'text-slate-200')}`}>
+                        Sim, incluir na contagem diária de hoje
+                      </span>
+                      <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        Recomendado
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      O produto será computado no total de devoluções/entradas de hoje no Dashboard e nos relatórios de fluxo diário.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Opção 2: NÃO incluir na contagem diária */}
+                <div
+                  onClick={() => setRevertCheckoutModalData(prev => prev ? { ...prev, includeInDailyCount: false } : null)}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                    !revertCheckoutModalData.includeInDailyCount
+                      ? 'bg-amber-500/10 border-amber-500/50 ring-1 ring-amber-500/30'
+                      : isLight 
+                        ? 'bg-slate-50 border-slate-200 hover:border-slate-300' 
+                        : 'bg-slate-950/40 border-slate-800 hover:border-slate-700'
+                  }`}
+                  id="opt-exclude-daily-count"
+                >
+                  <input
+                    type="radio"
+                    name="revert-daily-count"
+                    checked={revertCheckoutModalData.includeInDailyCount === false}
+                    onChange={() => setRevertCheckoutModalData(prev => prev ? { ...prev, includeInDailyCount: false } : null)}
+                    className="mt-0.5 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                  />
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <CalendarX2 className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span className={`text-xs font-bold ${!revertCheckoutModalData.includeInDailyCount ? 'text-amber-300' : (isLight ? 'text-slate-800' : 'text-slate-200')}`}>
+                        Não, apenas retornar ao estoque ativo
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      O item fica disponível novamente no estoque físico, mas NÃO altera a contagem de devoluções de hoje.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className={`flex items-center justify-end gap-2.5 pt-3 border-t ${
+              isLight ? 'border-slate-200' : 'border-slate-800/80'
+            }`}>
+              <button
+                type="button"
+                disabled={isRevertingCheckout}
+                onClick={() => setRevertCheckoutModalData(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                disabled={isRevertingCheckout}
+                onClick={handleConfirmRevertCheckout}
+                className="px-4.5 py-2 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white rounded-xl text-xs font-black shadow-lg shadow-amber-600/20 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                id="btn-confirm-revert-checkout"
+              >
+                {isRevertingCheckout ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Processando retorno...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Confirmar Retorno ao Estoque</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

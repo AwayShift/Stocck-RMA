@@ -748,10 +748,17 @@ export default function App() {
     setTriageUnits(prev => prev.map(u => u.id === id ? (updated || { ...u, status: 'Baixado', checkoutDate: new Date().toISOString() }) : u));
   };
 
-  const handleRevertCheckoutTriage = async (id: string) => {
+  const handleRevertCheckoutTriage = async (id: string, options?: { includeInDailyCount?: boolean }) => {
     const target = triageUnits.find(u => u.id === id);
-    const updated = await revertCheckoutTriageUnit(id, target?.trackingCode);
-    setTriageUnits(prev => prev.map(u => u.id === id ? (updated || { ...u, status: 'Estoque', checkoutDate: undefined }) : u));
+    const updated = await revertCheckoutTriageUnit(id, target?.trackingCode, options);
+    const includeInDaily = options?.includeInDailyCount !== undefined ? Boolean(options.includeInDailyCount) : true;
+    setTriageUnits(prev => prev.map(u => u.id === id ? (updated || { 
+      ...u, 
+      status: 'Estoque', 
+      checkoutDate: undefined,
+      createdAt: includeInDaily ? new Date().toISOString() : u.createdAt,
+      excludeFromDailyCount: !includeInDaily
+    }) : u));
   };
 
   const handleGuestAccess = () => {
