@@ -41,7 +41,7 @@ import {
   getResolvedUnitProductName 
 } from '../utils/productImages';
 import { normalizeStiCode } from '../utils/stiFormatter';
-import { isUnitPendingSkuRegistration, isRealStockTransfer } from './PhysicalStock';
+import { isUnitPendingSkuRegistration, isRealStockTransfer, getFormattedLaudoHtml } from './PhysicalStock';
 
 export interface StockUnitDetailsModalProps {
   isOpen: boolean;
@@ -654,14 +654,29 @@ export function StockUnitDetailsModal({
               <FileText className="w-4 h-4 text-sky-400" />
               Laudo Técnico de Entrada (Triador)
             </h4>
-            {unit.notes ? (
-              <div 
-                className="p-5 bg-slate-950 border border-slate-800/60 rounded-xl text-sm text-slate-200 leading-relaxed max-h-64 overflow-y-auto prose prose-invert prose-sm"
-                dangerouslySetInnerHTML={{ __html: unit.notes }}
-              />
-            ) : (
-              <p className="p-5 text-xs text-slate-500 bg-slate-950 rounded-xl border border-slate-800/60 italic text-center">Sem laudo técnico descritivo fornecido.</p>
-            )}
+            {(() => {
+              const laudoData = getFormattedLaudoHtml(unit.notes);
+              if (!laudoData.hasContent) {
+                return (
+                  <p className={`p-5 text-xs rounded-xl border italic text-center ${
+                    isLight 
+                      ? 'bg-slate-50 border-slate-200 text-slate-500' 
+                      : 'bg-slate-950 border-slate-800/60 text-slate-500'
+                  }`}>Sem laudo técnico descritivo fornecido.</p>
+                );
+              }
+
+              return (
+                <div 
+                  className={`p-5 rounded-xl text-sm leading-relaxed max-h-72 overflow-y-auto border prose prose-sm ${
+                    isLight 
+                      ? 'bg-slate-50 border-slate-200 text-slate-800 prose-slate' 
+                      : 'bg-slate-950 border-slate-800/60 text-slate-200 prose-invert'
+                  }`}
+                  dangerouslySetInnerHTML={{ __html: laudoData.html }}
+                />
+              );
+            })()}
           </div>
 
           {/* Integrated Photo Gallery split by logical category */}

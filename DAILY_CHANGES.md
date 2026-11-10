@@ -5,17 +5,21 @@ Quando a data muda, a seção **Arquivos Alterados no Dia** é atualizada confor
 
 ---
 
-## 📅 Data Atual: 2026-11-04
-- **Total de arquivos alterados hoje:** 3 arquivos
+## 📅 Data Atual: 2026-11-10
+- **Total de arquivos alterados hoje:** 2 arquivos
 
 ### Lista de Arquivos Alterados Hoje:
-1. `src/lib/dbService.ts` - Suporte a opções includeInDailyCount ao reverter baixa de unidades no estoque
-2. `src/App.tsx` - Propagação da opção de inclusão na contagem diária na reversão de baixa
-3. `src/components/PhysicalStock.tsx` - Modal de confirmação com opção interativa para incluir ou não na contagem diária ao reverter baixa de um produto/pedido
+1. `src/components/PhysicalStock.tsx` - Renderização do laudo técnico com formatação rica preservada (negrito, itálico, quebras de linha e parágrafos) no card e na listagem geral do estoque
+2. `src/components/StockUnitDetailsModal.tsx` - Sanitização de tags internas do sistema e suporte a tema claro/escuro no laudo técnico do modal de detalhes
 
 ---
 
 ## 🗄️ Histórico de Alterações por Data
+
+### 📅 2026-11-04
+- `src/lib/dbService.ts`
+- `src/App.tsx`
+- `src/components/PhysicalStock.tsx`
 
 ### 📅 2026-10-26
 - `src/components/PendingItems.tsx`

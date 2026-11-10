@@ -1,17 +1,13 @@
 {
-  "currentDate": "2026-11-04",
+  "currentDate": "2026-11-10",
   "todayFiles": [
     {
-      "file": "src/lib/dbService.ts",
-      "summary": "Suporte a opções includeInDailyCount ao reverter baixa de unidades no estoque"
-    },
-    {
-      "file": "src/App.tsx",
-      "summary": "Propagação da opção de inclusão na contagem diária na reversão de baixa"
-    },
-    {
       "file": "src/components/PhysicalStock.tsx",
-      "summary": "Modal de confirmação com opção interativa para incluir ou não na contagem diária ao reverter baixa de um produto/pedido"
+      "summary": "Renderização do laudo técnico com formatação rica preservada (negrito, itálico, quebras de linha e parágrafos) no card e na listagem geral do estoque"
+    },
+    {
+      "file": "src/components/StockUnitDetailsModal.tsx",
+      "summary": "Sanitização de tags internas do sistema e suporte a tema claro/escuro no laudo técnico do modal de detalhes"
     }
   ],
   "history": {
@@ -43,6 +39,11 @@
     "2026-10-26": [
       "src/components/PendingItems.tsx",
       "src/components/StockUnitEditModal.tsx",
+      "src/components/PhysicalStock.tsx"
+    ],
+    "2026-11-04": [
+      "src/lib/dbService.ts",
+      "src/App.tsx",
       "src/components/PhysicalStock.tsx"
     ]
   }

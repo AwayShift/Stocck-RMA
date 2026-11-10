@@ -132,6 +132,35 @@ const stripHtml = (html?: string): string => {
     .trim();
 };
 
+export const getFormattedLaudoHtml = (rawNotes?: string): { html: string; hasContent: boolean; plainText: string } => {
+  if (!rawNotes) return { html: '', hasContent: false, plainText: '' };
+
+  // Remove internal metadata tags
+  let clean = rawNotes
+    .replace(/\[[A-Z_]+:.*?\]/g, '')
+    .replace(/\[EXCLUDE_DAILY_COUNT\]/g, '')
+    .trim();
+
+  const plainText = stripHtml(clean);
+  if (!plainText) {
+    return { html: '', hasContent: false, plainText: '' };
+  }
+
+  // If clean does not contain HTML tags, wrap lines into paragraphs to preserve line breaks
+  const hasHtmlTags = /<[a-z][\s\S]*>/i.test(clean);
+  let html = clean;
+  if (!hasHtmlTags) {
+    html = clean
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => `<p>${line}</p>`)
+      .join('');
+  }
+
+  return { html, hasContent: true, plainText };
+};
+
 export const isRealStockTransfer = (originSector?: string): boolean => {
   if (!originSector) return false;
   const s = originSector.trim().toLowerCase();
@@ -2600,15 +2629,33 @@ export default function PhysicalStock({
                         <span className="font-medium text-slate-400">Motivo:</span> {unit.customerReason}
                       </p>
 
-                      {/* Laudo do Produto para itens do estoque Openbox */}
-                      {(activeTab === 'Openbox' || unit.destinationSector === 'Openbox') && (
-                        <div className="mt-1.5 mb-2">
-                          <p className="text-xs text-slate-300 line-clamp-4 leading-relaxed" title={stripHtml(unit.notes) || undefined}>
-                            <span className="text-amber-400 font-bold">Laudo:</span>{' '}
-                            {stripHtml(unit.notes) || <span className="text-slate-500 italic">Sem laudo informado</span>}
-                          </p>
-                        </div>
-                      )}
+                      {/* Laudo do Produto com formatação rica preservada (negrito, itálico, quebras de linha e parágrafos) */}
+                      {(activeTab === 'Openbox' || unit.destinationSector === 'Openbox' || Boolean(unit.notes && stripHtml(unit.notes).trim())) && (() => {
+                        const laudoData = getFormattedLaudoHtml(unit.notes);
+                        if (!laudoData.hasContent && activeTab !== 'Openbox' && unit.destinationSector !== 'Openbox') {
+                          return null;
+                        }
+
+                        return (
+                          <div className="mt-1.5 mb-2">
+                            <div className="text-xs leading-relaxed" title={laudoData.plainText || undefined}>
+                              <span className="text-amber-400 font-bold inline-block mr-1">Laudo:</span>{' '}
+                              {laudoData.hasContent ? (
+                                <div 
+                                  className={`stock-card-laudo-content inline text-xs leading-relaxed max-h-48 overflow-y-auto pr-1 ${
+                                    isLight 
+                                      ? 'text-slate-700 [&_strong]:text-slate-950 [&_strong]:font-bold [&_b]:text-slate-950 [&_b]:font-bold [&_em]:italic [&_em]:text-slate-900 [&_i]:italic [&_i]:text-slate-900 [&_u]:underline [&_p]:my-1 [&_p:first-child]:inline [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4' 
+                                      : 'text-slate-300 [&_strong]:text-white [&_strong]:font-bold [&_b]:text-white [&_b]:font-bold [&_em]:italic [&_em]:text-slate-200 [&_i]:italic [&_i]:text-slate-200 [&_u]:underline [&_p]:my-1 [&_p:first-child]:inline [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4'
+                                  }`}
+                                  dangerouslySetInnerHTML={{ __html: laudoData.html }}
+                                />
+                              ) : (
+                                <span className="text-slate-500 italic">Sem laudo informado</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Brand, Category, Voltage attributes */}
                       {(() => {
@@ -3007,13 +3054,31 @@ export default function PhysicalStock({
                           Motivo: {unit.customerReason}
                         </p>
 
-                        {(activeTab === 'Openbox' || unit.destinationSector === 'Openbox') && (
-                          <p className="text-xs text-slate-300 line-clamp-1 flex items-center gap-1" title={stripHtml(unit.notes) || undefined}>
-                            <span className="text-slate-600">•</span>
-                            <span className="text-amber-400 font-semibold">Laudo:</span>{' '}
-                            <span>{stripHtml(unit.notes) || <span className="text-slate-500 italic">Sem laudo</span>}</span>
-                          </p>
-                        )}
+                        {(activeTab === 'Openbox' || unit.destinationSector === 'Openbox' || Boolean(unit.notes && stripHtml(unit.notes).trim())) && (() => {
+                          const laudoData = getFormattedLaudoHtml(unit.notes);
+                          if (!laudoData.hasContent && activeTab !== 'Openbox' && unit.destinationSector !== 'Openbox') {
+                            return null;
+                          }
+
+                          return (
+                            <div className="text-xs flex items-center gap-1 max-w-xl" title={laudoData.plainText || undefined}>
+                              <span className="text-slate-600">•</span>
+                              <span className="text-amber-400 font-semibold shrink-0">Laudo:</span>{' '}
+                              {laudoData.hasContent ? (
+                                <div 
+                                  className={`inline text-xs truncate [&_p]:inline [&_p]:mr-1.5 [&_strong]:font-bold [&_b]:font-bold [&_em]:italic [&_i]:italic ${
+                                    isLight 
+                                      ? 'text-slate-700 [&_strong]:text-slate-900 [&_b]:text-slate-900' 
+                                      : 'text-slate-300 [&_strong]:text-white [&_b]:text-white'
+                                  }`}
+                                  dangerouslySetInnerHTML={{ __html: laudoData.html }}
+                                />
+                              ) : (
+                                <span className="text-slate-500 italic">Sem laudo</span>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {(() => {
                           const baseProd = findBaseProduct(unit, products);
