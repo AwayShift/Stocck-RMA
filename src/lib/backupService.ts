@@ -38,6 +38,12 @@ import {
   mapPendingItemToSupabase,
   mapSupabaseToPendingItem
 } from './supabase';
+import {
+  getCachedBaseProducts,
+  getCachedTriageUnits,
+  getCachedDailyInflows,
+  getCachedPendingItems
+} from './syncCacheService';
 import { getCurrentActiveAuthUser } from './supabaseAuth';
 
 const BACKUP_SCHEMA_VERSION = '1.2.0';
@@ -182,9 +188,32 @@ export const fetchCurrentDatabasePayload = async (userInfo?: {
       supabase.from('pending_items').select('*').limit(5000)
     ]);
 
-    if (pRes.data) products = pRes.data.map(mapSupabaseToProduct);
-    if (uRes.data) triageUnits = uRes.data.map(mapSupabaseToTriageUnit);
-    if (iRes.data) dailyInflows = iRes.data.map(mapSupabaseToDailyInflow);
+    const cachedProds = getCachedBaseProducts();
+    const cachedUnits = getCachedTriageUnits();
+    const cachedInflows = getCachedDailyInflows();
+    const cachedPending = getCachedPendingItems();
+
+    if (pRes.data) {
+      const serverProds = pRes.data.map(mapSupabaseToProduct);
+      products = serverProds.length >= cachedProds.length ? serverProds : cachedProds;
+    } else if (cachedProds.length > 0) {
+      products = cachedProds;
+    }
+
+    if (uRes.data) {
+      const serverUnits = uRes.data.map(mapSupabaseToTriageUnit);
+      triageUnits = serverUnits.length >= cachedUnits.length ? serverUnits : cachedUnits;
+    } else if (cachedUnits.length > 0) {
+      triageUnits = cachedUnits;
+    }
+
+    if (iRes.data) {
+      const serverInflows = iRes.data.map(mapSupabaseToDailyInflow);
+      dailyInflows = serverInflows.length >= cachedInflows.length ? serverInflows : cachedInflows;
+    } else if (cachedInflows.length > 0) {
+      dailyInflows = cachedInflows;
+    }
+
     if (cRes.data) {
       cases = cRes.data.map(r => ({
         id: r.id,
@@ -209,7 +238,10 @@ export const fetchCurrentDatabasePayload = async (userInfo?: {
       }));
     }
     if (pendRes.data) {
-      pendingItems = pendRes.data.map(mapSupabaseToPendingItem);
+      const serverPending = pendRes.data.map(mapSupabaseToPendingItem);
+      pendingItems = serverPending.length >= cachedPending.length ? serverPending : cachedPending;
+    } else if (cachedPending.length > 0) {
+      pendingItems = cachedPending;
     }
   }
 

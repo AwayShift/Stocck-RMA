@@ -1342,45 +1342,20 @@ export const fetchStockMetricsRPC = async (): Promise<StockMetricsSummary | null
 // BASE CRUD & PAGINATED ACTIONS
 
 export const getInitialBaseProducts = async (pageSize: number = 2500): Promise<PaginatedResult<BaseProduct>> => {
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      let { data, error } = await supabase
-        .from('products')
-        .select(PRODUCT_COLUMNS)
-        .order('created_at', { ascending: false })
-        .limit(pageSize);
-
-      if (error) {
-        console.warn('Column projection failed for products, falling back to select(*):', error);
-        const fallback = await supabase
-          .from('products')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(pageSize);
-        data = fallback.data;
-        error = fallback.error;
-      }
-
-      if (!error && data) {
-        const list = data.map(mapSupabaseToProduct);
-        updateWholeCollectionCache('products', list);
-        return {
-          data: list,
-          lastDoc: null,
-          hasMore: data.length === pageSize
-        };
-      }
-    } catch (e) {
-      console.warn('Error fetching initial base products from Supabase, using cache:', e);
-    }
+  const cached = getCachedBaseProducts();
+  if (cached.length > 0) {
+    return {
+      data: cached.slice(0, pageSize),
+      lastDoc: null,
+      hasMore: cached.length > pageSize
+    };
   }
 
-  const cached = getCachedBaseProducts();
+  const products = await syncBaseProductsIncrementally(true);
   return {
-    data: cached.slice(0, pageSize),
+    data: products.slice(0, pageSize),
     lastDoc: null,
-    hasMore: cached.length > pageSize
+    hasMore: products.length > pageSize
   };
 };
 
@@ -1433,58 +1408,20 @@ export const getPaginatedBaseProducts = async (page: number = 1, pageSize: numbe
 };
 
 export const getInitialTriageUnits = async (pageSize: number = 2500): Promise<PaginatedResult<TriageUnit>> => {
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      let { data, error } = await supabase
-        .from('triage_units')
-        .select(getTriageColumns())
-        .order('created_at', { ascending: false })
-        .limit(pageSize);
-
-      if (error) {
-        if (error.message?.includes('exclude_from_daily_count') || error.code === '42703') {
-          setHasExcludeDailyCol(false);
-        }
-        console.warn('Column projection failed for triage_units, falling back to safe columns / select(*):', error);
-        const fallback = await supabase
-          .from('triage_units')
-          .select(getTriageColumns())
-          .order('created_at', { ascending: false })
-          .limit(pageSize);
-        if (!fallback.error && fallback.data) {
-          data = fallback.data;
-          error = null;
-        } else {
-          const starFallback = await supabase
-            .from('triage_units')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(pageSize);
-          data = starFallback.data;
-          error = starFallback.error;
-        }
-      }
-
-      if (!error && data) {
-        const list = data.map(mapSupabaseToTriageUnit);
-        updateWholeCollectionCache('triage_units', list);
-        return {
-          data: list,
-          lastDoc: null,
-          hasMore: data.length === pageSize
-        };
-      }
-    } catch (e) {
-      console.warn('Error fetching initial triage units from Supabase, using cache:', e);
-    }
+  const cached = getCachedTriageUnits();
+  if (cached.length > 0) {
+    return {
+      data: cached.slice(0, pageSize),
+      lastDoc: null,
+      hasMore: cached.length > pageSize
+    };
   }
 
-  const cached = getCachedTriageUnits();
+  const units = await syncTriageUnitsIncrementally(true);
   return {
-    data: cached.slice(0, pageSize),
+    data: units.slice(0, pageSize),
     lastDoc: null,
-    hasMore: cached.length > pageSize
+    hasMore: units.length > pageSize
   };
 };
 

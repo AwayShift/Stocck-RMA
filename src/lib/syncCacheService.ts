@@ -278,6 +278,85 @@ const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, order_number, base_pro
 const INFLOW_COLUMNS = 'id, date, rma, estoque, openbox, es, total_dia, notes, source, created_at, updated_at';
 const PENDING_COLUMNS = 'id, registration_number, sku, product_name, voltage, serial_number, tracking_code, order_number, platform, pending_reason, detailed_notes, photos, destination_sector_suggested, status, priority, created_by, transferred_to_stock, transferred_unit_id, created_at, updated_at, resolved_at';
 
+/**
+ * Safely fetches ALL records from a Supabase table in paginated chunks of 1,000 items (.range(from, to)),
+ * preventing PostgREST server-side 1,000-row default ceiling from truncating records and causing data loss.
+ */
+async function fetchAllTableRowsChunked(
+  supabase: any,
+  tableName: string,
+  primaryColumns: string,
+  orderBy: string = 'created_at',
+  options: {
+    ascending?: boolean;
+    fallbackColumns?: string;
+    onColumnError?: (err: any) => void;
+    maxTotal?: number;
+  } = {}
+): Promise<any[]> {
+  const ascending = options.ascending ?? false;
+  const CHUNK_SIZE = 1000;
+  const maxTotal = options.maxTotal ?? 150000;
+  let from = 0;
+  let allRows: any[] = [];
+  let keepFetching = true;
+  let activeColumns = primaryColumns;
+
+  while (keepFetching && allRows.length < maxTotal) {
+    const to = from + CHUNK_SIZE - 1;
+    let { data, error } = await supabase
+      .from(tableName)
+      .select(activeColumns)
+      .order(orderBy, { ascending })
+      .range(from, to);
+
+    if (error) {
+      if (options.onColumnError) {
+        options.onColumnError(error);
+      }
+      if (options.fallbackColumns && activeColumns !== options.fallbackColumns) {
+        console.warn(`Fallback projection for ${tableName} (${from}-${to}):`, error.message);
+        activeColumns = options.fallbackColumns;
+        const retry = await supabase
+          .from(tableName)
+          .select(activeColumns)
+          .order(orderBy, { ascending })
+          .range(from, to);
+        data = retry.data;
+        error = retry.error;
+      } else {
+        console.warn(`Fallback select(*) for ${tableName} (${from}-${to}):`, error.message);
+        activeColumns = '*';
+        const starRetry = await supabase
+          .from(tableName)
+          .select('*')
+          .order(orderBy, { ascending })
+          .range(from, to);
+        data = starRetry.data;
+        error = starRetry.error;
+      }
+    }
+
+    if (error) {
+      console.error(`Error fetching chunk ${from}-${to} for ${tableName}:`, error);
+      break;
+    }
+
+    if (data && Array.isArray(data) && data.length > 0) {
+      allRows.push(...data);
+      if (data.length < CHUNK_SIZE) {
+        keepFetching = false;
+      } else {
+        from += CHUNK_SIZE;
+      }
+    } else {
+      keepFetching = false;
+    }
+  }
+
+  return allRows;
+}
+
 // ============================================================================
 // 1. BASE PRODUCTS INCREMENTAL SYNC
 // ============================================================================
@@ -302,37 +381,42 @@ export const syncBaseProductsIncrementally = async (
   const lastSync = syncMeta.lastSyncProducts;
   const queryStartTime = new Date().toISOString();
 
-  // If no cache or forced full sync, perform initial bulk fetch
+  // If no cache or forced full sync, perform paginated bulk fetch across ALL pages
   if (forceFull || currentCached.length === 0 || !lastSync) {
-    let { data, error } = await supabase
-      .from('products')
-      .select(PRODUCT_COLUMNS)
-      .order('created_at', { ascending: false });
+    const rows = await fetchAllTableRowsChunked(
+      supabase,
+      'products',
+      PRODUCT_COLUMNS,
+      'created_at',
+      { ascending: false }
+    );
 
-    if (error) {
-      console.warn('Fallback: products select with columns failed, trying select(*):', error);
-      const fallback = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-      data = fallback.data;
-      error = fallback.error;
-    }
-
-    if (error) {
-      console.error('Error fetching full products:', error);
+    if (rows.length === 0 && currentCached.length > 0) {
+      console.warn('Full sync returned 0 products while cache has', currentCached.length, 'products. Retaining cache to prevent data loss.');
       return currentCached;
     }
 
-    if (data) {
-      const mapped = data.map(mapSupabaseToProduct);
-      memoryProducts = mapped;
-      persistToStorage(CACHE_KEY_PRODUCTS, mapped);
-      syncMeta.lastSyncProducts = queryStartTime;
-      saveMetadata();
-      return mapped;
-    }
-    return currentCached;
+    const mapped = rows.map(mapSupabaseToProduct);
+    const serverIds = new Set(mapped.map(p => p.id));
+    const now = Date.now();
+    // Preserve any recent local creations (last 2 minutes) not yet seen in full query
+    const recentLocalUnsaved = currentCached.filter(p => {
+      if (!p || !p.id || serverIds.has(p.id)) return false;
+      const createdAtMs = new Date(p.createdAt || 0).getTime();
+      return (now - createdAtMs) < 120000;
+    });
+
+    const finalProducts = [...mapped, ...recentLocalUnsaved].sort((a, b) => {
+      const tA = new Date(a.createdAt || 0).getTime() || 0;
+      const tB = new Date(b.createdAt || 0).getTime() || 0;
+      return tB - tA;
+    });
+
+    memoryProducts = finalProducts;
+    persistToStorage(CACHE_KEY_PRODUCTS, finalProducts);
+    syncMeta.lastSyncProducts = queryStartTime;
+    saveMetadata();
+    return finalProducts;
   }
 
   // Incremental fetch with safety window against clock drift and in-flight updates
@@ -435,47 +519,49 @@ export const syncTriageUnitsIncrementally = async (
   const queryStartTime = new Date().toISOString();
 
   if (forceFull || currentCached.length === 0 || !lastSync) {
-    let { data, error } = await supabase
-      .from('triage_units')
-      .select(getTriageColumns())
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      if (error.message?.includes('exclude_from_daily_count') || error.code === '42703') {
-        setHasExcludeDailyCol(false);
+    const rows = await fetchAllTableRowsChunked(
+      supabase,
+      'triage_units',
+      getTriageColumns(),
+      'created_at',
+      {
+        ascending: false,
+        fallbackColumns: getTriageColumns(),
+        onColumnError: (err) => {
+          if (err.message?.includes('exclude_from_daily_count') || err.code === '42703') {
+            setHasExcludeDailyCol(false);
+          }
+        }
       }
-      console.warn('Fallback: triage_units select with columns failed, trying safe columns / select(*):', error);
-      const safeFallback = await supabase
-        .from('triage_units')
-        .select(getTriageColumns())
-        .order('created_at', { ascending: false });
-      if (!safeFallback.error && safeFallback.data) {
-        data = safeFallback.data;
-        error = null;
-      } else {
-        const starFallback = await supabase
-          .from('triage_units')
-          .select('*')
-          .order('created_at', { ascending: false });
-        data = starFallback.data;
-        error = starFallback.error;
-      }
-    }
+    );
 
-    if (error) {
-      console.error('Error fetching full triage units:', error);
+    if (rows.length === 0 && currentCached.length > 0) {
+      console.warn('Full sync returned 0 triage units while cache has', currentCached.length, 'units. Retaining cache to prevent data loss.');
       return currentCached;
     }
 
-    if (data) {
-      const mapped = data.map(mapSupabaseToTriageUnit);
-      memoryTriageUnits = mapped;
-      persistToStorage(CACHE_KEY_TRIAGE_UNITS, mapped);
-      syncMeta.lastSyncTriageUnits = queryStartTime;
-      saveMetadata();
-      return mapped;
-    }
-    return currentCached;
+    const mapped = rows.map(mapSupabaseToTriageUnit);
+
+    // Safety: merge any very recent local-only triage units (last 2 minutes) not yet seen in full query
+    const serverIds = new Set(mapped.map(u => u.id));
+    const now = Date.now();
+    const recentLocalUnsaved = currentCached.filter(u => {
+      if (!u || !u.id || serverIds.has(u.id)) return false;
+      const createdAtMs = new Date(u.createdAt || 0).getTime();
+      return (now - createdAtMs) < 120000;
+    });
+
+    const finalUnits = [...mapped, ...recentLocalUnsaved].sort((a, b) => {
+      const tA = new Date(a.createdAt || 0).getTime() || 0;
+      const tB = new Date(b.createdAt || 0).getTime() || 0;
+      return tB - tA;
+    });
+
+    memoryTriageUnits = finalUnits;
+    persistToStorage(CACHE_KEY_TRIAGE_UNITS, finalUnits);
+    syncMeta.lastSyncTriageUnits = queryStartTime;
+    saveMetadata();
+    return finalUnits;
   }
 
   // Incremental fetch with safety buffer against clock drift & concurrent updates
@@ -581,35 +667,24 @@ export const syncDailyInflowsIncrementally = async (
   const queryStartTime = new Date().toISOString();
 
   if (forceFull || currentCached.length === 0 || !lastSync) {
-    let { data, error } = await supabase
-      .from('daily_inflows')
-      .select(INFLOW_COLUMNS)
-      .order('date', { ascending: true });
+    const rows = await fetchAllTableRowsChunked(
+      supabase,
+      'daily_inflows',
+      INFLOW_COLUMNS,
+      'date',
+      { ascending: true }
+    );
 
-    if (error) {
-      console.warn('Initial daily inflows projection failed, trying select(*):', error);
-      const fallback = await supabase
-        .from('daily_inflows')
-        .select('*')
-        .order('date', { ascending: true });
-      data = fallback.data;
-      error = fallback.error;
-    }
-
-    if (error) {
-      console.error('Error fetching full daily inflows:', error);
+    if (rows.length === 0 && currentCached.length > 0) {
       return currentCached;
     }
 
-    if (data) {
-      const mapped = data.map(mapSupabaseToDailyInflow);
-      memoryDailyInflows = mapped;
-      persistToStorage(CACHE_KEY_DAILY_INFLOWS, mapped);
-      syncMeta.lastSyncDailyInflows = queryStartTime;
-      saveMetadata();
-      return mapped;
-    }
-    return currentCached;
+    const mapped = rows.map(mapSupabaseToDailyInflow);
+    memoryDailyInflows = mapped;
+    persistToStorage(CACHE_KEY_DAILY_INFLOWS, mapped);
+    syncMeta.lastSyncDailyInflows = queryStartTime;
+    saveMetadata();
+    return mapped;
   }
 
   try {
@@ -704,31 +779,50 @@ export const syncPendingItemsIncrementally = async (
   const queryStartTime = new Date().toISOString();
 
   try {
-    let { data, error } = await supabase
-      .from('pending_items')
-      .select(getPendingColumns())
-      .order('created_at', { ascending: false })
-      .limit(500);
+    let data: any[] | null = null;
+    let error: any = null;
 
-    if (error) {
-      setHasPendingExtendedCols(false);
-      console.warn('Fallback: pending_items select with columns failed, trying safe columns / select(*):', error);
-      const safeFallback = await supabase
+    if (forceFull) {
+      data = await fetchAllTableRowsChunked(
+        supabase,
+        'pending_items',
+        getPendingColumns(),
+        'created_at',
+        {
+          ascending: false,
+          fallbackColumns: getPendingColumns(),
+          onColumnError: () => setHasPendingExtendedCols(false)
+        }
+      );
+    } else {
+      const res = await supabase
         .from('pending_items')
         .select(getPendingColumns())
         .order('created_at', { ascending: false })
         .limit(500);
-      if (!safeFallback.error && safeFallback.data) {
-        data = safeFallback.data;
-        error = null;
-      } else {
-        const starFallback = await supabase
+      data = res.data;
+      error = res.error;
+
+      if (error) {
+        setHasPendingExtendedCols(false);
+        console.warn('Fallback: pending_items select with columns failed, trying safe columns / select(*):', error);
+        const safeFallback = await supabase
           .from('pending_items')
-          .select('*')
+          .select(getPendingColumns())
           .order('created_at', { ascending: false })
           .limit(500);
-        data = starFallback.data;
-        error = starFallback.error;
+        if (!safeFallback.error && safeFallback.data) {
+          data = safeFallback.data;
+          error = null;
+        } else {
+          const starFallback = await supabase
+            .from('pending_items')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(500);
+          data = starFallback.data;
+          error = starFallback.error;
+        }
       }
     }
 

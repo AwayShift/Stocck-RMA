@@ -15,7 +15,7 @@
     },
     {
       "file": "src/lib/syncCacheService.ts",
-      "summary": "src/App.tsx"
+      "summary": "src/lib/dbService.ts"
     }
   ],
   "history": {
