@@ -27,7 +27,8 @@ import {
   ArrowRight, 
   Trash2, 
   RotateCcw, 
-  Pencil 
+  Pencil,
+  Star
 } from 'lucide-react';
 import { 
   TriageUnit, 
@@ -718,19 +719,28 @@ export function StockUnitDetailsModal({
                     </span>
                     {resolved.photosProduct.length > 0 ? (
                       <div className="grid grid-cols-2 gap-2">
-                        {resolved.photosProduct.map((p, i) => (
-                          <div 
-                            key={i} 
-                            onClick={() => onOpenImageZoom && onOpenImageZoom(p, `Fotos do Aparelho - ${unit.baseProductName}`, resolved.photosProduct, i)}
-                            className="w-full aspect-video rounded-lg overflow-hidden border border-slate-700 hover:border-sky-500 cursor-pointer relative group transition-colors photo-container-clean !bg-white flex items-center justify-center p-1 shadow-sm"
-                            style={{ backgroundColor: '#ffffff' }}
-                          >
-                            <img src={p} className="w-full h-full object-contain" alt={`Aparelho ${i + 1}`} />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-lg">
-                              <Eye className="w-4 h-4" />
+                        {resolved.photosProduct.map((p, i) => {
+                          const isMain = p === resolved.mainPhoto;
+                          return (
+                            <div 
+                              key={i} 
+                              onClick={() => onOpenImageZoom && onOpenImageZoom(p, `Fotos do Aparelho - ${unit.baseProductName}`, resolved.photosProduct, i)}
+                              className={`w-full aspect-video rounded-lg overflow-hidden border ${isMain ? 'border-amber-400 ring-2 ring-amber-400/50' : 'border-slate-700 hover:border-sky-500'} cursor-pointer relative group transition-colors photo-container-clean !bg-white flex items-center justify-center p-1 shadow-sm`}
+                              style={{ backgroundColor: '#ffffff' }}
+                            >
+                              <img src={p} className="w-full h-full object-contain" alt={`Aparelho ${i + 1}`} />
+                              {isMain && (
+                                <div className="absolute top-1 left-1 flex items-center gap-1 bg-amber-500 text-slate-950 font-bold text-[8px] px-1.5 py-0.5 rounded shadow z-10 pointer-events-none">
+                                  <Star className="w-2.5 h-2.5 fill-slate-950 text-slate-950" />
+                                  <span>Card</span>
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-lg">
+                                <Eye className="w-4 h-4" />
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-xs text-slate-500 italic py-4 text-center">Nenhuma foto do aparelho.</p>
@@ -744,19 +754,28 @@ export function StockUnitDetailsModal({
                     </span>
                     {resolved.photosBox.length > 0 ? (
                       <div className="grid grid-cols-2 gap-2">
-                        {resolved.photosBox.map((p, i) => (
-                          <div 
-                            key={i} 
-                            onClick={() => onOpenImageZoom && onOpenImageZoom(p, `Fotos da Embalagem - ${unit.baseProductName}`, resolved.photosBox, i)}
-                            className="w-full aspect-video rounded-lg overflow-hidden border border-slate-700 hover:border-sky-500 cursor-pointer relative group transition-colors photo-container-clean !bg-white flex items-center justify-center p-1 shadow-sm"
-                            style={{ backgroundColor: '#ffffff' }}
-                          >
-                            <img src={p} className="w-full h-full object-contain" alt={`Embalagem ${i + 1}`} />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-lg">
-                              <Eye className="w-4 h-4" />
+                        {resolved.photosBox.map((p, i) => {
+                          const isMain = p === resolved.mainPhoto;
+                          return (
+                            <div 
+                              key={i} 
+                              onClick={() => onOpenImageZoom && onOpenImageZoom(p, `Fotos da Embalagem - ${unit.baseProductName}`, resolved.photosBox, i)}
+                              className={`w-full aspect-video rounded-lg overflow-hidden border ${isMain ? 'border-amber-400 ring-2 ring-amber-400/50' : 'border-slate-700 hover:border-sky-500'} cursor-pointer relative group transition-colors photo-container-clean !bg-white flex items-center justify-center p-1 shadow-sm`}
+                              style={{ backgroundColor: '#ffffff' }}
+                            >
+                              <img src={p} className="w-full h-full object-contain" alt={`Embalagem ${i + 1}`} />
+                              {isMain && (
+                                <div className="absolute top-1 left-1 flex items-center gap-1 bg-amber-500 text-slate-950 font-bold text-[8px] px-1.5 py-0.5 rounded shadow z-10 pointer-events-none">
+                                  <Star className="w-2.5 h-2.5 fill-slate-950 text-slate-950" />
+                                  <span>Card</span>
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-lg">
+                                <Eye className="w-4 h-4" />
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-xs text-slate-500 italic py-4 text-center">Nenhuma foto da caixa.</p>
@@ -770,19 +789,28 @@ export function StockUnitDetailsModal({
                     </span>
                     {resolved.photosAccessories.length > 0 ? (
                       <div className="grid grid-cols-2 gap-2">
-                        {resolved.photosAccessories.map((p, i) => (
-                          <div 
-                            key={i} 
-                            onClick={() => onOpenImageZoom && onOpenImageZoom(p, `Fotos dos Acessórios - ${unit.baseProductName}`, resolved.photosAccessories, i)}
-                            className="w-full aspect-video rounded-lg overflow-hidden border border-slate-700 hover:border-sky-500 cursor-pointer relative group transition-colors photo-container-clean !bg-white flex items-center justify-center p-1 shadow-sm"
-                            style={{ backgroundColor: '#ffffff' }}
-                          >
-                            <img src={p} className="w-full h-full object-contain" alt={`Acessório ${i + 1}`} />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-lg">
-                              <Eye className="w-4 h-4" />
+                        {resolved.photosAccessories.map((p, i) => {
+                          const isMain = p === resolved.mainPhoto;
+                          return (
+                            <div 
+                              key={i} 
+                              onClick={() => onOpenImageZoom && onOpenImageZoom(p, `Fotos dos Acessórios - ${unit.baseProductName}`, resolved.photosAccessories, i)}
+                              className={`w-full aspect-video rounded-lg overflow-hidden border ${isMain ? 'border-amber-400 ring-2 ring-amber-400/50' : 'border-slate-700 hover:border-sky-500'} cursor-pointer relative group transition-colors photo-container-clean !bg-white flex items-center justify-center p-1 shadow-sm`}
+                              style={{ backgroundColor: '#ffffff' }}
+                            >
+                              <img src={p} className="w-full h-full object-contain" alt={`Acessório ${i + 1}`} />
+                              {isMain && (
+                                <div className="absolute top-1 left-1 flex items-center gap-1 bg-amber-500 text-slate-950 font-bold text-[8px] px-1.5 py-0.5 rounded shadow z-10 pointer-events-none">
+                                  <Star className="w-2.5 h-2.5 fill-slate-950 text-slate-950" />
+                                  <span>Card</span>
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-lg">
+                                <Eye className="w-4 h-4" />
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-xs text-slate-500 italic py-4 text-center">Nenhuma foto de acessórios.</p>

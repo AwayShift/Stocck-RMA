@@ -8,6 +8,14 @@
     {
       "file": "src/components/StockUnitDetailsModal.tsx",
       "summary": "Sanitização de tags internas do sistema e suporte a tema claro/escuro no laudo técnico do modal de detalhes"
+    },
+    {
+      "file": "src/components/StockUnitEditModal.tsx",
+      "summary": "Arquivo alterado"
+    },
+    {
+      "file": "src/lib/syncCacheService.ts",
+      "summary": "src/App.tsx"
     }
   ],
   "history": {

@@ -26,7 +26,8 @@ import {
   ShieldCheck, 
   Layers, 
   Pencil,
-  Sparkles
+  Sparkles,
+  Star
 } from 'lucide-react';
 import { 
   TriageUnit, 
@@ -616,6 +617,45 @@ export function StockUnitEditModal({
       ...editForm,
       [category]: updated
     });
+  };
+
+  const handleSetCoverPhoto = (category: 'photosProduct' | 'photosBox' | 'photosAccessories', index: number) => {
+    if (!editForm) return;
+    if (category === 'photosProduct') {
+      const existing = [...(editForm.photosProduct || [])];
+      if (index === 0 || index >= existing.length) return;
+      const [selected] = existing.splice(index, 1);
+      if (selected) {
+        setEditForm({
+          ...editForm,
+          photosProduct: [selected, ...existing]
+        });
+      }
+    } else if (category === 'photosBox') {
+      const boxExisting = [...(editForm.photosBox || [])];
+      if (index >= boxExisting.length) return;
+      const [selected] = boxExisting.splice(index, 1);
+      if (selected) {
+        const prodExisting = [...(editForm.photosProduct || [])];
+        setEditForm({
+          ...editForm,
+          photosProduct: [selected, ...prodExisting],
+          photosBox: boxExisting
+        });
+      }
+    } else if (category === 'photosAccessories') {
+      const accExisting = [...(editForm.photosAccessories || [])];
+      if (index >= accExisting.length) return;
+      const [selected] = accExisting.splice(index, 1);
+      if (selected) {
+        const prodExisting = [...(editForm.photosProduct || [])];
+        setEditForm({
+          ...editForm,
+          photosProduct: [selected, ...prodExisting],
+          photosAccessories: accExisting
+        });
+      }
+    }
   };
 
   const handleSave = async () => {
@@ -1952,6 +1992,12 @@ export function StockUnitEditModal({
               </div>
             </div>
 
+            {/* Dica discreta de Foto do Card */}
+            <div className="flex items-center gap-1.5 px-1 text-[11px] text-slate-400">
+              <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+              <span>A foto com estrela dourada é a capa no card do estoque. Passe o mouse sobre outra foto e clique na estrela para selecioná-la.</span>
+            </div>
+
             {/* Categories preview grids */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Product Photos */}
@@ -1981,32 +2027,60 @@ export function StockUnitEditModal({
 
                 {editForm.photosProduct && editForm.photosProduct.length > 0 ? (
                   <div className="grid grid-cols-3 gap-1.5">
-                    {editForm.photosProduct.map((p, i) => (
-                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
-                        <img 
-                          src={p} 
-                          className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onOpenImageZoom) {
-                              onOpenImageZoom(p, `Fotos do Aparelho - ${editForm.baseProductName}`, editForm.photosProduct || [], i);
-                            }
-                          }}
-                          alt={`Aparelho ${i + 1}`}
-                        />
-                        <button 
-                          type="button" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemovePhoto('photosProduct', i);
-                          }}
-                          className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
-                          title="Remover foto"
+                    {editForm.photosProduct.map((p, i) => {
+                      const isCover = i === 0;
+                      return (
+                        <div 
+                          key={i} 
+                          className={`relative aspect-square rounded-lg overflow-hidden border group bg-slate-950 transition-all ${
+                            isCover ? 'border-amber-400/80 ring-1 ring-amber-400/30' : 'border-slate-700 hover:border-slate-500'
+                          }`}
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                          <img 
+                            src={p} 
+                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenImageZoom) {
+                                onOpenImageZoom(p, `Fotos do Aparelho - ${editForm.baseProductName}`, editForm.photosProduct || [], i);
+                              }
+                            }}
+                            alt={`Aparelho ${i + 1}`}
+                          />
+                          {isCover ? (
+                            <div 
+                              className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
+                              title="Foto principal do card"
+                            >
+                              <Star className="w-3 h-3 fill-white text-white" />
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetCoverPhoto('photosProduct', i);
+                              }}
+                              className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-70 cursor-pointer z-10"
+                              title="Definir como foto do card"
+                            >
+                              <Star className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button 
+                            type="button" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemovePhoto('photosProduct', i);
+                            }}
+                            className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-10"
+                            title="Remover foto"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div 
@@ -2050,32 +2124,60 @@ export function StockUnitEditModal({
 
                 {editForm.photosBox && editForm.photosBox.length > 0 ? (
                   <div className="grid grid-cols-3 gap-1.5">
-                    {editForm.photosBox.map((p, i) => (
-                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
-                        <img 
-                          src={p} 
-                          className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onOpenImageZoom) {
-                              onOpenImageZoom(p, `Fotos da Embalagem - ${editForm.baseProductName}`, editForm.photosBox || [], i);
-                            }
-                          }}
-                          alt={`Caixa ${i + 1}`}
-                        />
-                        <button 
-                          type="button" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemovePhoto('photosBox', i);
-                          }}
-                          className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
-                          title="Remover foto"
+                    {editForm.photosBox.map((p, i) => {
+                      const isCover = (!editForm.photosProduct || editForm.photosProduct.length === 0) && i === 0;
+                      return (
+                        <div 
+                          key={i} 
+                          className={`relative aspect-square rounded-lg overflow-hidden border group bg-slate-950 transition-all ${
+                            isCover ? 'border-amber-400/80 ring-1 ring-amber-400/30' : 'border-slate-700 hover:border-slate-500'
+                          }`}
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                          <img 
+                            src={p} 
+                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenImageZoom) {
+                                onOpenImageZoom(p, `Fotos da Embalagem - ${editForm.baseProductName}`, editForm.photosBox || [], i);
+                              }
+                            }}
+                            alt={`Caixa ${i + 1}`}
+                          />
+                          {isCover ? (
+                            <div 
+                              className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
+                              title="Foto principal do card"
+                            >
+                              <Star className="w-3 h-3 fill-white text-white" />
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetCoverPhoto('photosBox', i);
+                              }}
+                              className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-70 cursor-pointer z-10"
+                              title="Definir como foto do card"
+                            >
+                              <Star className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button 
+                            type="button" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemovePhoto('photosBox', i);
+                            }}
+                            className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-10"
+                            title="Remover foto"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div 
@@ -2119,32 +2221,60 @@ export function StockUnitEditModal({
 
                 {editForm.photosAccessories && editForm.photosAccessories.length > 0 ? (
                   <div className="grid grid-cols-3 gap-1.5">
-                    {editForm.photosAccessories.map((p, i) => (
-                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-700 group bg-slate-950">
-                        <img 
-                          src={p} 
-                          className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onOpenImageZoom) {
-                              onOpenImageZoom(p, `Fotos dos Acessórios - ${editForm.baseProductName}`, editForm.photosAccessories || [], i);
-                            }
-                          }}
-                          alt={`Acessório ${i + 1}`}
-                        />
-                        <button 
-                          type="button" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemovePhoto('photosAccessories', i);
-                          }}
-                          className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100"
-                          title="Remover foto"
+                    {editForm.photosAccessories.map((p, i) => {
+                      const isCover = (!editForm.photosProduct || editForm.photosProduct.length === 0) && (!editForm.photosBox || editForm.photosBox.length === 0) && i === 0;
+                      return (
+                        <div 
+                          key={i} 
+                          className={`relative aspect-square rounded-lg overflow-hidden border group bg-slate-950 transition-all ${
+                            isCover ? 'border-amber-400/80 ring-1 ring-amber-400/30' : 'border-slate-700 hover:border-slate-500'
+                          }`}
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                          <img 
+                            src={p} 
+                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenImageZoom) {
+                                onOpenImageZoom(p, `Fotos dos Acessórios - ${editForm.baseProductName}`, editForm.photosAccessories || [], i);
+                              }
+                            }}
+                            alt={`Acessório ${i + 1}`}
+                          />
+                          {isCover ? (
+                            <div 
+                              className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
+                              title="Foto principal do card"
+                            >
+                              <Star className="w-3 h-3 fill-white text-white" />
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetCoverPhoto('photosAccessories', i);
+                              }}
+                              className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-70 cursor-pointer z-10"
+                              title="Definir como foto do card"
+                            >
+                              <Star className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button 
+                            type="button" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemovePhoto('photosAccessories', i);
+                            }}
+                            className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-10"
+                            title="Remover foto"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div 

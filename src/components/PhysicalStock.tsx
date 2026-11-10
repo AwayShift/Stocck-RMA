@@ -100,6 +100,8 @@ interface PhysicalStockProps {
   onDeleteUnit: (id: string) => Promise<void>;
   onCheckoutUnit: (id: string) => Promise<void>;
   onRevertCheckoutUnit?: (id: string, options?: { includeInDailyCount?: boolean }) => Promise<void>;
+  onSyncDatabase?: () => Promise<void>;
+  isSyncingDb?: boolean;
   initialSelectedUnit?: TriageUnit | null;
   openModalOnInitialSelect?: boolean;
   onClearSelectedUnit?: () => void;
@@ -195,6 +197,8 @@ export default function PhysicalStock({
   onDeleteUnit, 
   onCheckoutUnit,
   onRevertCheckoutUnit,
+  onSyncDatabase,
+  isSyncingDb = false,
   initialSelectedUnit,
   openModalOnInitialSelect = true,
   onClearSelectedUnit,
@@ -2146,6 +2150,26 @@ export default function PhysicalStock({
                   <span>Limpar Filtros</span>
                 </button>
               )}
+
+              {onSyncDatabase && (
+                <button
+                  type="button"
+                  onClick={() => onSyncDatabase()}
+                  disabled={isSyncingDb}
+                  className={`ml-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                    isSyncingDb
+                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/40 cursor-wait'
+                      : isLight
+                        ? 'bg-white hover:bg-sky-50 text-slate-700 hover:text-sky-700 border-slate-300 hover:border-sky-400 shadow-2xs'
+                        : 'bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border-slate-700'
+                  }`}
+                  id="btn-stock-inline-sync"
+                  title="Atualizar estoque físico com dados mais recentes do banco de dados"
+                >
+                  <RefreshCw className={`w-3 h-3 text-sky-400 shrink-0 ${isSyncingDb ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingDb ? 'Sincronizando...' : 'Sincronizar Banco'}</span>
+                </button>
+              )}
             </div>
 
             {/* Active Filter Badges */}
@@ -2321,16 +2345,35 @@ export default function PhysicalStock({
                 <strong>{duplicateUnitsCount}</strong> {duplicateUnitsCount === 1 ? 'produto possui' : 'produtos possuem'} <strong>Código STI</strong> ou <strong>Número de Série</strong> repetidos no estoque físico.
               </span>
             </div>
-            <button
-              type="button"
-              id="btn-filter-duplicates-banner"
-              data-active={filterOnlyDuplicates ? 'true' : 'false'}
-              onClick={() => setFilterOnlyDuplicates(prev => !prev)}
-              className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Filter className="w-3 h-3" />
-              <span>{filterOnlyDuplicates ? 'Mostrar Todos os Produtos' : 'Filtrar Apenas Duplicados'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {onSyncDatabase && (
+                <button
+                  type="button"
+                  id="btn-sync-duplicates-banner"
+                  onClick={() => onSyncDatabase()}
+                  disabled={isSyncingDb}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isSyncingDb
+                      ? 'bg-amber-500/30 border-amber-500 text-amber-200 cursor-wait'
+                      : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
+                  }`}
+                  title="Atualizar estoque físico com o banco de dados para checar se a duplicidade já foi corrigida"
+                >
+                  <RefreshCw className={`w-3 h-3 text-amber-400 shrink-0 ${isSyncingDb ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingDb ? 'Sincronizando...' : 'Sincronizar Banco'}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                id="btn-filter-duplicates-banner"
+                data-active={filterOnlyDuplicates ? 'true' : 'false'}
+                onClick={() => setFilterOnlyDuplicates(prev => !prev)}
+                className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Filter className="w-3 h-3" />
+                <span>{filterOnlyDuplicates ? 'Mostrar Todos os Produtos' : 'Filtrar Apenas Duplicados'}</span>
+              </button>
+            </div>
           </div>
         )}
 

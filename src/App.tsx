@@ -24,7 +24,8 @@ import {
   HardDriveDownload,
   Clock,
   Zap,
-  Eye
+  Eye,
+  Check
 } from 'lucide-react';
 
 import { BaseProduct, TriageUnit, DailyInflowRecord, PendingItem, PendingStatusType, DestinationSectorType, PlatformType } from './types';
@@ -64,7 +65,9 @@ import {
   syncDailyInflowsIncrementally,
   syncPendingItemsIncrementally,
   subscribeCrossTabSync,
-  removeLocalCacheItem
+  removeLocalCacheItem,
+  reloadFromStorage,
+  broadcastCrossTabMutation
 } from './lib/syncCacheService';
 
 import Dashboard from './components/Dashboard';
@@ -141,6 +144,11 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isDbSwitcherModalOpen, setIsDbSwitcherModalOpen] = useState<boolean>(false);
+
+  // Manual database sync state
+  const [isSyncingDb, setIsSyncingDb] = useState<boolean>(false);
+  const [lastSyncedTime, setLastSyncedTime] = useState<Date>(() => new Date());
+  const [syncSuccessToast, setSyncSuccessToast] = useState<string | null>(null);
 
   // Shared filters when navigating from Dashboard, Catalog, or Pending to Stock
   const [initialStockFilters, setInitialStockFilters] = useState<{
@@ -374,42 +382,108 @@ export default function App() {
         syncPendingItemsIncrementally()
       ]);
       if (Array.isArray(prodList) && prodList.length > 0) setProducts(prodList);
-      if (Array.isArray(triageList) && triageList.length > 0) setTriageUnits(triageList);
-      if (Array.isArray(inflowList) && inflowList.length > 0) setDailyInflows(inflowList);
-      if (Array.isArray(pendingList)) setPendingItems(pendingList);
+      if (Array.isArray(prodList) && prodList.length > 0) setProducts([...prodList]);
+      if (Array.isArray(triageList) && triageList.length > 0) setTriageUnits([...triageList]);
+      if (Array.isArray(inflowList) && inflowList.length > 0) setDailyInflows([...inflowList]);
+      if (Array.isArray(pendingList)) setPendingItems([...pendingList]);
     } catch (e) {
       // Silent background delta sync
     }
   }, [user]);
+
+  // Manual full database sync requested by user or UI sync buttons
+  const handleManualDatabaseSync = React.useCallback(async (silent: boolean = false) => {
+    if (isSyncingDb) return;
+    setIsSyncingDb(true);
+    try {
+      // Force full fresh reload from Supabase database (forceFull: true)
+      const [prodList, triageList, inflowList, pendingList] = await Promise.all([
+        syncBaseProductsIncrementally(true),
+        syncTriageUnitsIncrementally(true),
+        syncDailyInflowsIncrementally(true),
+        syncPendingItemsIncrementally(true)
+      ]);
+
+      if (Array.isArray(prodList)) setProducts([...prodList]);
+      if (Array.isArray(triageList)) setTriageUnits([...triageList]);
+      if (Array.isArray(inflowList)) setDailyInflows([...inflowList]);
+      if (Array.isArray(pendingList)) setPendingItems([...pendingList]);
+
+      setLastSyncedTime(new Date());
+
+      // Broadcast full sync event to all other open tabs/windows
+      broadcastCrossTabMutation('triage_units', 'full', { items: triageList });
+      broadcastCrossTabMutation('products', 'full', { items: prodList });
+      broadcastCrossTabMutation('pending_items', 'full', { items: pendingList });
+      broadcastCrossTabMutation('daily_inflows', 'full', { items: inflowList });
+
+      if (!silent) {
+        setSyncSuccessToast(`Banco de dados sincronizado! (${triageList?.length || 0} unidades no estoque)`);
+        setTimeout(() => setSyncSuccessToast(null), 4000);
+      }
+    } catch (err: any) {
+      console.error('Error during manual database sync:', err);
+      if (!silent) {
+        setSyncSuccessToast('Erro ao sincronizar com o banco de dados.');
+        setTimeout(() => setSyncSuccessToast(null), 4000);
+      }
+    } finally {
+      setIsSyncingDb(false);
+    }
+  }, [isSyncingDb]);
 
   // 1. Live Realtime Subscriptions for Products, Triage Units, Daily Inflows, and Pending Items + Cross-Tab Bus
   useEffect(() => {
     if (!user) return;
 
     const unsubProducts = subscribeBaseProducts((updatedList) => {
-      if (Array.isArray(updatedList)) setProducts(updatedList);
+      if (Array.isArray(updatedList)) setProducts([...updatedList]);
     });
 
     const unsubTriage = subscribeTriageUnits((updatedList) => {
-      if (Array.isArray(updatedList)) setTriageUnits(updatedList);
+      if (Array.isArray(updatedList)) setTriageUnits([...updatedList]);
     });
 
     const unsubInflows = subscribeDailyInflows((updatedList) => {
-      if (Array.isArray(updatedList)) setDailyInflows(updatedList);
+      if (Array.isArray(updatedList)) setDailyInflows([...updatedList]);
     });
 
     const unsubPending = subscribePendingItems((updatedList) => {
-      if (Array.isArray(updatedList)) setPendingItems(updatedList);
+      if (Array.isArray(updatedList)) setPendingItems([...updatedList]);
     });
 
     // Zero-latency cross-tab synchronization bus (instant updates across multiple open tabs/windows)
     const unsubCrossTab = subscribeCrossTabSync((event) => {
       if (event.collection === 'products') {
-        setProducts(getCachedBaseProducts());
+        if (event.action === 'full' && Array.isArray(event.items)) {
+          setProducts([...event.items]);
+        } else {
+          setProducts([...getCachedBaseProducts()]);
+        }
       } else if (event.collection === 'triage_units') {
-        setTriageUnits(getCachedTriageUnits());
+        if (event.action === 'remove' && event.id) {
+          setTriageUnits(prev => prev.filter(u => u.id !== event.id));
+        } else if (event.action === 'update' && event.item) {
+          setTriageUnits(prev => {
+            const idx = prev.findIndex(u => u.id === event.item.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = event.item;
+              return next;
+            }
+            return [event.item, ...prev];
+          });
+        } else if (event.action === 'full' && Array.isArray(event.items)) {
+          setTriageUnits([...event.items]);
+        } else {
+          setTriageUnits([...getCachedTriageUnits()]);
+        }
       } else if (event.collection === 'daily_inflows') {
-        setDailyInflows(getCachedDailyInflows());
+        if (event.action === 'full' && Array.isArray(event.items)) {
+          setDailyInflows([...event.items]);
+        } else {
+          setDailyInflows([...getCachedDailyInflows()]);
+        }
       } else if (event.collection === 'pending_items') {
         if (event.action === 'remove' && event.id) {
           setPendingItems(prev => prev.filter(p => p.id !== event.id && p.registrationNumber !== event.id));
@@ -424,7 +498,7 @@ export default function App() {
             return [event.item, ...prev];
           });
         } else if (event.action === 'full' && Array.isArray(event.items)) {
-          setPendingItems(event.items);
+          setPendingItems([...event.items]);
         } else {
           setPendingItems([...getCachedPendingItems()]);
         }
@@ -435,10 +509,10 @@ export default function App() {
     const handleStorage = (e: StorageEvent) => {
       if (!e.key) return;
       if (e.key.startsWith('stocck_cache_') || e.key.startsWith('stocckrma_')) {
-        if (e.key.includes('product')) setProducts(getCachedBaseProducts());
-        if (e.key.includes('triage')) setTriageUnits(getCachedTriageUnits());
-        if (e.key.includes('inflow')) setDailyInflows(getCachedDailyInflows());
-        if (e.key.includes('pending')) setPendingItems([...getCachedPendingItems()]);
+        if (e.key.includes('product')) setProducts([...reloadFromStorage<BaseProduct>('products')]);
+        if (e.key.includes('triage')) setTriageUnits([...reloadFromStorage<TriageUnit>('triage_units')]);
+        if (e.key.includes('inflow')) setDailyInflows([...reloadFromStorage<DailyInflowRecord>('daily_inflows')]);
+        if (e.key.includes('pending')) setPendingItems([...reloadFromStorage<PendingItem>('pending_items')]);
       }
     };
     window.addEventListener('storage', handleStorage);
@@ -458,7 +532,7 @@ export default function App() {
     if (!user) return;
     if (activeTab === 'pending') {
       syncPendingItemsIncrementally(true).then((items) => {
-        if (Array.isArray(items)) setPendingItems(items);
+        if (Array.isArray(items)) setPendingItems([...items]);
       }).catch(() => {});
     } else {
       const now = Date.now();
@@ -474,11 +548,18 @@ export default function App() {
 
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible') {
-        // When user refocuses the tab after working elsewhere, check for changes
+        // When user refocuses the tab after working elsewhere, immediately reload newest cache written by other tabs
+        const freshTriage = reloadFromStorage<TriageUnit>('triage_units');
+        if (freshTriage.length > 0) setTriageUnits([...freshTriage]);
+        const freshProducts = reloadFromStorage<BaseProduct>('products');
+        if (freshProducts.length > 0) setProducts([...freshProducts]);
+        const freshPending = reloadFromStorage<PendingItem>('pending_items');
+        if (freshPending.length > 0) setPendingItems([...freshPending]);
+
         refreshIncrementalData(true);
         if (activeTab === 'pending') {
           syncPendingItemsIncrementally(true).then((items) => {
-            if (Array.isArray(items)) setPendingItems(items);
+            if (Array.isArray(items)) setPendingItems([...items]);
           }).catch(() => {});
         }
       }
@@ -499,7 +580,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       clearInterval(syncInterval);
     };
-  }, [refreshIncrementalData, user]);
+  }, [refreshIncrementalData, user, activeTab]);
 
   // Load More Base Products via startAfter() pagination
   const handleLoadMoreProducts = async () => {
@@ -1039,6 +1120,25 @@ export default function App() {
 
             {/* Unified Settings & System Control */}
             <div className="flex items-center gap-2 shrink-0">
+              {/* Database Sync Button */}
+              <button
+                type="button"
+                onClick={() => handleManualDatabaseSync()}
+                disabled={isSyncingDb}
+                className={`h-9 flex items-center gap-1.5 px-3 rounded-xl border transition-all cursor-pointer text-xs font-bold shadow-sm whitespace-nowrap group ${
+                  isSyncingDb 
+                    ? 'bg-sky-500/20 text-sky-300 border-sky-500/40 cursor-wait'
+                    : isLight
+                      ? 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border-slate-300 hover:border-sky-400'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-700 hover:border-sky-500/50'
+                }`}
+                title={`Sincronizar banco de dados e atualizar abas (Última: ${lastSyncedTime.toLocaleTimeString('pt-BR')})`}
+                id="btn-header-db-sync"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-sky-400 group-hover:text-sky-300 shrink-0 ${isSyncingDb ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">{isSyncingDb ? 'Sincronizando...' : 'Sincronizar'}</span>
+              </button>
+
               {userRole === 'viewer' && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-semibold" id="header-guest-badge">
                   <Eye className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -1282,6 +1382,8 @@ export default function App() {
                 initialPendingSkuFilter={Boolean(initialStockFilters?.pendingSku)}
                 onClearInitialFilters={() => setInitialStockFilters(null)}
                 userRole={userRole}
+                onSyncDatabase={handleManualDatabaseSync}
+                isSyncingDb={isSyncingDb}
               />
             </div>
 
@@ -1490,6 +1592,14 @@ export default function App() {
           setActiveTab('dashboard');
         }}
       />
+
+      {/* Synchronization Feedback Toast */}
+      {syncSuccessToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-2xl border border-emerald-400/40 animate-in fade-in slide-in-from-bottom-3 duration-200" id="sync-success-toast">
+          <Check className="w-4 h-4 text-white shrink-0" />
+          <span>{syncSuccessToast}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -240,6 +240,38 @@ const persistToStorage = <T>(key: string, data: T[]) => {
   }
 };
 
+/**
+ * Force-reloads an in-memory collection cache directly from LocalStorage (bypassing stale in-memory cache)
+ */
+export const reloadFromStorage = <T>(collectionName: 'products' | 'triage_units' | 'daily_inflows' | 'pending_items'): T[] => {
+  if (collectionName === 'triage_units') {
+    const stored = loadFromStorage<TriageUnit>(CACHE_KEY_TRIAGE_UNITS);
+    if (stored) {
+      memoryTriageUnits = stored;
+      return stored as any;
+    }
+  } else if (collectionName === 'products') {
+    const stored = loadFromStorage<BaseProduct>(CACHE_KEY_PRODUCTS);
+    if (stored) {
+      memoryProducts = stored;
+      return stored as any;
+    }
+  } else if (collectionName === 'pending_items') {
+    const stored = loadFromStorage<PendingItem>(CACHE_KEY_PENDING_ITEMS);
+    if (stored) {
+      memoryPendingItems = stored;
+      return stored as any;
+    }
+  } else if (collectionName === 'daily_inflows') {
+    const stored = loadFromStorage<DailyInflowRecord>(CACHE_KEY_DAILY_INFLOWS);
+    if (stored) {
+      memoryDailyInflows = stored;
+      return stored as any;
+    }
+  }
+  return [];
+};
+
 // Surgical Column Projections to reduce bandwidth & Egress (eliminating select * overload)
 const PRODUCT_COLUMNS = 'id, name, sku, voltage, description, image_url, images, images_product, images_box, images_accessories, accessories, brand, category, created_at, updated_at';
 const TRIAGE_COLUMNS = 'id, tracking_code, serial_number, order_number, base_product_id, base_product_name, base_product_sku, base_product_voltage, platform, customer_reason, device_status, package_status, accessories_inclusion, destination_sector, notes, photos_product, photos_box, photos_accessories, created_at, updated_at, status, checkout_date, source, is_migration, exclude_from_daily_count';
