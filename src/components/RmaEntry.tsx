@@ -28,7 +28,9 @@ import {
   User,
   Hash,
   FileText,
-  Sparkles
+  Sparkles,
+  GripVertical,
+  ArrowRightLeft
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType, PendingItem } from '../types';
 import { PlatformSelector } from './PlatformSelector';
@@ -454,6 +456,12 @@ export default function RmaEntry({
 
   // Active upload zone for Ctrl+V
   const [activeUploadCategory, setActiveUploadCategory] = useState<'product' | 'box' | 'accessories'>('product');
+  const [draggedPhotoRma, setDraggedPhotoRma] = useState<{
+    url: string;
+    sourceCategory: 'product' | 'box' | 'accessories';
+    sourceIndex: number;
+  } | null>(null);
+  const [dragOverCategoryRma, setDragOverCategoryRma] = useState<'product' | 'box' | 'accessories' | null>(null);
 
   // URL Photo state
   const [urlPhotoInput, setUrlPhotoInput] = useState('');
@@ -588,6 +596,59 @@ export default function RmaEntry({
     }
   };
 
+  const handleDragStartPhotoRma = (
+    e: React.DragEvent,
+    url: string,
+    sourceCategory: 'product' | 'box' | 'accessories',
+    sourceIndex: number
+  ) => {
+    const payload = { url, sourceCategory, sourceIndex };
+    setDraggedPhotoRma(payload);
+    try {
+      e.dataTransfer.setData('application/json', JSON.stringify(payload));
+      e.dataTransfer.setData('text/plain', url);
+    } catch (err) {
+      // ignore
+    }
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEndPhotoRma = () => {
+    setDraggedPhotoRma(null);
+    setDragOverCategoryRma(null);
+  };
+
+  const handleMovePhotoCategoryRma = (
+    url: string,
+    sourceCategory: 'product' | 'box' | 'accessories',
+    sourceIndex: number,
+    targetCategory: 'product' | 'box' | 'accessories'
+  ) => {
+    if (sourceCategory === targetCategory) return;
+
+    // Remove from source
+    if (sourceCategory === 'product') {
+      setPhotosProduct(prev => prev.filter((_, idx) => idx !== sourceIndex));
+    } else if (sourceCategory === 'box') {
+      setPhotosBox(prev => prev.filter((_, idx) => idx !== sourceIndex));
+    } else {
+      setPhotosAccessories(prev => prev.filter((_, idx) => idx !== sourceIndex));
+    }
+
+    // Add to target
+    if (targetCategory === 'product') {
+      setPhotosProduct(prev => prev.includes(url) ? prev : [...prev, url]);
+    } else if (targetCategory === 'box') {
+      setPhotosBox(prev => prev.includes(url) ? prev : [...prev, url]);
+    } else {
+      setPhotosAccessories(prev => prev.includes(url) ? prev : [...prev, url]);
+    }
+
+    const catLabels = { product: 'Produto', box: 'Caixa', accessories: 'Acessórios' };
+    setSuccessMessage(`Foto movida para ${catLabels[targetCategory]}!`);
+    setTimeout(() => setSuccessMessage(''), 2500);
+  };
+
   // Drag over handler
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -596,7 +657,35 @@ export default function RmaEntry({
   // Drag drop handler
   const handleDrop = (e: React.DragEvent, category: 'product' | 'box' | 'accessories') => {
     e.preventDefault();
-    if (e.dataTransfer.files) {
+    setDragOverCategoryRma(null);
+
+    let moveData = draggedPhotoRma;
+    if (!moveData) {
+      try {
+        const raw = e.dataTransfer.getData('application/json');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.url && parsed.sourceCategory) {
+            moveData = parsed;
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    if (moveData && moveData.url && moveData.sourceCategory) {
+      handleMovePhotoCategoryRma(
+        moveData.url,
+        moveData.sourceCategory,
+        moveData.sourceIndex,
+        category
+      );
+      setDraggedPhotoRma(null);
+      return;
+    }
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handlePhotoUpload(e.dataTransfer.files, category);
     }
   };
@@ -2359,39 +2448,66 @@ export default function RmaEntry({
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('product')}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverCategoryRma('product');
+                    }}
+                    onDragLeave={() => setDragOverCategoryRma(null)}
+                    onDrop={(e) => handleDrop(e, 'product')}
                     className={`py-1.5 px-1 rounded font-bold cursor-pointer transition-all truncate ${
-                      activeUploadCategory === 'product' 
+                      dragOverCategoryRma === 'product' && draggedPhotoRma && draggedPhotoRma.sourceCategory !== 'product'
+                        ? 'bg-amber-500 text-white ring-2 ring-amber-300 scale-105 shadow-md animate-pulse'
+                        : activeUploadCategory === 'product' 
                         ? 'bg-sky-600 text-white shadow-sm' 
                         : isLight 
                         ? 'text-slate-700 hover:text-slate-950 hover:bg-white font-semibold' 
                         : 'text-slate-400 hover:text-white hover:bg-slate-900'
                     }`}
+                    title={draggedPhotoRma ? "Solte aqui para mover para Produto" : undefined}
                   >
                     Produto ({photosProduct.length})
                   </button>
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('box')}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverCategoryRma('box');
+                    }}
+                    onDragLeave={() => setDragOverCategoryRma(null)}
+                    onDrop={(e) => handleDrop(e, 'box')}
                     className={`py-1.5 px-1 rounded font-bold cursor-pointer transition-all truncate ${
-                      activeUploadCategory === 'box' 
+                      dragOverCategoryRma === 'box' && draggedPhotoRma && draggedPhotoRma.sourceCategory !== 'box'
+                        ? 'bg-amber-500 text-white ring-2 ring-amber-300 scale-105 shadow-md animate-pulse'
+                        : activeUploadCategory === 'box' 
                         ? 'bg-sky-600 text-white shadow-sm' 
                         : isLight 
                         ? 'text-slate-700 hover:text-slate-950 hover:bg-white font-semibold' 
                         : 'text-slate-400 hover:text-white hover:bg-slate-900'
                     }`}
+                    title={draggedPhotoRma ? "Solte aqui para mover para Caixa" : undefined}
                   >
                     Caixa ({photosBox.length})
                   </button>
                   <button 
                     type="button" 
                     onClick={() => setActiveUploadCategory('accessories')}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverCategoryRma('accessories');
+                    }}
+                    onDragLeave={() => setDragOverCategoryRma(null)}
+                    onDrop={(e) => handleDrop(e, 'accessories')}
                     className={`py-1.5 px-1 rounded font-bold cursor-pointer transition-all truncate ${
-                      activeUploadCategory === 'accessories' 
+                      dragOverCategoryRma === 'accessories' && draggedPhotoRma && draggedPhotoRma.sourceCategory !== 'accessories'
+                        ? 'bg-amber-500 text-white ring-2 ring-amber-300 scale-105 shadow-md animate-pulse'
+                        : activeUploadCategory === 'accessories' 
                         ? 'bg-sky-600 text-white shadow-sm' 
                         : isLight 
                         ? 'text-slate-700 hover:text-slate-950 hover:bg-white font-semibold' 
                         : 'text-slate-400 hover:text-white hover:bg-slate-900'
                     }`}
+                    title={draggedPhotoRma ? "Solte aqui para mover para Acessórios" : undefined}
                   >
                     Acessórios ({photosAccessories.length})
                   </button>
@@ -2462,67 +2578,187 @@ export default function RmaEntry({
                 {/* Thumbnails Gallery of All 3 Categories */}
                 <div className="space-y-2 pt-1">
                   {/* Category 1: Produto */}
-                  {photosProduct.length > 0 && (
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400">Fotos do Produto ({photosProduct.length}):</span>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {photosProduct.map((p, i) => (
-                          <div key={i} className="relative aspect-square rounded-lg border border-slate-800 overflow-hidden group">
-                            <img src={p} className="w-full h-full object-cover" />
-                            <button 
-                              type="button" 
-                              onClick={() => handleRemovePhoto(i, 'product')}
-                              className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
+                  <div 
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverCategoryRma('product');
+                    }}
+                    onDragLeave={() => setDragOverCategoryRma(null)}
+                    onDrop={(e) => handleDrop(e, 'product')}
+                    className={`rounded-lg transition-colors ${
+                      dragOverCategoryRma === 'product' && draggedPhotoRma && draggedPhotoRma.sourceCategory !== 'product'
+                        ? 'p-1.5 bg-amber-500/10 border border-amber-400/50 rounded-lg'
+                        : ''
+                    }`}
+                  >
+                    {photosProduct.length > 0 ? (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400">Fotos do Produto ({photosProduct.length}):</span>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {photosProduct.map((p, i) => {
+                            const isBeingDragged = draggedPhotoRma?.url === p;
+                            return (
+                              <div 
+                                key={i} 
+                                draggable
+                                onDragStart={(e) => {
+                                  setDraggedPhotoRma({ url: p, sourceCategory: 'product', sourceIndex: i });
+                                  e.dataTransfer.setData('application/json', JSON.stringify({ url: p, sourceCategory: 'product', sourceIndex: i }));
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedPhotoRma(null);
+                                  setDragOverCategoryRma(null);
+                                }}
+                                className={`relative aspect-square rounded-lg border overflow-hidden group cursor-grab active:cursor-grabbing transition-all ${
+                                  isBeingDragged 
+                                    ? 'opacity-40 scale-95 border-amber-400 ring-2 ring-amber-400' 
+                                    : 'border-slate-800 bg-slate-950 hover:border-slate-600'
+                                }`}
+                                title="Arraste para mover para outra categoria"
+                              >
+                                <img src={p} className="w-full h-full object-cover pointer-events-none select-none" draggable={false} />
+                                <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 rounded px-0.5 py-0.5 text-white pointer-events-none">
+                                  <GripVertical className="w-3 h-3" />
+                                </div>
+                                <button 
+                                  type="button" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemovePhoto(i, 'product');
+                                  }}
+                                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    ) : null}
+                  </div>
 
                   {/* Category 2: Caixa */}
-                  {photosBox.length > 0 && (
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400">Fotos da Caixa ({photosBox.length}):</span>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {photosBox.map((p, i) => (
-                          <div key={i} className="relative aspect-square rounded-lg border border-slate-800 overflow-hidden group">
-                            <img src={p} className="w-full h-full object-cover" />
-                            <button 
-                              type="button" 
-                              onClick={() => handleRemovePhoto(i, 'box')}
-                              className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
+                  <div 
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverCategoryRma('box');
+                    }}
+                    onDragLeave={() => setDragOverCategoryRma(null)}
+                    onDrop={(e) => handleDrop(e, 'box')}
+                    className={`rounded-lg transition-colors ${
+                      dragOverCategoryRma === 'box' && draggedPhotoRma && draggedPhotoRma.sourceCategory !== 'box'
+                        ? 'p-1.5 bg-amber-500/10 border border-amber-400/50 rounded-lg'
+                        : ''
+                    }`}
+                  >
+                    {photosBox.length > 0 ? (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400">Fotos da Caixa ({photosBox.length}):</span>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {photosBox.map((p, i) => {
+                            const isBeingDragged = draggedPhotoRma?.url === p;
+                            return (
+                              <div 
+                                key={i} 
+                                draggable
+                                onDragStart={(e) => {
+                                  setDraggedPhotoRma({ url: p, sourceCategory: 'box', sourceIndex: i });
+                                  e.dataTransfer.setData('application/json', JSON.stringify({ url: p, sourceCategory: 'box', sourceIndex: i }));
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedPhotoRma(null);
+                                  setDragOverCategoryRma(null);
+                                }}
+                                className={`relative aspect-square rounded-lg border overflow-hidden group cursor-grab active:cursor-grabbing transition-all ${
+                                  isBeingDragged 
+                                    ? 'opacity-40 scale-95 border-amber-400 ring-2 ring-amber-400' 
+                                    : 'border-slate-800 bg-slate-950 hover:border-slate-600'
+                                }`}
+                                title="Arraste para mover para outra categoria"
+                              >
+                                <img src={p} className="w-full h-full object-cover pointer-events-none select-none" draggable={false} />
+                                <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 rounded px-0.5 py-0.5 text-white pointer-events-none">
+                                  <GripVertical className="w-3 h-3" />
+                                </div>
+                                <button 
+                                  type="button" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemovePhoto(i, 'box');
+                                  }}
+                                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    ) : null}
+                  </div>
 
                   {/* Category 3: Acessórios */}
-                  {photosAccessories.length > 0 && (
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400">Fotos de Acessórios ({photosAccessories.length}):</span>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {photosAccessories.map((p, i) => (
-                          <div key={i} className="relative aspect-square rounded-lg border border-slate-800 overflow-hidden group">
-                            <img src={p} className="w-full h-full object-cover" />
-                            <button 
-                              type="button" 
-                              onClick={() => handleRemovePhoto(i, 'accessories')}
-                              className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
+                  <div 
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOverCategoryRma('accessories');
+                    }}
+                    onDragLeave={() => setDragOverCategoryRma(null)}
+                    onDrop={(e) => handleDrop(e, 'accessories')}
+                    className={`rounded-lg transition-colors ${
+                      dragOverCategoryRma === 'accessories' && draggedPhotoRma && draggedPhotoRma.sourceCategory !== 'accessories'
+                        ? 'p-1.5 bg-amber-500/10 border border-amber-400/50 rounded-lg'
+                        : ''
+                    }`}
+                  >
+                    {photosAccessories.length > 0 ? (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400">Fotos de Acessórios ({photosAccessories.length}):</span>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {photosAccessories.map((p, i) => {
+                            const isBeingDragged = draggedPhotoRma?.url === p;
+                            return (
+                              <div 
+                                key={i} 
+                                draggable
+                                onDragStart={(e) => {
+                                  setDraggedPhotoRma({ url: p, sourceCategory: 'accessories', sourceIndex: i });
+                                  e.dataTransfer.setData('application/json', JSON.stringify({ url: p, sourceCategory: 'accessories', sourceIndex: i }));
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedPhotoRma(null);
+                                  setDragOverCategoryRma(null);
+                                }}
+                                className={`relative aspect-square rounded-lg border overflow-hidden group cursor-grab active:cursor-grabbing transition-all ${
+                                  isBeingDragged 
+                                    ? 'opacity-40 scale-95 border-amber-400 ring-2 ring-amber-400' 
+                                    : 'border-slate-800 bg-slate-950 hover:border-slate-600'
+                                }`}
+                                title="Arraste para mover para outra categoria"
+                              >
+                                <img src={p} className="w-full h-full object-cover pointer-events-none select-none" draggable={false} />
+                                <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 rounded px-0.5 py-0.5 text-white pointer-events-none">
+                                  <GripVertical className="w-3 h-3" />
+                                </div>
+                                <button 
+                                  type="button" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemovePhoto(i, 'accessories');
+                                  }}
+                                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    ) : null}
+                  </div>
                 </div>
               </div>
 

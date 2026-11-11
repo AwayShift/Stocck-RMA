@@ -27,7 +27,9 @@ import {
   Layers, 
   Pencil,
   Sparkles,
-  Star
+  Star,
+  GripVertical,
+  ArrowDownRight
 } from 'lucide-react';
 import { 
   TriageUnit, 
@@ -103,6 +105,12 @@ export function StockUnitEditModal({
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isSanitizingUrl, setIsSanitizingUrl] = useState(false);
   const [urlInputCategory, setUrlInputCategory] = useState<'photosProduct' | 'photosBox' | 'photosAccessories'>('photosProduct');
+  const [draggedPhoto, setDraggedPhoto] = useState<{
+    url: string;
+    sourceCategory: 'photosProduct' | 'photosBox' | 'photosAccessories';
+    sourceIndex: number;
+  } | null>(null);
+  const [dragOverCategory, setDragOverCategory] = useState<'photosProduct' | 'photosBox' | 'photosAccessories' | null>(null);
 
   // Custom Status
   const [isCustomEditDeviceStatus, setIsCustomEditDeviceStatus] = useState(false);
@@ -544,8 +552,98 @@ export function StockUnitEditModal({
     }
   };
 
+  const handleDragStartPhoto = (
+    e: React.DragEvent,
+    url: string,
+    sourceCategory: 'photosProduct' | 'photosBox' | 'photosAccessories',
+    sourceIndex: number
+  ) => {
+    const payload = { url, sourceCategory, sourceIndex };
+    setDraggedPhoto(payload);
+    try {
+      e.dataTransfer.setData('application/json', JSON.stringify(payload));
+      e.dataTransfer.setData('text/plain', url);
+    } catch (err) {
+      // ignore
+    }
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEndPhoto = () => {
+    setDraggedPhoto(null);
+    setDragOverCategory(null);
+  };
+
+  const handleMovePhotoCategory = (
+    url: string,
+    sourceCategory: 'photosProduct' | 'photosBox' | 'photosAccessories',
+    sourceIndex: number,
+    targetCategory: 'photosProduct' | 'photosBox' | 'photosAccessories'
+  ) => {
+    if (sourceCategory === targetCategory || !editForm) return;
+
+    setEditForm(prev => {
+      if (!prev) return prev;
+      const sourceList = [...(prev[sourceCategory] || [])];
+      const targetList = [...(prev[targetCategory] || [])];
+
+      // Remove from source by index or matching URL
+      const itemToMove = sourceList[sourceIndex] === url ? url : (sourceList.find(x => x === url) || url);
+      const newSourceList = sourceList.filter((_, idx) => idx !== sourceIndex);
+
+      // Append to target list without duplicates
+      if (!targetList.includes(itemToMove)) {
+        targetList.push(itemToMove);
+      }
+
+      return {
+        ...prev,
+        [sourceCategory]: newSourceList,
+        [targetCategory]: targetList
+      };
+    });
+
+    const catLabels = {
+      photosProduct: 'Aparelho',
+      photosBox: 'Embalagem',
+      photosAccessories: 'Acessórios'
+    };
+    setActionSuccess(`Foto movida de ${catLabels[sourceCategory]} para ${catLabels[targetCategory]}!`);
+    setTimeout(() => setActionSuccess(null), 3000);
+  };
+
   const handleDropPhoto = async (e: React.DragEvent, category: 'photosProduct' | 'photosBox' | 'photosAccessories') => {
     e.preventDefault();
+    setDragOverCategory(null);
+
+    // 1. Check if an existing internal photo is being dragged between categories
+    let moveData = draggedPhoto;
+    if (!moveData) {
+      try {
+        const raw = e.dataTransfer.getData('application/json');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.url && parsed.sourceCategory) {
+            moveData = parsed;
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    if (moveData && moveData.url && moveData.sourceCategory) {
+      handleMovePhotoCategory(
+        moveData.url,
+        moveData.sourceCategory,
+        moveData.sourceIndex,
+        category
+      );
+      setDraggedPhoto(null);
+      return;
+    }
+
+    // 2. Check for external files dragged from the computer
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const allFiles = Array.from(e.dataTransfer.files) as File[];
       const imageFiles = allFiles.filter(f => f.type.startsWith('image/'));
@@ -1873,12 +1971,25 @@ export function StockUnitEditModal({
                   <button 
                     type="button" 
                     onClick={() => setUrlInputCategory('photosProduct')}
+                    onDragOver={(e) => {
+                      if (draggedPhoto) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        setDragOverCategory('photosProduct');
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverCategory === 'photosProduct') setDragOverCategory(null);
+                    }}
+                    onDrop={(e) => handleDropPhoto(e, 'photosProduct')}
                     className={`px-2.5 py-1 rounded-md text-xs font-bold cursor-pointer transition-all flex items-center gap-1 ${
-                      urlInputCategory === 'photosProduct' 
+                      dragOverCategory === 'photosProduct' && draggedPhoto && draggedPhoto.sourceCategory !== 'photosProduct'
+                        ? 'bg-amber-500 text-white ring-2 ring-amber-300 scale-105 shadow-md shadow-amber-500/20'
+                        : urlInputCategory === 'photosProduct' 
                         ? 'bg-sky-500 text-white shadow-sm' 
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
-                    title="Definir destino como Fotos do Aparelho (Ctrl+V colará aqui)"
+                    title={draggedPhoto ? "Solte aqui para mover esta foto para Fotos do Aparelho" : "Definir destino como Fotos do Aparelho (Ctrl+V colará aqui)"}
                   >
                     <span>Aparelho</span>
                     <span className={`text-[10px] px-1 rounded-full ${urlInputCategory === 'photosProduct' ? 'bg-sky-700/80 text-white' : 'bg-slate-800 text-slate-300'}`}>
@@ -1888,12 +1999,25 @@ export function StockUnitEditModal({
                   <button 
                     type="button" 
                     onClick={() => setUrlInputCategory('photosBox')}
+                    onDragOver={(e) => {
+                      if (draggedPhoto) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        setDragOverCategory('photosBox');
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverCategory === 'photosBox') setDragOverCategory(null);
+                    }}
+                    onDrop={(e) => handleDropPhoto(e, 'photosBox')}
                     className={`px-2.5 py-1 rounded-md text-xs font-bold cursor-pointer transition-all flex items-center gap-1 ${
-                      urlInputCategory === 'photosBox' 
+                      dragOverCategory === 'photosBox' && draggedPhoto && draggedPhoto.sourceCategory !== 'photosBox'
+                        ? 'bg-amber-500 text-white ring-2 ring-amber-300 scale-105 shadow-md shadow-amber-500/20'
+                        : urlInputCategory === 'photosBox' 
                         ? 'bg-sky-500 text-white shadow-sm' 
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
-                    title="Definir destino como Fotos da Embalagem (Ctrl+V colará aqui)"
+                    title={draggedPhoto ? "Solte aqui para mover esta foto para Fotos da Embalagem" : "Definir destino como Fotos da Embalagem (Ctrl+V colará aqui)"}
                   >
                     <span>Embalagem</span>
                     <span className={`text-[10px] px-1 rounded-full ${urlInputCategory === 'photosBox' ? 'bg-sky-700/80 text-white' : 'bg-slate-800 text-slate-300'}`}>
@@ -1903,12 +2027,25 @@ export function StockUnitEditModal({
                   <button 
                     type="button" 
                     onClick={() => setUrlInputCategory('photosAccessories')}
+                    onDragOver={(e) => {
+                      if (draggedPhoto) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        setDragOverCategory('photosAccessories');
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverCategory === 'photosAccessories') setDragOverCategory(null);
+                    }}
+                    onDrop={(e) => handleDropPhoto(e, 'photosAccessories')}
                     className={`px-2.5 py-1 rounded-md text-xs font-bold cursor-pointer transition-all flex items-center gap-1 ${
-                      urlInputCategory === 'photosAccessories' 
+                      dragOverCategory === 'photosAccessories' && draggedPhoto && draggedPhoto.sourceCategory !== 'photosAccessories'
+                        ? 'bg-amber-500 text-white ring-2 ring-amber-300 scale-105 shadow-md shadow-amber-500/20'
+                        : urlInputCategory === 'photosAccessories' 
                         ? 'bg-sky-500 text-white shadow-sm' 
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
-                    title="Definir destino como Fotos dos Acessórios (Ctrl+V colará aqui)"
+                    title={draggedPhoto ? "Solte aqui para mover esta foto para Fotos dos Acessórios" : "Definir destino como Fotos dos Acessórios (Ctrl+V colará aqui)"}
                   >
                     <span>Acessórios</span>
                     <span className={`text-[10px] px-1 rounded-full ${urlInputCategory === 'photosAccessories' ? 'bg-sky-700/80 text-white' : 'bg-slate-800 text-slate-300'}`}>
@@ -1992,22 +2129,41 @@ export function StockUnitEditModal({
               </div>
             </div>
 
-            {/* Dica discreta de Foto do Card */}
-            <div className="flex items-center gap-1.5 px-1 text-[11px] text-slate-400">
-              <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
-              <span>A foto com estrela dourada é a capa no card do estoque. Passe o mouse sobre outra foto e clique na estrela para selecioná-la.</span>
+            {/* Dica discreta de Foto do Card e Arrastar de Categoria */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                <span>A foto com estrela dourada é a capa no card do estoque.</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-sky-400/90 font-medium">
+                <ArrowRightLeft className="w-3 h-3 text-sky-400 shrink-0" />
+                <span>Arraste qualquer foto para mover entre as categorias (Aparelho, Embalagem e Acessórios).</span>
+              </div>
             </div>
 
             {/* Categories preview grids */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Product Photos */}
               <div 
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dragOverCategory !== 'photosProduct') {
+                    setDragOverCategory('photosProduct');
+                  }
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    if (dragOverCategory === 'photosProduct') setDragOverCategory(null);
+                  }
+                }}
                 onDrop={(e) => handleDropPhoto(e, 'photosProduct')}
                 onPaste={(e) => handleEditModalPaste(e, 'photosProduct')}
                 onClick={() => setUrlInputCategory('photosProduct')}
-                className={`p-3 rounded-xl border transition-all space-y-2 ${
-                  urlInputCategory === 'photosProduct' 
+                className={`p-3 rounded-xl border transition-all space-y-2 relative ${
+                  dragOverCategory === 'photosProduct' && draggedPhoto && draggedPhoto.sourceCategory !== 'photosProduct'
+                    ? 'bg-amber-500/10 border-amber-400 ring-2 ring-amber-400/50 shadow-lg shadow-amber-500/10 scale-[1.01]'
+                    : urlInputCategory === 'photosProduct' 
                     ? 'bg-slate-900/90 border-sky-500/60 shadow-md shadow-sky-500/5 ring-1 ring-sky-500/30' 
                     : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
                 }`}
@@ -2025,28 +2181,55 @@ export function StockUnitEditModal({
                   </div>
                 </div>
 
+                {draggedPhoto && draggedPhoto.sourceCategory !== 'photosProduct' && (
+                  <div className={`p-2 rounded-lg border text-center text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    dragOverCategory === 'photosProduct'
+                      ? 'bg-amber-500/25 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 animate-pulse'
+                      : 'bg-slate-950/70 border-dashed border-amber-500/40 text-amber-300/80'
+                  }`}>
+                    <ArrowDownRight className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Solte aqui para mover para Fotos do Aparelho</span>
+                  </div>
+                )}
+
                 {editForm.photosProduct && editForm.photosProduct.length > 0 ? (
                   <div className="grid grid-cols-3 gap-1.5">
                     {editForm.photosProduct.map((p, i) => {
                       const isCover = i === 0;
+                      const isBeingDragged = draggedPhoto?.url === p;
                       return (
                         <div 
                           key={i} 
-                          className={`relative aspect-square rounded-lg overflow-hidden border group bg-slate-950 transition-all ${
-                            isCover ? 'border-amber-400/80 ring-1 ring-amber-400/30' : 'border-slate-700 hover:border-slate-500'
+                          draggable
+                          onDragStart={(e) => handleDragStartPhoto(e, p, 'photosProduct', i)}
+                          onDragEnd={handleDragEndPhoto}
+                          className={`relative aspect-square rounded-lg overflow-hidden border group bg-slate-950 transition-all cursor-grab active:cursor-grabbing select-none ${
+                            isBeingDragged
+                              ? 'opacity-40 scale-95 ring-2 ring-sky-400 border-sky-400'
+                              : isCover 
+                              ? 'border-amber-400/80 ring-1 ring-amber-400/30' 
+                              : 'border-slate-700 hover:border-slate-500'
                           }`}
+                          title="Clique para ampliar ou arraste para mover para outra categoria"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onOpenImageZoom && !draggedPhoto) {
+                              onOpenImageZoom(p, `Fotos do Aparelho - ${editForm.baseProductName}`, editForm.photosProduct || [], i);
+                            }
+                          }}
                         >
                           <img 
                             src={p} 
-                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (onOpenImageZoom) {
-                                onOpenImageZoom(p, `Fotos do Aparelho - ${editForm.baseProductName}`, editForm.photosProduct || [], i);
-                              }
-                            }}
+                            draggable={false}
+                            className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform" 
                             alt={`Aparelho ${i + 1}`}
                           />
+                          <div 
+                            className="absolute bottom-1 right-1 p-0.5 bg-black/60 text-slate-300 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 flex items-center justify-center shadow"
+                            title="Arraste para outra categoria"
+                          >
+                            <GripVertical className="w-3 h-3 text-slate-300" />
+                          </div>
                           {isCover ? (
                             <div 
                               className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
@@ -2061,7 +2244,7 @@ export function StockUnitEditModal({
                                 e.stopPropagation();
                                 handleSetCoverPhoto('photosProduct', i);
                               }}
-                              className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-70 cursor-pointer z-10"
+                              className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-70 cursor-pointer z-20"
                               title="Definir como foto do card"
                             >
                               <Star className="w-3 h-3" />
@@ -2073,7 +2256,7 @@ export function StockUnitEditModal({
                               e.stopPropagation();
                               handleRemovePhoto('photosProduct', i);
                             }}
-                            className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-10"
+                            className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-20"
                             title="Remover foto"
                           >
                             <X className="w-3 h-3" />
@@ -2084,27 +2267,48 @@ export function StockUnitEditModal({
                   </div>
                 ) : (
                   <div 
-                    className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-2.5 text-center cursor-pointer transition-colors bg-slate-950/40"
+                    className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-all ${
+                      dragOverCategory === 'photosProduct' && draggedPhoto && draggedPhoto.sourceCategory !== 'photosProduct'
+                        ? 'border-amber-400 bg-amber-500/20 text-amber-200 ring-2 ring-amber-400/40'
+                        : 'border-slate-800 hover:border-sky-500/50 bg-slate-950/40'
+                    }`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setUrlInputCategory('photosProduct');
                     }}
                   >
-                    <Upload className="w-4 h-4 mx-auto text-slate-500 mb-0.5" />
-                    <p className="text-[11px] text-slate-300 font-semibold">Sem fotos do aparelho</p>
-                    <p className="text-[9px] text-slate-500">Clique, arraste ou use Ctrl+V</p>
+                    <Upload className={`w-4 h-4 mx-auto mb-0.5 ${dragOverCategory === 'photosProduct' ? 'text-amber-400' : 'text-slate-500'}`} />
+                    <p className={`text-[11px] font-semibold ${dragOverCategory === 'photosProduct' ? 'text-amber-200' : 'text-slate-300'}`}>
+                      {dragOverCategory === 'photosProduct' && draggedPhoto ? 'Solte a foto aqui!' : 'Sem fotos do aparelho'}
+                    </p>
+                    <p className="text-[9px] text-slate-500">
+                      {draggedPhoto ? 'Solte para mover a foto' : 'Clique, arraste ou use Ctrl+V'}
+                    </p>
                   </div>
                 )}
               </div>
 
               {/* Box Photos */}
               <div 
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dragOverCategory !== 'photosBox') {
+                    setDragOverCategory('photosBox');
+                  }
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    if (dragOverCategory === 'photosBox') setDragOverCategory(null);
+                  }
+                }}
                 onDrop={(e) => handleDropPhoto(e, 'photosBox')}
                 onPaste={(e) => handleEditModalPaste(e, 'photosBox')}
                 onClick={() => setUrlInputCategory('photosBox')}
-                className={`p-3 rounded-xl border transition-all space-y-2 ${
-                  urlInputCategory === 'photosBox' 
+                className={`p-3 rounded-xl border transition-all space-y-2 relative ${
+                  dragOverCategory === 'photosBox' && draggedPhoto && draggedPhoto.sourceCategory !== 'photosBox'
+                    ? 'bg-amber-500/10 border-amber-400 ring-2 ring-amber-400/50 shadow-lg shadow-amber-500/10 scale-[1.01]'
+                    : urlInputCategory === 'photosBox' 
                     ? 'bg-slate-900/90 border-sky-500/60 shadow-md shadow-sky-500/5 ring-1 ring-sky-500/30' 
                     : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
                 }`}
@@ -2122,28 +2326,55 @@ export function StockUnitEditModal({
                   </div>
                 </div>
 
+                {draggedPhoto && draggedPhoto.sourceCategory !== 'photosBox' && (
+                  <div className={`p-2 rounded-lg border text-center text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    dragOverCategory === 'photosBox'
+                      ? 'bg-amber-500/25 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 animate-pulse'
+                      : 'bg-slate-950/70 border-dashed border-amber-500/40 text-amber-300/80'
+                  }`}>
+                    <ArrowDownRight className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Solte aqui para mover para Fotos da Embalagem</span>
+                  </div>
+                )}
+
                 {editForm.photosBox && editForm.photosBox.length > 0 ? (
                   <div className="grid grid-cols-3 gap-1.5">
                     {editForm.photosBox.map((p, i) => {
                       const isCover = (!editForm.photosProduct || editForm.photosProduct.length === 0) && i === 0;
+                      const isBeingDragged = draggedPhoto?.url === p;
                       return (
                         <div 
                           key={i} 
-                          className={`relative aspect-square rounded-lg overflow-hidden border group bg-slate-950 transition-all ${
-                            isCover ? 'border-amber-400/80 ring-1 ring-amber-400/30' : 'border-slate-700 hover:border-slate-500'
+                          draggable
+                          onDragStart={(e) => handleDragStartPhoto(e, p, 'photosBox', i)}
+                          onDragEnd={handleDragEndPhoto}
+                          className={`relative aspect-square rounded-lg overflow-hidden border group bg-slate-950 transition-all cursor-grab active:cursor-grabbing select-none ${
+                            isBeingDragged
+                              ? 'opacity-40 scale-95 ring-2 ring-sky-400 border-sky-400'
+                              : isCover 
+                              ? 'border-amber-400/80 ring-1 ring-amber-400/30' 
+                              : 'border-slate-700 hover:border-slate-500'
                           }`}
+                          title="Clique para ampliar ou arraste para mover para outra categoria"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onOpenImageZoom && !draggedPhoto) {
+                              onOpenImageZoom(p, `Fotos da Embalagem - ${editForm.baseProductName}`, editForm.photosBox || [], i);
+                            }
+                          }}
                         >
                           <img 
                             src={p} 
-                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (onOpenImageZoom) {
-                                onOpenImageZoom(p, `Fotos da Embalagem - ${editForm.baseProductName}`, editForm.photosBox || [], i);
-                              }
-                            }}
+                            draggable={false}
+                            className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform" 
                             alt={`Caixa ${i + 1}`}
                           />
+                          <div 
+                            className="absolute bottom-1 right-1 p-0.5 bg-black/60 text-slate-300 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 flex items-center justify-center shadow"
+                            title="Arraste para outra categoria"
+                          >
+                            <GripVertical className="w-3 h-3 text-slate-300" />
+                          </div>
                           {isCover ? (
                             <div 
                               className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
@@ -2158,7 +2389,7 @@ export function StockUnitEditModal({
                                 e.stopPropagation();
                                 handleSetCoverPhoto('photosBox', i);
                               }}
-                              className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-70 cursor-pointer z-10"
+                              className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-70 cursor-pointer z-20"
                               title="Definir como foto do card"
                             >
                               <Star className="w-3 h-3" />
@@ -2170,7 +2401,7 @@ export function StockUnitEditModal({
                               e.stopPropagation();
                               handleRemovePhoto('photosBox', i);
                             }}
-                            className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-10"
+                            className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-20"
                             title="Remover foto"
                           >
                             <X className="w-3 h-3" />
@@ -2181,27 +2412,48 @@ export function StockUnitEditModal({
                   </div>
                 ) : (
                   <div 
-                    className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-2.5 text-center cursor-pointer transition-colors bg-slate-950/40"
+                    className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-all ${
+                      dragOverCategory === 'photosBox' && draggedPhoto && draggedPhoto.sourceCategory !== 'photosBox'
+                        ? 'border-amber-400 bg-amber-500/20 text-amber-200 ring-2 ring-amber-400/40'
+                        : 'border-slate-800 hover:border-sky-500/50 bg-slate-950/40'
+                    }`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setUrlInputCategory('photosBox');
                     }}
                   >
-                    <Upload className="w-4 h-4 mx-auto text-slate-500 mb-0.5" />
-                    <p className="text-[11px] text-slate-300 font-semibold">Sem fotos da caixa</p>
-                    <p className="text-[9px] text-slate-500">Clique, arraste ou use Ctrl+V</p>
+                    <Upload className={`w-4 h-4 mx-auto mb-0.5 ${dragOverCategory === 'photosBox' ? 'text-amber-400' : 'text-slate-500'}`} />
+                    <p className={`text-[11px] font-semibold ${dragOverCategory === 'photosBox' ? 'text-amber-200' : 'text-slate-300'}`}>
+                      {dragOverCategory === 'photosBox' && draggedPhoto ? 'Solte a foto aqui!' : 'Sem fotos da caixa'}
+                    </p>
+                    <p className="text-[9px] text-slate-500">
+                      {draggedPhoto ? 'Solte para mover a foto' : 'Clique, arraste ou use Ctrl+V'}
+                    </p>
                   </div>
                 )}
               </div>
 
               {/* Accessories Photos */}
               <div 
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dragOverCategory !== 'photosAccessories') {
+                    setDragOverCategory('photosAccessories');
+                  }
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    if (dragOverCategory === 'photosAccessories') setDragOverCategory(null);
+                  }
+                }}
                 onDrop={(e) => handleDropPhoto(e, 'photosAccessories')}
                 onPaste={(e) => handleEditModalPaste(e, 'photosAccessories')}
                 onClick={() => setUrlInputCategory('photosAccessories')}
-                className={`p-3 rounded-xl border transition-all space-y-2 ${
-                  urlInputCategory === 'photosAccessories' 
+                className={`p-3 rounded-xl border transition-all space-y-2 relative ${
+                  dragOverCategory === 'photosAccessories' && draggedPhoto && draggedPhoto.sourceCategory !== 'photosAccessories'
+                    ? 'bg-amber-500/10 border-amber-400 ring-2 ring-amber-400/50 shadow-lg shadow-amber-500/10 scale-[1.01]'
+                    : urlInputCategory === 'photosAccessories' 
                     ? 'bg-slate-900/90 border-sky-500/60 shadow-md shadow-sky-500/5 ring-1 ring-sky-500/30' 
                     : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
                 }`}
@@ -2219,28 +2471,55 @@ export function StockUnitEditModal({
                   </div>
                 </div>
 
+                {draggedPhoto && draggedPhoto.sourceCategory !== 'photosAccessories' && (
+                  <div className={`p-2 rounded-lg border text-center text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    dragOverCategory === 'photosAccessories'
+                      ? 'bg-amber-500/25 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 animate-pulse'
+                      : 'bg-slate-950/70 border-dashed border-amber-500/40 text-amber-300/80'
+                  }`}>
+                    <ArrowDownRight className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Solte aqui para mover para Fotos dos Acessórios</span>
+                  </div>
+                )}
+
                 {editForm.photosAccessories && editForm.photosAccessories.length > 0 ? (
                   <div className="grid grid-cols-3 gap-1.5">
                     {editForm.photosAccessories.map((p, i) => {
                       const isCover = (!editForm.photosProduct || editForm.photosProduct.length === 0) && (!editForm.photosBox || editForm.photosBox.length === 0) && i === 0;
+                      const isBeingDragged = draggedPhoto?.url === p;
                       return (
                         <div 
                           key={i} 
-                          className={`relative aspect-square rounded-lg overflow-hidden border group bg-slate-950 transition-all ${
-                            isCover ? 'border-amber-400/80 ring-1 ring-amber-400/30' : 'border-slate-700 hover:border-slate-500'
+                          draggable
+                          onDragStart={(e) => handleDragStartPhoto(e, p, 'photosAccessories', i)}
+                          onDragEnd={handleDragEndPhoto}
+                          className={`relative aspect-square rounded-lg overflow-hidden border group bg-slate-950 transition-all cursor-grab active:cursor-grabbing select-none ${
+                            isBeingDragged
+                              ? 'opacity-40 scale-95 ring-2 ring-sky-400 border-sky-400'
+                              : isCover 
+                              ? 'border-amber-400/80 ring-1 ring-amber-400/30' 
+                              : 'border-slate-700 hover:border-slate-500'
                           }`}
+                          title="Clique para ampliar ou arraste para mover para outra categoria"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onOpenImageZoom && !draggedPhoto) {
+                              onOpenImageZoom(p, `Fotos dos Acessórios - ${editForm.baseProductName}`, editForm.photosAccessories || [], i);
+                            }
+                          }}
                         >
                           <img 
                             src={p} 
-                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (onOpenImageZoom) {
-                                onOpenImageZoom(p, `Fotos dos Acessórios - ${editForm.baseProductName}`, editForm.photosAccessories || [], i);
-                              }
-                            }}
+                            draggable={false}
+                            className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform" 
                             alt={`Acessório ${i + 1}`}
                           />
+                          <div 
+                            className="absolute bottom-1 right-1 p-0.5 bg-black/60 text-slate-300 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 flex items-center justify-center shadow"
+                            title="Arraste para outra categoria"
+                          >
+                            <GripVertical className="w-3 h-3 text-slate-300" />
+                          </div>
                           {isCover ? (
                             <div 
                               className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
@@ -2255,7 +2534,7 @@ export function StockUnitEditModal({
                                 e.stopPropagation();
                                 handleSetCoverPhoto('photosAccessories', i);
                               }}
-                              className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-70 cursor-pointer z-10"
+                              className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-70 cursor-pointer z-20"
                               title="Definir como foto do card"
                             >
                               <Star className="w-3 h-3" />
@@ -2267,7 +2546,7 @@ export function StockUnitEditModal({
                               e.stopPropagation();
                               handleRemovePhoto('photosAccessories', i);
                             }}
-                            className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-10"
+                            className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-20"
                             title="Remover foto"
                           >
                             <X className="w-3 h-3" />
@@ -2278,15 +2557,23 @@ export function StockUnitEditModal({
                   </div>
                 ) : (
                   <div 
-                    className="border border-dashed border-slate-800 hover:border-sky-500/50 rounded-lg p-2.5 text-center cursor-pointer transition-colors bg-slate-950/40"
+                    className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-all ${
+                      dragOverCategory === 'photosAccessories' && draggedPhoto && draggedPhoto.sourceCategory !== 'photosAccessories'
+                        ? 'border-amber-400 bg-amber-500/20 text-amber-200 ring-2 ring-amber-400/40'
+                        : 'border-slate-800 hover:border-sky-500/50 bg-slate-950/40'
+                    }`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setUrlInputCategory('photosAccessories');
                     }}
                   >
-                    <Upload className="w-4 h-4 mx-auto text-slate-500 mb-0.5" />
-                    <p className="text-[11px] text-slate-300 font-semibold">Sem fotos de acessórios</p>
-                    <p className="text-[9px] text-slate-500">Clique, arraste ou use Ctrl+V</p>
+                    <Upload className={`w-4 h-4 mx-auto mb-0.5 ${dragOverCategory === 'photosAccessories' ? 'text-amber-400' : 'text-slate-500'}`} />
+                    <p className={`text-[11px] font-semibold ${dragOverCategory === 'photosAccessories' ? 'text-amber-200' : 'text-slate-300'}`}>
+                      {dragOverCategory === 'photosAccessories' && draggedPhoto ? 'Solte a foto aqui!' : 'Sem fotos de acessórios'}
+                    </p>
+                    <p className="text-[9px] text-slate-500">
+                      {draggedPhoto ? 'Solte para mover a foto' : 'Clique, arraste ou use Ctrl+V'}
+                    </p>
                   </div>
                 )}
               </div>

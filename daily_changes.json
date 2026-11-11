@@ -1,21 +1,9 @@
 {
-  "currentDate": "2026-11-10",
+  "currentDate": "2026-11-11",
   "todayFiles": [
     {
-      "file": "src/components/PhysicalStock.tsx",
-      "summary": "Renderização do laudo técnico com formatação rica preservada (negrito, itálico, quebras de linha e parágrafos) no card e na listagem geral do estoque"
-    },
-    {
-      "file": "src/components/StockUnitDetailsModal.tsx",
-      "summary": "Sanitização de tags internas do sistema e suporte a tema claro/escuro no laudo técnico do modal de detalhes"
-    },
-    {
       "file": "src/components/StockUnitEditModal.tsx",
-      "summary": "Arquivo alterado"
-    },
-    {
-      "file": "src/lib/syncCacheService.ts",
-      "summary": "src/lib/dbService.ts"
+      "summary": "src/components/RmaEntry.tsx"
     }
   ],
   "history": {
@@ -53,6 +41,12 @@
       "src/lib/dbService.ts",
       "src/App.tsx",
       "src/components/PhysicalStock.tsx"
+    ],
+    "2026-11-10": [
+      "src/components/PhysicalStock.tsx",
+      "src/components/StockUnitDetailsModal.tsx",
+      "src/components/StockUnitEditModal.tsx",
+      "src/lib/syncCacheService.ts"
     ]
   }
 }
