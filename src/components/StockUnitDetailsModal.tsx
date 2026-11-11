@@ -43,6 +43,7 @@ import {
 } from '../utils/productImages';
 import { normalizeStiCode } from '../utils/stiFormatter';
 import { isUnitPendingSkuRegistration, isRealStockTransfer, getFormattedLaudoHtml } from './PhysicalStock';
+import { cleanPendingReasonFromCustomerReason } from '../utils/pendingRegistrationHelper';
 
 export interface StockUnitDetailsModalProps {
   isOpen: boolean;
@@ -632,7 +633,7 @@ export function StockUnitDetailsModal({
                 Motivo da Devolução / Entrada
               </h4>
               <p className="text-sm text-slate-200 leading-relaxed italic bg-slate-900/60 p-3.5 rounded-lg border border-slate-800/40">
-                "{unit.customerReason || 'Sem motivo registrado.'}"
+                "{cleanPendingReasonFromCustomerReason(unit.customerReason) || 'Sem motivo registrado.'}"
               </p>
             </div>
 

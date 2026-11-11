@@ -41,7 +41,7 @@ import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { getCurrentActiveAuthUser } from '../lib/supabaseAuth';
 import { formatStiInput, isValidStiCode, normalizeStiCode } from '../utils/stiFormatter';
 import { StiCodeInput } from './StiCodeInput';
-import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
+import { validatePendingItemLink, findPendingItemByRegistrationNumber, cleanPendingBoilerplateFromNotes, cleanPendingReasonFromCustomerReason } from '../utils/pendingRegistrationHelper';
 import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform } from '../utils/orderPlatformHelper';
 
 export interface TriageSummaryData {
@@ -251,14 +251,12 @@ export default function RmaEntry({
       setSerials([item.serialNumber]);
     }
     
-    // Set customer reason with the motive that was generated upon creating the pendency
-    const pendingGeneratedReason = item.pendingReason 
-      ? (item.customerReason && item.customerReason !== item.pendingReason 
-          ? `${item.pendingReason} - ${item.customerReason}` 
-          : item.pendingReason)
-      : (item.customerReason || '');
-    if (pendingGeneratedReason) {
-      setCustomerReason(pendingGeneratedReason);
+    // Set customer reason with only the described motive, without pending registration motive prefix
+    const cleanReason = (item.customerReason && item.customerReason.trim())
+      ? cleanPendingReasonFromCustomerReason(item.customerReason.trim(), item.pendingReason)
+      : (item.pendingReason || '');
+    if (cleanReason) {
+      setCustomerReason(cleanReason);
     }
 
     // Leave accessories list ONLY if accessories were inserted when creating the pendency
@@ -268,8 +266,11 @@ export default function RmaEntry({
       setAccessoriesInclusion('');
     }
 
-    if (item.detailedNotes || item.pendingReason) {
-      setNotes(`<p><strong>Cadastrado no RMA via Pendências:</strong></p><p>Registro: ${item.registrationNumber || '-'}</p><p>Motivo: ${item.pendingReason || ''}</p>${item.detailedNotes ? `<p>${item.detailedNotes}</p>` : ''}`);
+    if (item.detailedNotes && item.detailedNotes.trim()) {
+      const cleanNotes = cleanPendingBoilerplateFromNotes(item.detailedNotes.trim());
+      setNotes(cleanNotes ? (cleanNotes.startsWith('<') ? cleanNotes : `<p>${cleanNotes}</p>`) : '');
+    } else {
+      setNotes('');
     }
 
     if (item.deviceStatus) {

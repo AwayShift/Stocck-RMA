@@ -76,7 +76,9 @@ import {
   validateUniqueOrderNumber, 
   ensurePendingRegistrationNumber,
   healPendingItemRegistrationNumber,
-  normalizeRegistrationNumber
+  normalizeRegistrationNumber,
+  cleanPendingBoilerplateFromNotes,
+  cleanPendingReasonFromCustomerReason
 } from '../utils/pendingRegistrationHelper';
 import { findBaseProduct, getResolvedUnitProductName, getBaseProductImages } from '../utils/productImages';
 import { inspectOrderNumber, detectPlatformFromOrderNumber, normalizeOrderNumberForPlatform, areOrdersMatching } from '../utils/orderPlatformHelper';
@@ -1108,15 +1110,15 @@ export default function PendingItems({
           baseProductSku: finalSku,
           baseProductVoltage: finalVoltage,
           platform: formPlatform as PlatformType,
-          customerReason: formCustomerReason.trim() 
-            ? `${finalReason} - ${formCustomerReason.trim()}`
-            : finalReason,
+          customerReason: formCustomerReason.trim() || finalReason,
           deviceStatus: finalDeviceStatus as any,
           packageStatus: finalPackageStatus as any,
           accessoriesInclusion: formStockAccessories.trim(),
           destinationSector: 'RMA',
           initialEntryDate: new Date().toISOString(),
-          notes: `<p><strong>Entrada direta vinculada à Pendência:</strong></p><p>Registro: ${regNumber}</p><p>Motivo: ${finalReason}</p>${formDetailedNotes.trim() ? `<p>${formDetailedNotes.trim()}</p>` : ''}`,
+          notes: formDetailedNotes.trim() 
+            ? (formDetailedNotes.trim().startsWith('<') ? formDetailedNotes.trim() : `<p>${formDetailedNotes.trim()}</p>`) 
+            : '',
           photosProduct: formPhotos && formPhotos.length > 0 ? formPhotos : [],
           photosBox: [],
           photosAccessories: [],
@@ -1234,13 +1236,11 @@ export default function PendingItems({
     setTransferOrderNumber(item.orderNumber || '');
     setTransferDestination(item.destinationSectorSuggested || 'Openbox');
 
-    // Automatically pull motive that was generated upon pending creation
-    const pendingGeneratedReason = item.pendingReason 
-      ? (item.customerReason && item.customerReason !== item.pendingReason 
-          ? `${item.pendingReason} - ${item.customerReason}` 
-          : item.pendingReason)
-      : (item.customerReason || '');
-    setTransferCustomerReason(pendingGeneratedReason);
+    // Automatically pull motive that was generated upon pending creation without pending prefix
+    const cleanTransferCustomerReason = (item.customerReason && item.customerReason.trim())
+      ? cleanPendingReasonFromCustomerReason(item.customerReason.trim(), item.pendingReason)
+      : (item.pendingReason || '');
+    setTransferCustomerReason(cleanTransferCustomerReason);
 
     const initialDevStatus = item.deviceStatus || 'Usado';
     const isStandardDev = ['Novo', 'Usado', 'Danificado'].includes(initialDevStatus);
@@ -1254,7 +1254,8 @@ export default function PendingItems({
 
     // Pre-populate accessories ONLY if accessories were inserted when creating the pendency
     setTransferAccessories(item.accessories || '');
-    setTransferNotes(`<p><strong>Liberado da Aba de Pendências:</strong></p><p>Motivo: ${item.pendingReason}</p>${item.detailedNotes ? `<p>${item.detailedNotes}</p>` : ''}`);
+    const cleanTransferNotes = item.detailedNotes ? cleanPendingBoilerplateFromNotes(item.detailedNotes) : '';
+    setTransferNotes(cleanTransferNotes ? (cleanTransferNotes.startsWith('<') ? cleanTransferNotes : `<p>${cleanTransferNotes}</p>`) : '');
     setTransferPhotosProduct(item.photos ? [...item.photos] : []);
     setTransferPhotosBox([]);
     setTransferPhotosAccessories([]);

@@ -4,6 +4,14 @@
     {
       "file": "src/components/StockUnitEditModal.tsx",
       "summary": "src/components/RmaEntry.tsx"
+    },
+    {
+      "file": "src/components/PendingItems.tsx",
+      "summary": "src/components/RmaEntry.tsx"
+    },
+    {
+      "file": "src/utils/pendingRegistrationHelper.ts",
+      "summary": "src/components/PendingItems.tsx"
     }
   ],
   "history": {

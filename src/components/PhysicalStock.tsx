@@ -75,7 +75,7 @@ import {
   matchesExactHashSti 
 } from '../utils/stiFormatter';
 import { StiCodeInput } from './StiCodeInput';
-import { validatePendingItemLink, findPendingItemByRegistrationNumber } from '../utils/pendingRegistrationHelper';
+import { validatePendingItemLink, findPendingItemByRegistrationNumber, cleanPendingBoilerplateFromNotes, cleanPendingReasonFromCustomerReason } from '../utils/pendingRegistrationHelper';
 import QuickRegisterSkuModal from './QuickRegisterSkuModal';
 import { StockUnitEditModal } from './StockUnitEditModal';
 import { StockUnitDetailsModal } from './StockUnitDetailsModal';
@@ -142,6 +142,9 @@ export const getFormattedLaudoHtml = (rawNotes?: string): { html: string; hasCon
     .replace(/\[[A-Z_]+:.*?\]/g, '')
     .replace(/\[EXCLUDE_DAILY_COUNT\]/g, '')
     .trim();
+
+  // Remove automated pending boilerplate (e.g. "Entrada direta vinculada à Pendência", "Registro: ...", "Motivo: ...")
+  clean = cleanPendingBoilerplateFromNotes(clean);
 
   const plainText = stripHtml(clean);
   if (!plainText) {
@@ -2669,7 +2672,7 @@ export default function PhysicalStock({
                         {getResolvedUnitProductName(unit, products)}
                       </h4>
                       <p className="text-xs text-slate-400 line-clamp-1">
-                        <span className="font-medium text-slate-400">Motivo:</span> {unit.customerReason}
+                        <span className="font-medium text-slate-400">Motivo:</span> {cleanPendingReasonFromCustomerReason(unit.customerReason)}
                       </p>
 
                       {/* Laudo do Produto com formatação rica preservada (negrito, itálico, quebras de linha e parágrafos) */}
@@ -3094,7 +3097,7 @@ export default function PhysicalStock({
 
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-xs text-slate-400 line-clamp-1">
-                          Motivo: {unit.customerReason}
+                          Motivo: {cleanPendingReasonFromCustomerReason(unit.customerReason)}
                         </p>
 
                         {(activeTab === 'Openbox' || unit.destinationSector === 'Openbox' || Boolean(unit.notes && stripHtml(unit.notes).trim())) && (() => {

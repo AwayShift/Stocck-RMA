@@ -29,6 +29,7 @@ import {
 import { BaseProduct } from '../types';
 import { getBaseProductImages } from '../utils/productImages';
 import { ImageZoomModal } from './ImageZoomModal';
+import { cleanPendingBoilerplateFromNotes, cleanPendingReasonFromCustomerReason } from '../utils/pendingRegistrationHelper';
 
 export interface SelectedProductData {
   id?: string;
@@ -620,7 +621,7 @@ export default function ProductCompareModal({
                   <div className={`p-3 rounded-xl border text-xs italic leading-relaxed ${
                     isLightMode ? 'bg-amber-50/60 border-amber-200 text-amber-950' : 'bg-slate-900/80 border-slate-800 text-slate-300'
                   }`}>
-                    "{selectedProduct.customerReason}"
+                    "{cleanPendingReasonFromCustomerReason(selectedProduct.customerReason)}"
                   </div>
                 </div>
               )}
@@ -634,11 +635,14 @@ export default function ProductCompareModal({
                 <div className={`p-3.5 rounded-xl border text-xs leading-relaxed max-h-56 overflow-y-auto prose prose-invert prose-xs ${
                   isLightMode ? 'bg-white border-slate-200 text-slate-800' : 'bg-slate-900 border-slate-800 text-slate-200'
                 }`}>
-                  {selectedProduct.notes && selectedProduct.notes.trim() !== '' && selectedProduct.notes !== '<p><br></p>' ? (
-                    <div dangerouslySetInnerHTML={{ __html: selectedProduct.notes }} />
-                  ) : (
-                    <span className="text-slate-400 italic">Sem laudo técnico descritivo registrado.</span>
-                  )}
+                  {(() => {
+                    const cleanNotes = cleanPendingBoilerplateFromNotes(selectedProduct.notes);
+                    return cleanNotes && cleanNotes.trim() !== '' && cleanNotes !== '<p><br></p>' ? (
+                      <div dangerouslySetInnerHTML={{ __html: cleanNotes }} />
+                    ) : (
+                      <span className="text-slate-400 italic">Sem laudo técnico descritivo registrado.</span>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

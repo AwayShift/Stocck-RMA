@@ -70,7 +70,9 @@ import {
   ensurePendingRegistrationNumber,
   normalizeRegistrationNumber,
   validateUniqueOrderNumber,
-  validatePendingItemLink
+  validatePendingItemLink,
+  cleanPendingBoilerplateFromNotes,
+  cleanPendingReasonFromCustomerReason
 } from '../utils/pendingRegistrationHelper';
 import { detectPlatformFromOrderNumber } from '../utils/orderPlatformHelper';
 
@@ -853,13 +855,11 @@ export const transferPendingItemToStock = async (
     baseProductSku: finalSku,
     baseProductVoltage: finalVoltage,
     platform: finalPlatform,
-    customerReason: triageDetails?.customerReason || (
-      pendingItem.pendingReason 
-        ? (pendingItem.customerReason && pendingItem.customerReason !== pendingItem.pendingReason 
-            ? `${pendingItem.pendingReason} - ${pendingItem.customerReason}` 
-            : pendingItem.pendingReason)
-        : (pendingItem.customerReason || 'Liberado de Pendências')
-    ),
+    customerReason: (triageDetails?.customerReason && triageDetails.customerReason.trim())
+      ? cleanPendingReasonFromCustomerReason(triageDetails.customerReason.trim(), pendingItem.pendingReason)
+      : ((pendingItem.customerReason && pendingItem.customerReason.trim())
+          ? cleanPendingReasonFromCustomerReason(pendingItem.customerReason.trim(), pendingItem.pendingReason)
+          : (pendingItem.pendingReason || 'Liberado de Pendências')),
     deviceStatus: (triageDetails?.deviceStatus as any) || 'Usado',
     packageStatus: (triageDetails?.packageStatus as any) || 'Danificada',
     accessoriesInclusion: (triageDetails?.accessoriesInclusion !== undefined 
@@ -868,7 +868,9 @@ export const transferPendingItemToStock = async (
     ).trim(),
     destinationSector: destinationSector,
     initialEntryDate: pendingItem.createdAt || new Date().toISOString(),
-    notes: triageDetails?.notes || `<p><strong>Item Liberado da Aba de Pendências:</strong></p><p>Motivo: ${pendingItem.pendingReason}</p>${pendingItem.detailedNotes ? `<p>${pendingItem.detailedNotes}</p>` : ''}`,
+    notes: triageDetails?.notes !== undefined 
+      ? cleanPendingBoilerplateFromNotes(triageDetails.notes)
+      : (pendingItem.detailedNotes ? (pendingItem.detailedNotes.startsWith('<') ? cleanPendingBoilerplateFromNotes(pendingItem.detailedNotes) : `<p>${cleanPendingBoilerplateFromNotes(pendingItem.detailedNotes)}</p>`) : ''),
     photosProduct: triageDetails?.photosProduct && triageDetails.photosProduct.length > 0 ? triageDetails.photosProduct : (pendingItem.photos || []),
     photosBox: triageDetails?.photosBox || [],
     photosAccessories: triageDetails?.photosAccessories || [],

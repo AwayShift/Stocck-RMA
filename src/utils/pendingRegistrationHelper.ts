@@ -251,3 +251,87 @@ export function findPendingItemByRegistrationNumber(
     return p.id === registrationNumber.trim();
   });
 }
+
+/**
+ * Remove cabeçalhos e rótulos de sistema gerados automaticamente em laudos/observações
+ * vindos de pendências (como "Entrada direta vinculada à Pendência:", "Registro: ...", "Motivo: ...", etc.),
+ * preservando estritamente apenas o texto e formatação digitados pelo operador.
+ */
+export function cleanPendingBoilerplateFromNotes(rawNotes?: string): string {
+  if (!rawNotes) return '';
+  let text = rawNotes;
+
+  // 1. Remove parágrafos HTML de cabeçalho do sistema
+  text = text.replace(
+    /<p>\s*(?:<strong>|<b>)?\s*(?:Entrada direta vinculada à Pendência|Item Liberado da Aba de Pendências|Cadastrado no RMA via Pendências|Liberado da Aba de Pendências):?\s*(?:<\/strong>|<\/b>)?\s*<\/p>/gi,
+    ''
+  );
+  // Remove linhas de Registro e Motivo inseridas automaticamente no laudo
+  text = text.replace(/<p>\s*(?:<strong>|<b>)?\s*Registro:\s*.*?<\/p>/gi, '');
+  text = text.replace(/<p>\s*(?:<strong>|<b>)?\s*Motivo:\s*.*?<\/p>/gi, '');
+
+  // 2. Remove ocorrências em texto plano caso não haja tags HTML
+  text = text.replace(
+    /(?:^|\n|\r)\s*(?:Entrada direta vinculada à Pendência|Item Liberado da Aba de Pendências|Cadastrado no RMA via Pendências|Liberado da Aba de Pendências):?\s*/gi,
+    '\n'
+  );
+  text = text.replace(/(?:^|\n|\r)\s*Registro:\s*[^\n\r<]*/gi, '');
+  text = text.replace(/(?:^|\n|\r)\s*Motivo:\s*[^\n\r<]*/gi, '');
+
+  // 3. Remove tags vazias residuais
+  text = text.replace(/<p>\s*(?:&nbsp;|\s)*<\/p>/gi, '');
+
+  return text.trim();
+}
+
+export const PENDING_PRESET_REASONS = [
+  'Aguardando Nota Fiscal (NF)',
+  'Sem Identificação do Comprador / Rastreio',
+  'Aguardando Peça de Reposição',
+  'Dúvida Técnica / Em Teste Prolongado',
+  'Falta Acessório Essencial / Incompleto',
+  'Aguardando Autorização da Gerência',
+  'Item Não Localizado no Catálogo',
+  'Produto Danificado no Transporte (Avaria)',
+  'Outro Motivo',
+  'Item Liberado da Aba de Pendências',
+  'Liberado de Pendências',
+  'Entrada direta vinculada à Pendência'
+];
+
+/**
+ * Remove o prefixo do motivo da pendência (ex: "Sem Identificação do Comprador / Rastreio - teste" => "teste")
+ * mantendo estritamente a descrição inserida pelo operador no motivo da devolução.
+ */
+export function cleanPendingReasonFromCustomerReason(
+  rawReason?: string | null,
+  specificPendingReason?: string | null
+): string {
+  if (!rawReason) return '';
+  let reason = rawReason.trim();
+
+  // Se houver um motivo de pendência específico associado, tenta remover o prefixo dele primeiro
+  if (specificPendingReason && specificPendingReason.trim()) {
+    const spec = specificPendingReason.trim();
+    if (reason.startsWith(`${spec} - `)) {
+      const remainder = reason.slice(`${spec} - `.length).trim();
+      if (remainder) return remainder;
+    } else if (reason.startsWith(`${spec} -`)) {
+      const remainder = reason.slice(`${spec} -`.length).trim();
+      if (remainder) return remainder;
+    }
+  }
+
+  // Percorre os motivos predefinidos conhecidos
+  for (const preset of PENDING_PRESET_REASONS) {
+    if (reason.startsWith(`${preset} - `)) {
+      const remainder = reason.slice(`${preset} - `.length).trim();
+      if (remainder) return remainder;
+    } else if (reason.startsWith(`${preset} -`)) {
+      const remainder = reason.slice(`${preset} -`.length).trim();
+      if (remainder) return remainder;
+    }
+  }
+
+  return reason;
+}

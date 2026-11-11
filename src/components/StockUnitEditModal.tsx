@@ -56,7 +56,9 @@ import {
 import { StiCodeInput } from './StiCodeInput';
 import { 
   validatePendingItemLink, 
-  findPendingItemByRegistrationNumber 
+  findPendingItemByRegistrationNumber,
+  cleanPendingBoilerplateFromNotes,
+  cleanPendingReasonFromCustomerReason
 } from '../utils/pendingRegistrationHelper';
 import { 
   inspectOrderNumber, 
@@ -160,8 +162,13 @@ export function StockUnitEditModal({
       sanitizedTrackingCode = '';
     }
 
+    const sanitizedNotes = cleanPendingBoilerplateFromNotes(unit.notes);
+    const sanitizedCustomerReason = cleanPendingReasonFromCustomerReason(unit.customerReason);
+
     setEditForm({
       ...unit,
+      notes: sanitizedNotes,
+      customerReason: sanitizedCustomerReason,
       trackingCode: sanitizedTrackingCode,
       originSector: sanitizedOriginSector,
       baseProductName: resolvedName,
@@ -381,8 +388,8 @@ export function StockUnitEditModal({
     if (item.trackingCode && (!updated.trackingCode || updated.trackingCode.trim() === '')) {
       updated.trackingCode = item.trackingCode;
     }
-    if (!updated.customerReason && item.customerReason) {
-      updated.customerReason = item.customerReason;
+    if (!updated.customerReason && (item.customerReason || item.pendingReason)) {
+      updated.customerReason = cleanPendingReasonFromCustomerReason(item.customerReason || item.pendingReason, item.pendingReason);
     }
     if (item.deviceStatus && (!updated.deviceStatus || updated.deviceStatus === 'Usado')) {
       updated.deviceStatus = item.deviceStatus as any;
