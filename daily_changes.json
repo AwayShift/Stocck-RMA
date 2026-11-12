@@ -1,17 +1,9 @@
 {
-  "currentDate": "2026-11-11",
+  "currentDate": "2026-11-12",
   "todayFiles": [
     {
-      "file": "src/components/StockUnitEditModal.tsx",
-      "summary": "src/components/RmaEntry.tsx"
-    },
-    {
-      "file": "src/components/PendingItems.tsx",
-      "summary": "src/components/RmaEntry.tsx"
-    },
-    {
-      "file": "src/utils/pendingRegistrationHelper.ts",
-      "summary": "src/components/PendingItems.tsx"
+      "file": "src/components/ScrollToTop.tsx",
+      "summary": "src/App.tsx"
     }
   ],
   "history": {
@@ -55,6 +47,12 @@
       "src/components/StockUnitDetailsModal.tsx",
       "src/components/StockUnitEditModal.tsx",
       "src/lib/syncCacheService.ts"
+    ],
+    "2026-11-11": [
+      "src/components/StockUnitEditModal.tsx",
+      "src/components/PendingItems.tsx",
+      "src/utils/pendingRegistrationHelper.ts",
+      "src/components/PendingItemDetailsModal.tsx"
     ]
   }
 }

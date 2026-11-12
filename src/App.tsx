@@ -78,6 +78,7 @@ import PendingItems, { getLinkedStockUnit } from './components/PendingItems';
 import Login from './components/Login';
 import ProductMovements from './components/ProductMovements';
 import { GlobalSearchBar } from './components/GlobalSearchBar';
+import { ScrollToTop } from './components/ScrollToTop';
 import SettingsModal from './components/SettingsModal';
 import BackupModal from './components/BackupModal';
 import DatabaseSwitcherModal from './components/DatabaseSwitcherModal';
@@ -1384,6 +1385,7 @@ export default function App() {
                 userRole={userRole}
                 onSyncDatabase={handleManualDatabaseSync}
                 isSyncingDb={isSyncingDb}
+                onNavigateToPendingTab={() => handleSwitchTab('pending')}
               />
             </div>
 
@@ -1595,11 +1597,14 @@ export default function App() {
 
       {/* Synchronization Feedback Toast */}
       {syncSuccessToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-2xl border border-emerald-400/40 animate-in fade-in slide-in-from-bottom-3 duration-200" id="sync-success-toast">
+        <div className="fixed bottom-20 right-6 z-50 flex items-center gap-2.5 px-4 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-2xl border border-emerald-400/40 animate-in fade-in slide-in-from-bottom-3 duration-200" id="sync-success-toast">
           <Check className="w-4 h-4 text-white shrink-0" />
           <span>{syncSuccessToast}</span>
         </div>
       )}
+
+      {/* Floating Scroll to Top Button (appears only when scrolled deeply down) */}
+      <ScrollToTop threshold={1400} />
     </div>
   );
 }

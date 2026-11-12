@@ -118,6 +118,7 @@ interface PhysicalStockProps {
   onClearInitialFilters?: () => void;
   currentTab?: 'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement';
   userRole?: 'admin' | 'operator' | 'viewer' | null;
+  onNavigateToPendingTab?: (pendingId?: string) => void;
 }
 
 const stripHtml = (html?: string): string => {
@@ -217,7 +218,8 @@ export default function PhysicalStock({
   initialPendingSkuFilter,
   onClearInitialFilters,
   currentTab = 'stock',
-  userRole
+  userRole,
+  onNavigateToPendingTab
 }: PhysicalStockProps) {
   const isReadOnly = userRole === 'viewer';
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm || '');
@@ -3308,6 +3310,7 @@ export default function PhysicalStock({
           unit={currentUnit}
           products={products}
           units={units}
+          pendingItems={pendingItems}
           isLight={isLight}
           isReadOnly={isReadOnly}
           enableSpreadsheetExport={enableSpreadsheetExport}
@@ -3326,6 +3329,7 @@ export default function PhysicalStock({
             setFullscreenImageList(list);
             setFullscreenImageIndex(idx);
           }}
+          onNavigateToPendingTab={onNavigateToPendingTab}
         />
       )}
 

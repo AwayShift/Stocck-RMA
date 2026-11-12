@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, 
@@ -28,13 +28,16 @@ import {
   Trash2, 
   RotateCcw, 
   Pencil,
-  Star
+  Star,
+  AlertOctagon,
+  ExternalLink
 } from 'lucide-react';
 import { 
   TriageUnit, 
   DestinationSectorType, 
   PlatformType, 
-  BaseProduct 
+  BaseProduct,
+  PendingItem 
 } from '../types';
 import { 
   getUnitResolvedPhotos, 
@@ -44,6 +47,8 @@ import {
 import { normalizeStiCode } from '../utils/stiFormatter';
 import { isUnitPendingSkuRegistration, isRealStockTransfer, getFormattedLaudoHtml } from './PhysicalStock';
 import { cleanPendingReasonFromCustomerReason } from '../utils/pendingRegistrationHelper';
+import { PendingItemDetailsModal } from './PendingItemDetailsModal';
+import { getCachedPendingItems } from '../lib/syncCacheService';
 
 export interface StockUnitDetailsModalProps {
   isOpen: boolean;
@@ -51,6 +56,7 @@ export interface StockUnitDetailsModalProps {
   unit: TriageUnit;
   products?: BaseProduct[];
   units?: TriageUnit[];
+  pendingItems?: PendingItem[];
   isLight?: boolean;
   enableSpreadsheetExport?: boolean;
   onStartEdit: (unit: TriageUnit) => void;
@@ -63,6 +69,7 @@ export interface StockUnitDetailsModalProps {
   onCheckout?: (id: string) => void;
   onRevertCheckout?: (id: string) => void;
   onOpenImageZoom?: (imageUrl: string, title: string, imagesList: string[], index: number) => void;
+  onNavigateToPendingTab?: (pendingId?: string) => void;
   isReadOnly?: boolean;
 }
 
@@ -72,6 +79,7 @@ export function StockUnitDetailsModal({
   unit,
   products = [],
   units = [],
+  pendingItems = [],
   isLight = false,
   enableSpreadsheetExport = true,
   onStartEdit,
@@ -84,10 +92,70 @@ export function StockUnitDetailsModal({
   onCheckout,
   onRevertCheckout,
   onOpenImageZoom,
+  onNavigateToPendingTab,
   isReadOnly = false
 }: StockUnitDetailsModalProps) {
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [editingSector, setEditingSector] = useState<DestinationSectorType | ''>('');
+  const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+
+  const resolvedPendingItem = useMemo<PendingItem | null>(() => {
+    if (!unit) return null;
+    if (!unit.pendingRegistrationNumber && !unit.pendingItemId && !unit.orderNumber) {
+      return null;
+    }
+
+    const allPending = (pendingItems && pendingItems.length > 0) ? pendingItems : getCachedPendingItems();
+    
+    // 1. Localiza por ID da pendência
+    if (unit.pendingItemId) {
+      const byId = allPending.find(p => p.id === unit.pendingItemId);
+      if (byId) return byId;
+    }
+
+    // 2. Localiza por Número de Registro
+    if (unit.pendingRegistrationNumber) {
+      const cleanReg = unit.pendingRegistrationNumber.replace(/^#/, '').trim().toUpperCase();
+      const byReg = allPending.find(p => 
+        p.registrationNumber && p.registrationNumber.trim().toUpperCase() === cleanReg
+      );
+      if (byReg) return byReg;
+    }
+
+    // 3. Localiza por Número de Pedido
+    if (unit.orderNumber && unit.orderNumber.trim()) {
+      const byOrder = allPending.find(p => 
+        p.orderNumber && p.orderNumber.trim() === unit.orderNumber?.trim()
+      );
+      if (byOrder) return byOrder;
+    }
+
+    // Fallback: Sintetiza dados do produto vinculado para garantir abertura com informações completas
+    const reg = unit.pendingRegistrationNumber ? unit.pendingRegistrationNumber.replace(/^#/, '').trim() : 'REG-VINCULADO';
+    return {
+      id: unit.pendingItemId || `pend-${unit.id}`,
+      registrationNumber: reg,
+      sku: unit.baseProductSku || '',
+      productName: unit.baseProductName || 'Produto em Estoque',
+      voltage: unit.baseProductVoltage || 'Bivolt',
+      serialNumber: unit.serialNumber,
+      orderNumber: unit.orderNumber,
+      trackingCode: unit.trackingCode,
+      platform: unit.platform,
+      pendingReason: 'Item de Pendência Vinculado',
+      customerReason: unit.customerReason,
+      deviceStatus: unit.deviceStatus,
+      packageStatus: unit.packageStatus,
+      detailedNotes: unit.notes,
+      accessories: unit.accessoriesInclusion,
+      status: 'Pendente',
+      priority: 'Média',
+      photos: (unit.photosProduct && unit.photosProduct.length > 0) ? unit.photosProduct : [],
+      createdAt: unit.initialEntryDate || unit.createdAt,
+      linkedUnitId: unit.id,
+      linkedUnitTrackingCode: unit.trackingCode
+    };
+  }, [unit, pendingItems]);
 
   if (!isOpen || !unit) return null;
 
@@ -248,6 +316,23 @@ export function StockUnitDetailsModal({
               <span>Ir ao estoque</span>
               <ArrowRight className="w-3.5 h-3.5 opacity-70 shrink-0" />
             </button>
+
+            {unit.pendingRegistrationNumber && (
+              <button 
+                type="button"
+                onClick={() => setIsPendingModalOpen(true)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                  isLight
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
+                    : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40 shadow-2xs'
+                }`}
+                title="Abrir modal com todas as informações da pendência vinculada"
+                id="btn-modal-open-pending-header"
+              >
+                <AlertOctagon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Ver Pendência</span>
+              </button>
+            )}
 
             {!isReadOnly && (
               <button 
@@ -532,18 +617,31 @@ export function StockUnitDetailsModal({
                 const regCode = (unit.pendingRegistrationNumber || '').replace(/^#/, '').trim();
                 if (!regCode) return null;
                 return (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5" id="section-reg-number-details">
                     <span className="text-slate-400 font-semibold text-[11px]">Nº de Registro:</span>
                     <button
                       type="button"
-                      onClick={(e) => handleCopyCode(regCode, 'reg', e)}
-                      className="font-mono text-[11px] font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 rounded transition-colors cursor-pointer group flex items-center gap-1"
-                      title="Clique para copiar Número de Registro"
-                      id="btn-copy-reg-bottom"
+                      onClick={() => setIsPendingModalOpen(true)}
+                      className="font-mono text-[11px] font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/25 border border-sky-500/30 hover:border-sky-400 px-2 py-0.5 rounded transition-all cursor-pointer group flex items-center gap-1.5 shadow-2xs hover:scale-102"
+                      title={`Clique para abrir a ficha completa da pendência ${regCode}`}
+                      id="btn-open-pending-modal-badge"
                     >
                       <Hash className="w-2.5 h-2.5 text-sky-400" />
                       <span>{regCode}</span>
-                      <Copy className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                      <ExternalLink className="w-2.5 h-2.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopyCode(regCode, 'reg', e)}
+                      className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                      title="Copiar Número de Registro"
+                      id="btn-copy-reg-bottom"
+                    >
+                      {copiedCodeKey === 'reg' ? (
+                        <Check className="w-2.5 h-2.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-2.5 h-2.5 opacity-60 hover:opacity-100" />
+                      )}
                     </button>
                   </div>
                 );
@@ -932,6 +1030,19 @@ export function StockUnitDetailsModal({
           </div>
         </div>
       </div>
+
+      {/* Linked Pending Item Details Modal */}
+      {isPendingModalOpen && resolvedPendingItem && (
+        <PendingItemDetailsModal
+          isOpen={isPendingModalOpen}
+          onClose={() => setIsPendingModalOpen(false)}
+          pendingItem={resolvedPendingItem}
+          linkedUnit={unit}
+          products={products}
+          isLight={isLight}
+          onNavigateToPendingTab={onNavigateToPendingTab}
+        />
+      )}
     </div>,
     document.body
   );

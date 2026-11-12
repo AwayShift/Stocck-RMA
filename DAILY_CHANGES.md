@@ -5,17 +5,21 @@ Quando a data muda, a seção **Arquivos Alterados no Dia** é atualizada confor
 
 ---
 
-## 📅 Data Atual: 2026-11-11
-- **Total de arquivos alterados hoje:** 3 arquivos
+## 📅 Data Atual: 2026-11-12
+- **Total de arquivos alterados hoje:** 1 arquivos
 
 ### Lista de Arquivos Alterados Hoje:
-1. `src/components/StockUnitEditModal.tsx` - src/components/RmaEntry.tsx
-2. `src/components/PendingItems.tsx` - src/components/RmaEntry.tsx
-3. `src/utils/pendingRegistrationHelper.ts` - src/components/PendingItems.tsx
+1. `src/components/ScrollToTop.tsx` - src/App.tsx
 
 ---
 
 ## 🗄️ Histórico de Alterações por Data
+
+### 📅 2026-11-11
+- `src/components/StockUnitEditModal.tsx`
+- `src/components/PendingItems.tsx`
+- `src/utils/pendingRegistrationHelper.ts`
+- `src/components/PendingItemDetailsModal.tsx`
 
 ### 📅 2026-11-10
 - `src/components/PhysicalStock.tsx`
