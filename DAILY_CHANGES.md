@@ -5,15 +5,18 @@ Quando a data muda, a seção **Arquivos Alterados no Dia** é atualizada confor
 
 ---
 
-## 📅 Data Atual: 2026-11-12
+## 📅 Data Atual: 2026-11-13
 - **Total de arquivos alterados hoje:** 1 arquivos
 
 ### Lista de Arquivos Alterados Hoje:
-1. `src/components/ScrollToTop.tsx` - src/App.tsx
+1. `src/utils/productImages.ts` - src/components/PhysicalStock.tsx
 
 ---
 
 ## 🗄️ Histórico de Alterações por Data
+
+### 📅 2026-11-12
+- `src/components/ScrollToTop.tsx`
 
 ### 📅 2026-11-11
 - `src/components/StockUnitEditModal.tsx`

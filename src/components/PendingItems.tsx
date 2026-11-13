@@ -1349,8 +1349,8 @@ export default function PendingItems({
       let finalTransferPhotosBox = [...transferPhotosBox];
       let finalTransferPhotosAccessories = [...transferPhotosAccessories];
 
-      // Auto-reference base product images if transferring to Principal or Outros without photos
-      if ((transferDestination === 'Principal' || transferDestination === 'Outros') && matchedProd) {
+      // Auto-reference base product images strictly when transferring to Principal without photos
+      if (transferDestination === 'Principal' && matchedProd) {
         const baseImgs = getBaseProductImages(matchedProd);
         if (finalTransferPhotosProduct.length === 0 && baseImgs.productPhotos.length > 0) {
           finalTransferPhotosProduct = baseImgs.productPhotos;

@@ -26,7 +26,8 @@ import {
   Link as LinkIcon,
   ShieldCheck,
   RefreshCw,
-  ArrowRight
+  ArrowRight,
+  Star
 } from 'lucide-react';
 import { BaseProduct, TriageUnit } from '../types';
 import { uploadFileToStorage, uploadImageUrlToStorage, saveBatchBaseProducts } from '../lib/dbService';
@@ -127,12 +128,46 @@ export default function BaseCatalog({
   const [imagesProduct, setImagesProduct] = useState<string[]>([]);
   const [imagesBox, setImagesBox] = useState<string[]>([]);
   const [imagesAccessories, setImagesAccessories] = useState<string[]>([]);
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string>('');
   const [activeUploadCategory, setActiveUploadCategory] = useState<'product' | 'box' | 'accessories'>('product');
   const activeUploadCategoryRef = useRef(activeUploadCategory);
 
   useEffect(() => {
     activeUploadCategoryRef.current = activeUploadCategory;
   }, [activeUploadCategory]);
+
+  const allFormImages = React.useMemo(() => {
+    return [...imagesProduct, ...imagesBox, ...imagesAccessories].filter((v, i, a) => a.indexOf(v) === i);
+  }, [imagesProduct, imagesBox, imagesAccessories]);
+
+  const effectiveFeaturedUrl = React.useMemo(() => {
+    if (featuredImageUrl && allFormImages.includes(featuredImageUrl)) {
+      return featuredImageUrl;
+    }
+    return imagesProduct[0] || imagesBox[0] || imagesAccessories[0] || '';
+  }, [featuredImageUrl, allFormImages, imagesProduct, imagesBox, imagesAccessories]);
+
+  const handleSetFeaturedImage = (categoryTarget: 'product' | 'box' | 'accessories', index: number) => {
+    const list = categoryTarget === 'product' ? imagesProduct : categoryTarget === 'box' ? imagesBox : imagesAccessories;
+    const targetUrl = list[index];
+    if (!targetUrl) return;
+
+    setFeaturedImageUrl(targetUrl);
+
+    if (categoryTarget === 'product' && index > 0) {
+      const updated = [...imagesProduct];
+      const [selected] = updated.splice(index, 1);
+      if (selected) setImagesProduct([selected, ...updated]);
+    } else if (categoryTarget === 'box' && index > 0) {
+      const updated = [...imagesBox];
+      const [selected] = updated.splice(index, 1);
+      if (selected) setImagesBox([selected, ...updated]);
+    } else if (categoryTarget === 'accessories' && index > 0) {
+      const updated = [...imagesAccessories];
+      const [selected] = updated.splice(index, 1);
+      if (selected) setImagesAccessories([selected, ...updated]);
+    }
+  };
   const [accessories, setAccessories] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -162,6 +197,9 @@ export default function BaseCatalog({
         setImagesAccessories(prev => [...prev, ...urls]);
       }
       setImages(prev => [...prev, ...urls]);
+      if (urls.length > 0) {
+        setFeaturedImageUrl(prev => (prev && allFormImages.includes(prev)) ? prev : urls[0]);
+      }
       setSuccessMessage('Fotos enviadas e sanitizadas com sucesso!');
       setTimeout(() => setSuccessMessage(''), 2500);
     } catch (err: any) {
@@ -193,6 +231,7 @@ export default function BaseCatalog({
         setImagesAccessories(prev => [...prev, uploadedUrl]);
       }
       setImages(prev => [...prev, uploadedUrl]);
+      setFeaturedImageUrl(prev => (prev && allFormImages.includes(prev)) ? prev : uploadedUrl);
       setImageUrlInput('');
       setSuccessMessage('Imagem por link enviada e hospedada no Cloudinary com sucesso!');
       setTimeout(() => setSuccessMessage(''), 2500);
@@ -259,18 +298,22 @@ export default function BaseCatalog({
 
   const handleRemoveImage = (index: number) => {
     const currentCategory = activeUploadCategoryRef.current;
+    let removedUrl = '';
     if (currentCategory === 'product') {
-      const removedUrl = imagesProduct[index];
+      removedUrl = imagesProduct[index] || '';
       setImagesProduct(prev => prev.filter((_, i) => i !== index));
       setImages(prev => prev.filter(url => url !== removedUrl));
     } else if (currentCategory === 'box') {
-      const removedUrl = imagesBox[index];
+      removedUrl = imagesBox[index] || '';
       setImagesBox(prev => prev.filter((_, i) => i !== index));
       setImages(prev => prev.filter(url => url !== removedUrl));
     } else if (currentCategory === 'accessories') {
-      const removedUrl = imagesAccessories[index];
+      removedUrl = imagesAccessories[index] || '';
       setImagesAccessories(prev => prev.filter((_, i) => i !== index));
       setImages(prev => prev.filter(url => url !== removedUrl));
+    }
+    if (removedUrl && removedUrl === featuredImageUrl) {
+      setFeaturedImageUrl('');
     }
   };
 
@@ -291,6 +334,7 @@ export default function BaseCatalog({
     setImagesProduct([]);
     setImagesBox([]);
     setImagesAccessories([]);
+    setFeaturedImageUrl('');
     setActiveUploadCategory('product');
     setImageUrlInput('');
     setUrlInputError(null);
@@ -316,10 +360,14 @@ export default function BaseCatalog({
     setDescription(p.description || '');
     
     const fallbackImages = p.images || (p.imageUrl ? [p.imageUrl] : []);
+    const initialProd = p.imagesProduct || fallbackImages;
+    const initialBox = p.imagesBox || [];
+    const initialAcc = p.imagesAccessories || [];
     setImages(fallbackImages);
-    setImagesProduct(p.imagesProduct || fallbackImages);
-    setImagesBox(p.imagesBox || []);
-    setImagesAccessories(p.imagesAccessories || []);
+    setImagesProduct(initialProd);
+    setImagesBox(initialBox);
+    setImagesAccessories(initialAcc);
+    setFeaturedImageUrl(p.imageUrl || initialProd[0] || initialBox[0] || initialAcc[0] || '');
     setActiveUploadCategory('product');
     setImageUrlInput('');
     setUrlInputError(null);
@@ -355,6 +403,12 @@ export default function BaseCatalog({
       return;
     }
 
+    const combinedImages = [...imagesProduct, ...imagesBox, ...imagesAccessories].filter((v, i, a) => a.indexOf(v) === i);
+    const mainImg = effectiveFeaturedUrl || combinedImages[0] || images[0] || '';
+    const orderedImages = mainImg
+      ? [mainImg, ...combinedImages.filter(u => u !== mainImg)]
+      : combinedImages;
+
     const productToSave: BaseProduct = {
       id: editingProduct ? editingProduct.id : 'bp-' + Date.now(),
       name: name.trim(),
@@ -363,8 +417,8 @@ export default function BaseCatalog({
       brand: brand.trim(),
       category: category.trim(),
       description: description.trim(),
-      imageUrl: imagesProduct[0] || imagesBox[0] || imagesAccessories[0] || images[0] || '',
-      images: [...imagesProduct, ...imagesBox, ...imagesAccessories],
+      imageUrl: mainImg,
+      images: orderedImages,
       imagesProduct,
       imagesBox,
       imagesAccessories,
@@ -387,6 +441,7 @@ export default function BaseCatalog({
         setImagesProduct([]);
         setImagesBox([]);
         setImagesAccessories([]);
+        setFeaturedImageUrl('');
         setAccessories('');
       }
 
@@ -758,21 +813,24 @@ export default function BaseCatalog({
                             className="flex items-center gap-3 cursor-pointer group/item hover:opacity-90"
                             title="Ver detalhes do produto"
                           >
-                            {product.imageUrl ? (
-                              <div className="relative group/thumb">
-                                <img 
-                                  src={getOptimizedThumbnailUrl(product.imageUrl, 120, 120)} 
-                                  alt={product.name} 
-                                  loading="lazy"
-                                  decoding="async"
-                                  className="w-10 h-10 object-contain p-0.5 rounded-lg border border-slate-700 group-hover/item:border-sky-500 bg-white dark:bg-slate-900 flex-shrink-0 transition-colors" 
-                                />
-                              </div>
-                            ) : (
-                              <div className="w-10 h-10 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-[10px] text-slate-500 font-mono flex-shrink-0 group-hover/item:border-sky-500 transition-colors">
-                                N/D
-                              </div>
-                            )}
+                            {(() => {
+                              const rowThumb = product.imageUrl || product.imagesProduct?.[0] || product.images?.[0] || product.imagesBox?.[0] || product.imagesAccessories?.[0] || '';
+                              return rowThumb ? (
+                                <div className="relative group/thumb">
+                                  <img 
+                                    src={getOptimizedThumbnailUrl(rowThumb, 120, 120)} 
+                                    alt={product.name} 
+                                    loading="lazy"
+                                    decoding="async"
+                                    className="w-10 h-10 object-contain p-0.5 rounded-lg border border-slate-700 group-hover/item:border-sky-500 bg-white dark:bg-slate-900 flex-shrink-0 transition-colors" 
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-[10px] text-slate-500 font-mono flex-shrink-0 group-hover/item:border-sky-500 transition-colors">
+                                  N/D
+                                </div>
+                              );
+                            })()}
                             <div>
                               <div className="font-semibold text-white group-hover/item:text-sky-400 transition-colors flex items-center gap-1.5">
                                 {product.name}
@@ -1489,6 +1547,14 @@ export default function BaseCatalog({
                   )}
                 </div>
 
+                {/* Dica discreta de Foto de Destaque Principal */}
+                {allFormImages.length > 0 && (
+                  <div className="flex items-center gap-1.5 px-1 text-[11px] text-slate-400">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                    <span>A foto com estrela dourada fica no destaque principal do produto (card e ficha).</span>
+                  </div>
+                )}
+
                 {/* Dropzone & Paste Area */}
                 <div 
                   tabIndex={0}
@@ -1530,18 +1596,58 @@ export default function BaseCatalog({
                   ) : (
                     <div className="space-y-4 w-full" onClick={(e) => e.stopPropagation()}>
                       <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 w-full">
-                        {(activeUploadCategory === 'product' ? imagesProduct : activeUploadCategory === 'box' ? imagesBox : imagesAccessories).map((img, idx) => (
-                          <div key={idx} className="relative aspect-square rounded-lg border border-slate-800 bg-slate-950 overflow-hidden group">
-                            <img src={img} className="w-full h-full object-cover" alt={`${activeUploadCategory}-${idx}`} />
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveImage(idx)}
-                              className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity rounded-lg cursor-pointer"
+                        {(activeUploadCategory === 'product' ? imagesProduct : activeUploadCategory === 'box' ? imagesBox : imagesAccessories).map((img, idx) => {
+                          const isFeatured = img === effectiveFeaturedUrl;
+                          return (
+                            <div
+                              key={idx}
+                              className={`relative aspect-square rounded-lg border bg-slate-950 overflow-hidden group transition-all ${
+                                isFeatured
+                                  ? 'border-amber-400/90 ring-1 ring-amber-400/40 shadow-sm'
+                                  : 'border-slate-800 hover:border-slate-600'
+                              }`}
+                              title="Clique para ampliar ou selecione a estrela para destaque principal"
+                              onClick={() => setZoomedImage(img)}
                             >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
+                              <img
+                                src={img}
+                                className="w-full h-full object-cover cursor-zoom-in transition-transform duration-200 group-hover:scale-105"
+                                alt={`${activeUploadCategory}-${idx}`}
+                              />
+                              {isFeatured ? (
+                                <div
+                                  className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
+                                  title="Foto de destaque principal"
+                                >
+                                  <Star className="w-3 h-3 fill-white text-white" />
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetFeaturedImage(activeUploadCategory, idx);
+                                  }}
+                                  className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-75 cursor-pointer z-20"
+                                  title="Definir como foto de destaque principal"
+                                >
+                                  <Star className="w-3 h-3" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveImage(idx);
+                                }}
+                                className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-20"
+                                title="Remover foto"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                       <div className="text-center pt-2 border-t border-slate-800/40 pointer-events-none">
                         <p className="text-[10px] text-slate-500 font-medium">
@@ -1849,13 +1955,21 @@ export default function BaseCatalog({
         isOpen={!!zoomedImage}
         onClose={() => setZoomedImage(null)}
         imageUrl={zoomedImage}
-        imageTitle={viewingProduct ? `${viewingProduct.name} (${viewingProduct.sku})` : 'Foto do Catálogo'}
-        imagesList={viewingProduct?.images && viewingProduct.images.length > 0 ? viewingProduct.images : (zoomedImage ? [zoomedImage] : [])}
-        currentIndex={viewingProduct?.images && zoomedImage ? viewingProduct.images.indexOf(zoomedImage) : 0}
+        imageTitle={viewingProduct ? `${viewingProduct.name} (${viewingProduct.sku})` : (name ? `${name}${sku ? ` (${sku})` : ''}` : 'Foto do Catálogo')}
+        imagesList={viewingProduct?.images && viewingProduct.images.length > 0 ? viewingProduct.images : (isFormOpen && allFormImages.length > 0 ? allFormImages : (zoomedImage ? [zoomedImage] : []))}
+        currentIndex={(() => {
+          const list = viewingProduct?.images && viewingProduct.images.length > 0
+            ? viewingProduct.images
+            : (isFormOpen && allFormImages.length > 0 ? allFormImages : []);
+          return zoomedImage && list.length > 0 ? Math.max(0, list.indexOf(zoomedImage)) : 0;
+        })()}
         onNavigate={(newIdx) => {
-          if (viewingProduct?.images && viewingProduct.images[newIdx]) {
-            setZoomedImage(viewingProduct.images[newIdx]);
-            setActiveViewImageIndex(newIdx);
+          const list = viewingProduct?.images && viewingProduct.images.length > 0
+            ? viewingProduct.images
+            : (isFormOpen && allFormImages.length > 0 ? allFormImages : []);
+          if (list[newIdx]) {
+            setZoomedImage(list[newIdx]);
+            if (viewingProduct) setActiveViewImageIndex(newIdx);
           }
         }}
       />

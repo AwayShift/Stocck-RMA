@@ -30,7 +30,8 @@ import {
   FileText,
   Sparkles,
   GripVertical,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Star
 } from 'lucide-react';
 import { BaseProduct, TriageUnit, PlatformType, DeviceStatusType, PackageStatusType, DestinationSectorType, PendingItem } from '../types';
 import { PlatformSelector } from './PlatformSelector';
@@ -594,6 +595,34 @@ export default function RmaEntry({
       setPhotosBox(prev => prev.filter((_, i) => i !== index));
     } else {
       setPhotosAccessories(prev => prev.filter((_, i) => i !== index));
+    }
+  };
+
+  // Set cover photo (main highlight photo on card)
+  const handleSetCoverPhotoRma = (category: 'product' | 'box' | 'accessories', index: number) => {
+    if (category === 'product') {
+      const existing = [...photosProduct];
+      if (index === 0 || index >= existing.length) return;
+      const [selected] = existing.splice(index, 1);
+      if (selected) {
+        setPhotosProduct([selected, ...existing]);
+      }
+    } else if (category === 'box') {
+      const boxExisting = [...photosBox];
+      if (index >= boxExisting.length) return;
+      const [selected] = boxExisting.splice(index, 1);
+      if (selected) {
+        setPhotosProduct(prev => [selected, ...prev]);
+        setPhotosBox(boxExisting);
+      }
+    } else if (category === 'accessories') {
+      const accExisting = [...photosAccessories];
+      if (index >= accExisting.length) return;
+      const [selected] = accExisting.splice(index, 1);
+      if (selected) {
+        setPhotosProduct(prev => [selected, ...prev]);
+        setPhotosAccessories(accExisting);
+      }
     }
   };
 
@@ -2578,6 +2607,13 @@ export default function RmaEntry({
 
                 {/* Thumbnails Gallery of All 3 Categories */}
                 <div className="space-y-2 pt-1">
+                  {(photosProduct.length + photosBox.length + photosAccessories.length) > 0 && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 pb-0.5">
+                      <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                      <span>A foto com estrela dourada fica no destaque principal do card.</span>
+                    </div>
+                  )}
+
                   {/* Category 1: Produto */}
                   <div 
                     onDragOver={(e) => {
@@ -2597,6 +2633,7 @@ export default function RmaEntry({
                         <span className="text-[10px] font-bold text-slate-400">Fotos do Produto ({photosProduct.length}):</span>
                         <div className="grid grid-cols-4 gap-1.5">
                           {photosProduct.map((p, i) => {
+                            const isCover = i === 0;
                             const isBeingDragged = draggedPhotoRma?.url === p;
                             return (
                               <div 
@@ -2610,26 +2647,49 @@ export default function RmaEntry({
                                   setDraggedPhotoRma(null);
                                   setDragOverCategoryRma(null);
                                 }}
-                                className={`relative aspect-square rounded-lg border overflow-hidden group cursor-grab active:cursor-grabbing transition-all ${
+                                className={`relative aspect-square rounded-lg border overflow-hidden group cursor-grab active:cursor-grabbing transition-all bg-slate-950 ${
                                   isBeingDragged 
                                     ? 'opacity-40 scale-95 border-amber-400 ring-2 ring-amber-400' 
-                                    : 'border-slate-800 bg-slate-950 hover:border-slate-600'
+                                    : isCover
+                                    ? 'border-amber-400/80 ring-1 ring-amber-400/30'
+                                    : 'border-slate-800 hover:border-slate-600'
                                 }`}
-                                title="Arraste para mover para outra categoria"
+                                title="Clique na estrela para destacar ou arraste para mover de categoria"
                               >
                                 <img src={p} className="w-full h-full object-cover pointer-events-none select-none" draggable={false} />
-                                <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 rounded px-0.5 py-0.5 text-white pointer-events-none">
+                                <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 rounded p-0.5 text-white pointer-events-none z-10">
                                   <GripVertical className="w-3 h-3" />
                                 </div>
+                                {isCover ? (
+                                  <div
+                                    className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
+                                    title="Foto de destaque principal"
+                                  >
+                                    <Star className="w-2.5 h-2.5 fill-white text-white" />
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSetCoverPhotoRma('product', i);
+                                    }}
+                                    className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-75 cursor-pointer z-20"
+                                    title="Definir como destaque principal"
+                                  >
+                                    <Star className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
                                 <button 
                                   type="button" 
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleRemovePhoto(i, 'product');
                                   }}
-                                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity cursor-pointer"
+                                  className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-20"
+                                  title="Remover foto"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <X className="w-3 h-3" />
                                 </button>
                               </div>
                             );
@@ -2658,6 +2718,7 @@ export default function RmaEntry({
                         <span className="text-[10px] font-bold text-slate-400">Fotos da Caixa ({photosBox.length}):</span>
                         <div className="grid grid-cols-4 gap-1.5">
                           {photosBox.map((p, i) => {
+                            const isCover = photosProduct.length === 0 && i === 0;
                             const isBeingDragged = draggedPhotoRma?.url === p;
                             return (
                               <div 
@@ -2671,26 +2732,49 @@ export default function RmaEntry({
                                   setDraggedPhotoRma(null);
                                   setDragOverCategoryRma(null);
                                 }}
-                                className={`relative aspect-square rounded-lg border overflow-hidden group cursor-grab active:cursor-grabbing transition-all ${
+                                className={`relative aspect-square rounded-lg border overflow-hidden group cursor-grab active:cursor-grabbing transition-all bg-slate-950 ${
                                   isBeingDragged 
                                     ? 'opacity-40 scale-95 border-amber-400 ring-2 ring-amber-400' 
-                                    : 'border-slate-800 bg-slate-950 hover:border-slate-600'
+                                    : isCover
+                                    ? 'border-amber-400/80 ring-1 ring-amber-400/30'
+                                    : 'border-slate-800 hover:border-slate-600'
                                 }`}
-                                title="Arraste para mover para outra categoria"
+                                title="Clique na estrela para destacar ou arraste para mover de categoria"
                               >
                                 <img src={p} className="w-full h-full object-cover pointer-events-none select-none" draggable={false} />
-                                <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 rounded px-0.5 py-0.5 text-white pointer-events-none">
+                                <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 rounded p-0.5 text-white pointer-events-none z-10">
                                   <GripVertical className="w-3 h-3" />
                                 </div>
+                                {isCover ? (
+                                  <div
+                                    className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
+                                    title="Foto de destaque principal"
+                                  >
+                                    <Star className="w-2.5 h-2.5 fill-white text-white" />
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSetCoverPhotoRma('box', i);
+                                    }}
+                                    className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-75 cursor-pointer z-20"
+                                    title="Definir como destaque principal"
+                                  >
+                                    <Star className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
                                 <button 
                                   type="button" 
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleRemovePhoto(i, 'box');
                                   }}
-                                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity cursor-pointer"
+                                  className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-20"
+                                  title="Remover foto"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <X className="w-3 h-3" />
                                 </button>
                               </div>
                             );
@@ -2719,6 +2803,7 @@ export default function RmaEntry({
                         <span className="text-[10px] font-bold text-slate-400">Fotos de Acessórios ({photosAccessories.length}):</span>
                         <div className="grid grid-cols-4 gap-1.5">
                           {photosAccessories.map((p, i) => {
+                            const isCover = photosProduct.length === 0 && photosBox.length === 0 && i === 0;
                             const isBeingDragged = draggedPhotoRma?.url === p;
                             return (
                               <div 
@@ -2732,26 +2817,49 @@ export default function RmaEntry({
                                   setDraggedPhotoRma(null);
                                   setDragOverCategoryRma(null);
                                 }}
-                                className={`relative aspect-square rounded-lg border overflow-hidden group cursor-grab active:cursor-grabbing transition-all ${
+                                className={`relative aspect-square rounded-lg border overflow-hidden group cursor-grab active:cursor-grabbing transition-all bg-slate-950 ${
                                   isBeingDragged 
                                     ? 'opacity-40 scale-95 border-amber-400 ring-2 ring-amber-400' 
-                                    : 'border-slate-800 bg-slate-950 hover:border-slate-600'
+                                    : isCover
+                                    ? 'border-amber-400/80 ring-1 ring-amber-400/30'
+                                    : 'border-slate-800 hover:border-slate-600'
                                 }`}
-                                title="Arraste para mover para outra categoria"
+                                title="Clique na estrela para destacar ou arraste para mover de categoria"
                               >
                                 <img src={p} className="w-full h-full object-cover pointer-events-none select-none" draggable={false} />
-                                <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 rounded px-0.5 py-0.5 text-white pointer-events-none">
+                                <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-80 transition-opacity bg-black/60 rounded p-0.5 text-white pointer-events-none z-10">
                                   <GripVertical className="w-3 h-3" />
                                 </div>
+                                {isCover ? (
+                                  <div
+                                    className="absolute top-1 left-1 p-1 bg-amber-500 text-white rounded shadow-sm pointer-events-none z-10 flex items-center justify-center"
+                                    title="Foto de destaque principal"
+                                  >
+                                    <Star className="w-2.5 h-2.5 fill-white text-white" />
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSetCoverPhotoRma('accessories', i);
+                                    }}
+                                    className="absolute top-1 left-1 p-1 bg-black/60 hover:bg-amber-500 text-slate-300 hover:text-white rounded transition-all shadow-sm opacity-0 group-hover:opacity-100 max-sm:opacity-75 cursor-pointer z-20"
+                                    title="Definir como destaque principal"
+                                  >
+                                    <Star className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
                                 <button 
                                   type="button" 
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleRemovePhoto(i, 'accessories');
                                   }}
-                                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity cursor-pointer"
+                                  className="absolute top-1 right-1 p-0.5 bg-rose-600/90 text-white rounded hover:bg-rose-500 transition-colors shadow-md cursor-pointer opacity-80 hover:opacity-100 z-20"
+                                  title="Remover foto"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <X className="w-3 h-3" />
                                 </button>
                               </div>
                             );

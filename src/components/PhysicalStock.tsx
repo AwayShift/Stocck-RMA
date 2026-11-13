@@ -59,7 +59,7 @@ import ExcelImportModal from './ExcelImportModal';
 import ProductCompareModal from './ProductCompareModal';
 import { getPlatformFilterStyle, getSectorFilterStyle } from '../utils/filterColorHelpers';
 import { ImageZoomModal } from './ImageZoomModal';
-import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct, getResolvedUnitProductName, getOptimizedThumbnailUrl } from '../utils/productImages';
+import { getUnitResolvedPhotos, getBaseProductImages, findBaseProduct, getResolvedUnitProductName, getOptimizedThumbnailUrl, getAllBaseCatalogUrls } from '../utils/productImages';
 import { exportStockInventoryToExcel } from '../utils/excelHelpers';
 import { processSafeImageUrl } from '../lib/imageSecurityService';
 import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
@@ -1254,9 +1254,16 @@ export default function PhysicalStock({
         let finalPhotosBox = unit.photosBox || [];
         let finalPhotosAccessories = unit.photosAccessories || [];
 
-        // If moving to Principal or Outros with no previous photos, auto-reference base product images
-        if ((newSector === 'Principal' || newSector === 'Outros') && savedPhotosCount === 0 && baseImgs.productPhotos.length > 0) {
+        // Only auto-reference base product images when moving strictly to Principal with no previous photos
+        if (newSector === 'Principal' && savedPhotosCount === 0 && baseImgs.productPhotos.length > 0) {
           finalPhotosProduct = baseImgs.productPhotos;
+        } else if (newSector === 'Outros' && baseProd) {
+          const baseUrls = getAllBaseCatalogUrls(baseProd);
+          if (baseUrls.size > 0) {
+            finalPhotosProduct = finalPhotosProduct.filter(url => !baseUrls.has(url));
+            finalPhotosBox = finalPhotosBox.filter(url => !baseUrls.has(url));
+            finalPhotosAccessories = finalPhotosAccessories.filter(url => !baseUrls.has(url));
+          }
         }
 
         const transferMoment = new Date().toISOString();

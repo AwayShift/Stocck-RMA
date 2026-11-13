@@ -43,7 +43,8 @@ import {
 import { 
   getBaseProductImages, 
   findBaseProduct, 
-  getResolvedUnitProductName 
+  getResolvedUnitProductName,
+  getAllBaseCatalogUrls
 } from '../utils/productImages';
 import { uploadFileToStorage, uploadImageUrlToStorage } from '../lib/dbService';
 import { RichTextEditor } from './RichTextEditor';
@@ -165,6 +166,22 @@ export function StockUnitEditModal({
     const sanitizedNotes = cleanPendingBoilerplateFromNotes(unit.notes);
     const sanitizedCustomerReason = cleanPendingReasonFromCustomerReason(unit.customerReason);
 
+    let initialPhotosProduct = unit.photosProduct || [];
+    let initialPhotosBox = unit.photosBox || [];
+    let initialPhotosAccessories = unit.photosAccessories || [];
+
+    if (unit.destinationSector === 'Outros') {
+      const matchedProd = findBaseProduct(unit, products);
+      if (matchedProd) {
+        const baseUrls = getAllBaseCatalogUrls(matchedProd);
+        if (baseUrls.size > 0) {
+          initialPhotosProduct = initialPhotosProduct.filter(url => !baseUrls.has(url));
+          initialPhotosBox = initialPhotosBox.filter(url => !baseUrls.has(url));
+          initialPhotosAccessories = initialPhotosAccessories.filter(url => !baseUrls.has(url));
+        }
+      }
+    }
+
     setEditForm({
       ...unit,
       notes: sanitizedNotes,
@@ -173,6 +190,9 @@ export function StockUnitEditModal({
       originSector: sanitizedOriginSector,
       baseProductName: resolvedName,
       baseProductSku: resolvedSku,
+      photosProduct: initialPhotosProduct,
+      photosBox: initialPhotosBox,
+      photosAccessories: initialPhotosAccessories,
       platform: (((unit.platform as string) === 'Outro' ? 'Outros' : unit.platform) || '') as any,
     });
 

@@ -71,7 +71,10 @@ export function getBaseProductImages(product?: BaseProduct): {
   const boxPhotos = product.imagesBox || [];
   const accessoriesPhotos = product.imagesAccessories || [];
 
-  const main = productPhotos[0] || boxPhotos[0] || accessoriesPhotos[0] || product.imageUrl || null;
+  const allAvailable = [...productPhotos, ...boxPhotos, ...accessoriesPhotos];
+  const main = (product.imageUrl && allAvailable.includes(product.imageUrl))
+    ? product.imageUrl
+    : (productPhotos[0] || boxPhotos[0] || accessoriesPhotos[0] || product.imageUrl || null);
 
   return {
     main,
@@ -81,11 +84,23 @@ export function getBaseProductImages(product?: BaseProduct): {
   };
 }
 
+export function getAllBaseCatalogUrls(product?: BaseProduct): Set<string> {
+  const urls = new Set<string>();
+  if (!product) return urls;
+  if (product.imageUrl) urls.add(product.imageUrl);
+  (product.images || []).forEach(u => u && urls.add(u));
+  (product.imagesProduct || []).forEach(u => u && urls.add(u));
+  (product.imagesBox || []).forEach(u => u && urls.add(u));
+  (product.imagesAccessories || []).forEach(u => u && urls.add(u));
+  return urls;
+}
+
 /**
  * Resolves the display photos for a TriageUnit.
  * Only units whose destination is strictly 'Principal' (Estoque Principal) will use the base product's
  * registered image if they do not have separate triage photos.
- * Non-Principal items (Openbox, Sucata, Garantia, Doação, etc.) will NEVER fall back to the base product image.
+ * Non-Principal items (Openbox, RMA, Outros, etc.) will NEVER fall back to the base product image.
+ * For 'Outros', any previously auto-copied base catalog URLs are also excluded so only manually inserted photos appear.
  */
 export function getUnitResolvedPhotos(
   unit: TriageUnit,
@@ -99,6 +114,7 @@ export function getUnitResolvedPhotos(
   totalPhotosCount: number;
 } {
   const isPrincipal = unit.destinationSector === 'Principal';
+  const isOutros = unit.destinationSector === 'Outros';
 
   const unitHasProductPhotos = Array.isArray(unit.photosProduct) && unit.photosProduct.length > 0;
   const unitHasBoxPhotos = Array.isArray(unit.photosBox) && unit.photosBox.length > 0;
@@ -108,11 +124,13 @@ export function getUnitResolvedPhotos(
   let resolvedBoxPhotos = unit.photosBox || [];
   let resolvedAccPhotos = unit.photosAccessories || [];
   let isUsingBaseProductImage = false;
+  let inheritedBaseMain: string | null = null;
 
   // STRICT RULE: Only use base product image for units in Estoque Principal
   if (isPrincipal) {
     const baseProduct = findBaseProduct(unit, products);
     const baseImgs = getBaseProductImages(baseProduct);
+    inheritedBaseMain = baseImgs.main;
 
     if (!unitHasProductPhotos && baseImgs.productPhotos.length > 0) {
       resolvedProductPhotos = baseImgs.productPhotos;
@@ -124,10 +142,23 @@ export function getUnitResolvedPhotos(
     if (!unitHasAccPhotos && baseImgs.accessoriesPhotos.length > 0) {
       resolvedAccPhotos = baseImgs.accessoriesPhotos;
     }
+  } else if (isOutros) {
+    const baseProduct = findBaseProduct(unit, products);
+    if (baseProduct) {
+      const baseUrls = getAllBaseCatalogUrls(baseProduct);
+      if (baseUrls.size > 0) {
+        resolvedProductPhotos = resolvedProductPhotos.filter(url => !baseUrls.has(url));
+        resolvedBoxPhotos = resolvedBoxPhotos.filter(url => !baseUrls.has(url));
+        resolvedAccPhotos = resolvedAccPhotos.filter(url => !baseUrls.has(url));
+      }
+    }
   }
 
-  // Determine main photo strictly: for Principal it can come from base if resolved; for non-Principal it comes ONLY from actual triage unit photos
-  const mainPhoto = resolvedProductPhotos[0] || resolvedBoxPhotos[0] || resolvedAccPhotos[0] || null;
+  // Determine main photo strictly: for Principal it can come from base if resolved; for non-Principal it comes ONLY from actual manual triage unit photos
+  const allUnitResolved = [...resolvedProductPhotos, ...resolvedBoxPhotos, ...resolvedAccPhotos];
+  const mainPhoto = (!unitHasProductPhotos && isPrincipal && inheritedBaseMain && allUnitResolved.includes(inheritedBaseMain))
+    ? inheritedBaseMain
+    : (resolvedProductPhotos[0] || resolvedBoxPhotos[0] || resolvedAccPhotos[0] || null);
   const totalPhotosCount = resolvedProductPhotos.length + resolvedBoxPhotos.length + resolvedAccPhotos.length;
 
   return {
