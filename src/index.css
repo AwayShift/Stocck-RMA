@@ -4893,3 +4893,11 @@ html.light .highlighted-order-card {
   background-color: #f0f9ff !important;
 }
 
+
+/* Dashboard: movimento reduzido */
+@media (prefers-reduced-motion: reduce) {
+  #dashboard-container * {
+    transition-duration: 0.01ms !important;
+    transform: none !important;
+  }
+}
