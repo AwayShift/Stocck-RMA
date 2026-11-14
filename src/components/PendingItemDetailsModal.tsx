@@ -32,6 +32,7 @@ import { PendingItem, TriageUnit, BaseProduct } from '../types';
 import { ImageZoomModal } from './ImageZoomModal';
 import { cleanPendingReasonFromCustomerReason, cleanPendingBoilerplateFromNotes } from '../utils/pendingRegistrationHelper';
 import { normalizeStiCode } from '../utils/stiFormatter';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 export interface PendingItemDetailsModalProps {
   isOpen: boolean;
@@ -396,7 +397,7 @@ export const PendingItemDetailsModal: React.FC<PendingItemDetailsModalProps> = (
                 cleanNotes.startsWith('<') ? (
                   <div 
                     className="prose prose-sm prose-invert"
-                    dangerouslySetInnerHTML={{ __html: cleanNotes }} 
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(cleanNotes) }} 
                   />
                 ) : (
                   <p className="whitespace-pre-line">{cleanNotes}</p>

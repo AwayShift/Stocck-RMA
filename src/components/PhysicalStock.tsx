@@ -79,6 +79,7 @@ import { validatePendingItemLink, findPendingItemByRegistrationNumber, cleanPend
 import QuickRegisterSkuModal from './QuickRegisterSkuModal';
 import { StockUnitEditModal } from './StockUnitEditModal';
 import { StockUnitDetailsModal } from './StockUnitDetailsModal';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 export const isUnitPendingSkuRegistration = (unit: TriageUnit, productsList?: BaseProduct[]): boolean => {
   if (!unit) return false;
@@ -2702,7 +2703,7 @@ export default function PhysicalStock({
                                       ? 'text-slate-700 [&_strong]:text-slate-950 [&_strong]:font-bold [&_b]:text-slate-950 [&_b]:font-bold [&_em]:italic [&_em]:text-slate-900 [&_i]:italic [&_i]:text-slate-900 [&_u]:underline [&_p]:my-1 [&_p:first-child]:inline [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4' 
                                       : 'text-slate-300 [&_strong]:text-white [&_strong]:font-bold [&_b]:text-white [&_b]:font-bold [&_em]:italic [&_em]:text-slate-200 [&_i]:italic [&_i]:text-slate-200 [&_u]:underline [&_p]:my-1 [&_p:first-child]:inline [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4'
                                   }`}
-                                  dangerouslySetInnerHTML={{ __html: laudoData.html }}
+                                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(laudoData.html) }}
                                 />
                               ) : (
                                 <span className="text-slate-500 italic">Sem laudo informado</span>
@@ -3126,7 +3127,7 @@ export default function PhysicalStock({
                                       ? 'text-slate-700 [&_strong]:text-slate-900 [&_b]:text-slate-900' 
                                       : 'text-slate-300 [&_strong]:text-white [&_b]:text-white'
                                   }`}
-                                  dangerouslySetInnerHTML={{ __html: laudoData.html }}
+                                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(laudoData.html) }}
                                 />
                               ) : (
                                 <span className="text-slate-500 italic">Sem laudo</span>

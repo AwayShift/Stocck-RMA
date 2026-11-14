@@ -41,6 +41,7 @@ import { CategoryBadge } from './CategoryBadge';
 import { buildGroupedFilterCategories, checkCategoryFilterMatch } from '../utils/categoryTaxonomy';
 import { getOptimizedThumbnailUrl } from '../utils/productImages';
 import { isExactHashStiSearch } from '../utils/stiFormatter';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 interface BaseCatalogProps {
   products: BaseProduct[];
@@ -1915,7 +1916,7 @@ export default function BaseCatalog({
                         {viewingProduct.description && viewingProduct.description.trim() !== '' && viewingProduct.description !== '<p><br></p>' ? (
                           <div 
                             className="text-xs text-slate-300 leading-relaxed prose prose-invert prose-xs ql-editor"
-                            dangerouslySetInnerHTML={{ __html: viewingProduct.description }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingProduct.description) }}
                           />
                         ) : (
                           <p className="text-xs text-slate-500 italic">Nenhuma descrição técnica informada para este produto.</p>

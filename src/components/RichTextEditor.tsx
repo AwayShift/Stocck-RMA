@@ -19,6 +19,7 @@ import {
   Outdent,
   Type
 } from 'lucide-react';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 interface RichTextEditorProps {
   value: string;
@@ -65,7 +66,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   // Sync state with editor DOM
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value || '';
+      editorRef.current.innerHTML = sanitizeHtml(value);
     }
   }, [value]);
 

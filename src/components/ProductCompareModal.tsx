@@ -30,6 +30,7 @@ import { BaseProduct } from '../types';
 import { getBaseProductImages } from '../utils/productImages';
 import { ImageZoomModal } from './ImageZoomModal';
 import { cleanPendingBoilerplateFromNotes, cleanPendingReasonFromCustomerReason } from '../utils/pendingRegistrationHelper';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 export interface SelectedProductData {
   id?: string;
@@ -638,7 +639,7 @@ export default function ProductCompareModal({
                   {(() => {
                     const cleanNotes = cleanPendingBoilerplateFromNotes(selectedProduct.notes);
                     return cleanNotes && cleanNotes.trim() !== '' && cleanNotes !== '<p><br></p>' ? (
-                      <div dangerouslySetInnerHTML={{ __html: cleanNotes }} />
+                      <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(cleanNotes) }} />
                     ) : (
                       <span className="text-slate-400 italic">Sem laudo técnico descritivo registrado.</span>
                     );
@@ -843,7 +844,7 @@ export default function ProductCompareModal({
                       {currentBaseProduct.description && 
                        currentBaseProduct.description.trim() !== '' && 
                        currentBaseProduct.description !== '<p><br></p>' ? (
-                        <div dangerouslySetInnerHTML={{ __html: currentBaseProduct.description }} />
+                        <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentBaseProduct.description) }} />
                       ) : (
                         <span className="text-slate-400 italic">Sem descrição técnica cadastrada no catálogo.</span>
                       )}

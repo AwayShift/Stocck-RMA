@@ -40,6 +40,14 @@ Esta especificação descreve o modelo **atual** (Supabase: PostgreSQL + Auth + 
 - `/api/supabase-usage` (Vercel `api/` e `server.ts`): exige `Authorization: Bearer <sessão>`; valida no Supabase Auth e confere `app_role() = 'admin'`. Sem login → 401; outro papel → 403.
 - O `projectRef` é definido só pelo servidor (variáveis de ambiente); a requisição não escolhe o projeto.
 
+## 4b. Navegador: HTML e cabeçalhos
+
+- **HTML armazenado** (descrições, laudos, notas) só é exibido depois de passar por `sanitizeHtml` (`src/utils/sanitizeHtml.ts`, DOMPurify): remove scripts, `onerror`/`onclick` e `javascript:`, mantendo a formatação do editor. Vale para todo `dangerouslySetInnerHTML` e para o `innerHTML` do `RichTextEditor`. **Nunca** renderize HTML do banco sem ela.
+- **Cabeçalhos** (`vercel.json`, todas as rotas): `Content-Security-Policy` (scripts só `'self'`; conexões só `'self'`, `*.supabase.co` e `api.cloudinary.com`; imagens `https:`; `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` (câmera/microfone/localização desligados) e `Strict-Transport-Security`.
+- O único script inline do app foi movido para `public/compat.js` (a CSP não permite script inline). Para usar outro domínio de Supabase ou outro serviço externo, inclua-o em `connect-src`/`img-src` no `vercel.json`.
+- Navegar com texto malicioso gera avisos de CSP no console durante a análise do DOMPurify; são bloqueios inofensivos (nada é executado).
+- GitHub Pages não aplica esses cabeçalhos; a proteção completa vale no deploy da Vercel.
+
 ## 5. Trilha de auditoria
 
 - `createAuditLog` (`src/lib/dbService.ts`) grava em `audit_logs` **apenas ações sensíveis** (lista `SENSITIVE_AUDIT_ACTIONS`): mudança/exclusão de usuário e papel, limpezas totais (`RESET_*`) e operações de backup (restaurar, exportar, apagar, apagar em lote, limpeza rápida, limpeza de órfãos). É melhor esforço: nunca lança erro nem bloqueia a ação.
@@ -75,5 +83,7 @@ Esta especificação descreve o modelo **atual** (Supabase: PostgreSQL + Auth + 
 | 13 | Admin tenta apagar registros de `audit_logs` | 0 linhas afetadas (imutável) |
 | 14 | Usuário grava log com `user_id` de outra pessoa | Violação de RLS |
 | 15 | Promover alguém por SQL | Gatilho registra `USER_ROLE_CHANGED` |
+| 16 | Descrição com `<img onerror>`, `<script>` ou `javascript:` | Removidos na exibição; formatação normal preservada |
+| 17 | Embutir o app em um `<iframe>` de outro site | Bloqueado (`X-Frame-Options`/`frame-ancestors`) |
 
 Os cenários 1–10 e 13–15 foram verificados em um banco Supabase local de testes.

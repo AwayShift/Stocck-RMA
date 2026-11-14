@@ -49,6 +49,7 @@ import { isUnitPendingSkuRegistration, isRealStockTransfer, getFormattedLaudoHtm
 import { cleanPendingReasonFromCustomerReason } from '../utils/pendingRegistrationHelper';
 import { PendingItemDetailsModal } from './PendingItemDetailsModal';
 import { getCachedPendingItems } from '../lib/syncCacheService';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 export interface StockUnitDetailsModalProps {
   isOpen: boolean;
@@ -773,7 +774,7 @@ export function StockUnitDetailsModal({
                       ? 'bg-slate-50 border-slate-200 text-slate-800 prose-slate' 
                       : 'bg-slate-950 border-slate-800/60 text-slate-200 prose-invert'
                   }`}
-                  dangerouslySetInnerHTML={{ __html: laudoData.html }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(laudoData.html) }}
                 />
               );
             })()}
