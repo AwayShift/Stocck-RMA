@@ -2228,9 +2228,9 @@ html.light .pending-card-title {
 }
 
 html.light .pending-sku-badge {
-  background-color: #fef3c7 !important;
-  border-color: #fde68a !important;
-  color: #92400e !important;
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
   font-weight: 800 !important;
 }
 
@@ -2241,32 +2241,26 @@ html.light .pending-platform-badge {
   font-weight: 700 !important;
 }
 
-html.light .pending-platform-badge[data-platform="Mercado Livre"] {
-  background-color: #fefce8 !important;
-  border-color: #eab308 !important;
-  color: #713f12 !important;
-  font-weight: 800 !important;
+/* Plataforma: etiqueta neutra; a cor da plataforma aparece só no pontinho */
+.pending-platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
-
-html.light .pending-platform-badge[data-platform="Shopee"] {
-  background-color: #fff7ed !important;
-  border-color: #f97316 !important;
-  color: #9a3412 !important;
-  font-weight: 800 !important;
+.pending-platform-badge::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #64748b;
+  flex-shrink: 0;
 }
-
-html.dark .pending-platform-badge[data-platform="Mercado Livre"] {
-  background-color: rgba(250, 204, 21, 0.18) !important;
-  border-color: rgba(250, 204, 21, 0.6) !important;
-  color: #fde047 !important;
-  font-weight: 800 !important;
-}
-
-html.dark .pending-platform-badge[data-platform="Shopee"] {
-  background-color: rgba(249, 115, 22, 0.18) !important;
-  border-color: rgba(249, 115, 22, 0.6) !important;
-  color: #fdba74 !important;
-  font-weight: 800 !important;
+.pending-platform-badge[data-platform="Mercado Livre"]::before { background: #facc15; }
+.pending-platform-badge[data-platform="Shopee"]::before { background: #f97316; }
+html.dark .pending-platform-badge {
+  background-color: transparent !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
 }
 
 html.light .pending-voltage-badge {
@@ -2294,37 +2288,39 @@ html.light .pending-info-box .text-slate-400 {
 html.light .pending-reason-banner,
 html.light .bg-amber-500\/10.border-amber-500\/20 {
   background-color: #fffbeb !important;
-  border-color: #fcd34d !important;
+  border-color: #fde68a !important;
+  border-left-color: #f59e0b !important;
   box-shadow: 0 1px 2px rgba(217, 119, 6, 0.06) !important;
 }
 
 html.light .pending-reason-header,
 html.light .pending-reason-banner .text-amber-400,
 html.light .bg-amber-500\/10.border-amber-500\/20 .text-amber-400 {
-  color: #92400e !important;
-  font-weight: 900 !important;
+  color: #64748b !important;
+  font-weight: 700 !important;
 }
 
 html.light .pending-reason-header svg,
 html.light .pending-reason-banner svg {
-  color: #b45309 !important;
+  color: #64748b !important;
 }
 
 html.light .pending-reason-text,
 html.light .pending-reason-banner .text-amber-200\/90,
 html.light .bg-amber-500\/10.border-amber-500\/20 .text-amber-200\/90,
 html.light .bg-amber-500\/10.border-amber-500\/20 p {
-  color: #78350f !important;
+  color: #0f172a !important;
   font-weight: 700 !important;
 }
 
 html.light .pending-reason-banner-resolved {
-  background-color: #f0fdf4 !important;
-  border-color: #bbf7d0 !important;
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  border-left-color: #10b981 !important;
 }
 
 html.light .pending-reason-banner-resolved p {
-  color: #166534 !important;
+  color: #0f172a !important;
   font-weight: 600 !important;
 }
 
@@ -2353,20 +2349,22 @@ html.light select.bg-slate-950:focus {
 }
 
 html.light .pending-transfer-btn {
-  background-color: #059669 !important;
-  color: #ffffff !important;
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+  color: #047857 !important;
   font-weight: 800 !important;
 }
 
 html.light .pending-transfer-btn:hover {
-  background-color: #047857 !important;
+  background-color: #d1fae5 !important;
+  border-color: #34d399 !important;
 }
 
 /* Hide/Show Resolved Toggle & Banner in Light Mode */
 html.light #btn-toggle-hide-resolved[data-hidden="true"] {
-  background-color: #ecfdf5 !important;
-  border-color: #6ee7b7 !important;
-  color: #065f46 !important;
+  background-color: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
 }
 
 html.light #btn-toggle-hide-resolved:not([data-hidden="true"]) {
@@ -2382,18 +2380,18 @@ html.light #btn-toggle-hide-resolved:not([data-hidden="true"]):hover {
 }
 
 html.light .pending-hidden-resolved-banner {
-  background-color: #ecfdf5 !important;
-  border-color: #a7f3d0 !important;
-  color: #065f46 !important;
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #334155 !important;
 }
 
 html.light .pending-hidden-resolved-banner strong,
 html.light .pending-hidden-resolved-banner span {
-  color: #065f46 !important;
+  color: #334155 !important;
 }
 
 html.light .pending-hidden-resolved-banner button {
-  color: #059669 !important;
+  color: #0369a1 !important;
 }
 
 html.light #card-metric-resolvidos {
@@ -2467,7 +2465,7 @@ html.light #pendencias-table td div.text-amber-300\/90,
 html.light #pendencias-table td div.text-amber-300,
 html.light #pendencias-table td div.text-amber-400,
 html.light #pendencias-table td div.text-amber-800 {
-  color: #92400e !important; /* Deep rich amber-800: WCAG AAA contrast (7.2:1) on white */
+  color: #0f172a !important; /* Texto principal da coluna: neutro e de alto contraste */
   font-weight: 800 !important;
 }
 
@@ -4900,4 +4898,66 @@ html.light .highlighted-order-card {
     transition-duration: 0.01ms !important;
     transform: none !important;
   }
+}
+
+/* =========================================================================
+   PENDÊNCIAS: VISUAL NEUTRO, PRIORIDADE EM DESTAQUE
+   ========================================================================= */
+.pend-prio {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.pend-prio-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.pend-prio[data-priority="Urgente"] { background: #e11d48; border-color: #e11d48; color: #ffffff; }
+.pend-prio[data-priority="Alta"]    { background: #f59e0b; border-color: #f59e0b; color: #1c1100; }
+.pend-prio[data-priority="Média"]   { background: rgba(14, 165, 233, 0.15); border-color: rgba(56, 189, 248, 0.55); color: #7dd3fc; }
+.pend-prio[data-priority="Baixa"]   { background: transparent; border-color: #475569; color: #94a3b8; }
+html.light .pend-prio[data-priority="Média"]  { background: #e0f2fe; border-color: #38bdf8; color: #075985; }
+html.light .pend-prio[data-priority="Baixa"]  { background: #f8fafc; border-color: #cbd5e1; color: #475569; }
+
+html.light .pending-reg-badge {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.light .pending-reg-badge svg { color: #64748b !important; }
+
+html.light .pending-customer-box {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+html.light .pending-customer-box * { color: #475569 !important; }
+
+html.light .pending-card.border-l-rose-500 { border-left-color: #e11d48 !important; }
+html.light .pending-card.border-l-amber-500 { border-left-color: #f59e0b !important; }
+html.light tr.is-urgent-row { border-left-color: #e11d48 !important; }
+html.light tr.is-high-row { border-left-color: #f59e0b !important; }
+
+/* A cor da plataforma é regra global do app (span[data-platform]); na aba Pendências ela vira só o pontinho */
+html.dark #pendencias-container span.pending-platform-badge[data-platform] {
+  background-color: transparent !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+  font-weight: 600 !important;
+}
+html.light #pendencias-container span.pending-platform-badge[data-platform] {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+  font-weight: 600 !important;
 }
