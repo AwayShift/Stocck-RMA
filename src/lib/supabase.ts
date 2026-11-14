@@ -11,11 +11,9 @@ import { normalizeRegistrationNumber } from '../utils/pendingRegistrationHelper'
 export interface SupabaseConfig {
   url: string;
   anonKey: string;
-  personalAccessToken?: string;
 }
 
 const STORAGE_SUPABASE_CONFIG_KEY = 'stocckrma_supabase_config';
-const STORAGE_SUPABASE_PAT_KEY = 'stocckrma_supabase_pat';
 const STORAGE_DB_PROVIDER_KEY = 'stocckrma_active_db_provider';
 
 export type DatabaseProvider = 'supabase';
@@ -23,84 +21,33 @@ export type DatabaseProvider = 'supabase';
 // Default / fallback configurations or environment variables
 export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
   url: ((import.meta as any).env?.VITE_SUPABASE_URL as string) || '',
-  anonKey: ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string) || '',
-  personalAccessToken: ((import.meta as any).env?.VITE_SUPABASE_MANAGEMENT_TOKEN as string) || ''
+  anonKey: ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string) || ''
 };
 
-// In-memory runtime cache to guarantee resilience even if browser storage is blocked/sandboxed
-let inMemorySupabasePat: string = '';
-
-export const getSupabaseManagementToken = (): string => {
+/**
+ * Segurança: o token de gerenciamento (PAT) do Supabase NUNCA deve existir no navegador.
+ * Esta limpeza única remove resquícios de versões anteriores (localStorage, sessionStorage
+ * e o campo personalAccessToken salvo dentro da configuração do Supabase).
+ */
+const scrubLegacySupabasePat = (): void => {
+  if (typeof window === 'undefined') return;
   try {
-    if (inMemorySupabasePat && inMemorySupabasePat.trim()) {
-      return inMemorySupabasePat.trim();
-    }
-    const savedPat = localStorage.getItem(STORAGE_SUPABASE_PAT_KEY);
-    if (savedPat && savedPat.trim()) {
-      inMemorySupabasePat = savedPat.trim();
-      return inMemorySupabasePat;
-    }
-    const sessionPat = sessionStorage.getItem(STORAGE_SUPABASE_PAT_KEY);
-    if (sessionPat && sessionPat.trim()) {
-      inMemorySupabasePat = sessionPat.trim();
-      return inMemorySupabasePat;
-    }
-    const config = getSupabaseConfig();
-    if (config.personalAccessToken && config.personalAccessToken.trim()) {
-      inMemorySupabasePat = config.personalAccessToken.trim();
-      return inMemorySupabasePat;
-    }
-    const envToken = ((import.meta as any).env?.VITE_SUPABASE_MANAGEMENT_TOKEN as string) || '';
-    if (envToken && envToken.trim()) {
-      inMemorySupabasePat = envToken.trim();
-      return inMemorySupabasePat;
-    }
-  } catch (err) {
-    console.error('Error loading Supabase PAT:', err);
-  }
-  return '';
-};
-
-export const saveSupabaseManagementToken = (token: string): void => {
-  try {
-    let clean = token.trim();
-    clean = clean.replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim();
-    inMemorySupabasePat = clean;
-
-    if (clean) {
-      localStorage.setItem(STORAGE_SUPABASE_PAT_KEY, clean);
-      try {
-        sessionStorage.setItem(STORAGE_SUPABASE_PAT_KEY, clean);
-      } catch {}
-      
-      // Also save in SupabaseConfig so it is retained across all components
-      const config = getSupabaseConfig();
-      config.personalAccessToken = clean;
-      saveSupabaseConfig(config);
-      
-      window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: clean } }));
-
-      // Persist to central cloud database immediately
-      import('./integrationsConfigService').then(({ persistSystemIntegrationsToCloud }) => {
-        persistSystemIntegrationsToCloud({ supabasePat: clean }).catch(() => {});
-      }).catch(() => {});
-    } else {
-      // Explicit removal
-      localStorage.removeItem(STORAGE_SUPABASE_PAT_KEY);
-      try {
-        sessionStorage.removeItem(STORAGE_SUPABASE_PAT_KEY);
-      } catch {}
-      const config = getSupabaseConfig();
-      if (config.personalAccessToken) {
-        delete config.personalAccessToken;
-        saveSupabaseConfig(config);
+    localStorage.removeItem('stocckrma_supabase_pat');
+    sessionStorage.removeItem('stocckrma_supabase_pat');
+    const rawConfig = localStorage.getItem(STORAGE_SUPABASE_CONFIG_KEY);
+    if (rawConfig) {
+      const parsed = JSON.parse(rawConfig);
+      if (parsed && typeof parsed === 'object' && 'personalAccessToken' in parsed) {
+        delete parsed.personalAccessToken;
+        localStorage.setItem(STORAGE_SUPABASE_CONFIG_KEY, JSON.stringify(parsed));
       }
-      window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: '' } }));
     }
-  } catch (err) {
-    console.error('Error saving Supabase PAT:', err);
+  } catch {
+    // Storage indisponível: nada a limpar
   }
 };
+
+scrubLegacySupabasePat();
 
 export const extractSupabaseProjectRef = (url?: string): string => {
   const targetUrl = url || getSupabaseConfig().url;
@@ -186,10 +133,8 @@ export interface OfficialSupabaseUsage {
 
 export const fetchOfficialSupabaseUsage = async (
   customProjectRef?: string,
-  customToken?: string,
   customCalibration?: SupabaseCalibration | null
 ): Promise<OfficialSupabaseUsage> => {
-  const token = (customToken || getSupabaseManagementToken()).trim();
   const projectRef = (customProjectRef || extractSupabaseProjectRef()).trim();
   const activeCalibration = customCalibration !== undefined ? customCalibration : getLocalSupabaseCalibration();
 
@@ -202,8 +147,7 @@ export const fetchOfficialSupabaseUsage = async (
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        projectRef: projectRef || undefined, 
-        token: token || undefined, 
+        projectRef: projectRef || undefined,
         calibration: activeCalibration || undefined,
         calibratedEgressGb: activeCalibration?.egressGb
       })
@@ -335,7 +279,7 @@ export const fetchOfficialSupabaseUsage = async (
   const usageResult: OfficialSupabaseUsage = {
     isOfficial: true,
     tokenValid: true,
-    tokenSource: resultJson.tokenSource || (token ? 'manual_input' : 'vercel_environment'),
+    tokenSource: resultJson.tokenSource || 'server_environment',
     projectRef: resultJson.projectRef || projectRef,
     projectName: projectData?.name || `Stocck-RMA (${projectRef})`,
     projectStatus: resultJson.projectStatus || projectData?.status || 'Ativo',

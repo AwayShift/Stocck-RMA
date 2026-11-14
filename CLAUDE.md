@@ -23,7 +23,7 @@ npm run lint           # tsc --noEmit (único "lint"; não há suíte de testes)
 npm run track-changes  # atualiza DAILY_CHANGES.md / daily_changes.json
 ```
 
-Variáveis de ambiente: veja `.env.example` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SUPABASE_MANAGEMENT_TOKEN`, `VITE_CLOUDINARY_*`, `GEMINI_API_KEY`). Nunca commitar `.env`.
+Variáveis de ambiente: veja `.env.example` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_CLOUDINARY_*`, `GEMINI_API_KEY`). Nunca commitar `.env`. O PAT do Supabase (`SUPABASE_MANAGEMENT_TOKEN`) existe **apenas como variável de servidor** (usada por `/api/supabase-usage`): nunca usar prefixo `VITE_`, nunca salvar no navegador nem no banco.
 
 ## Estrutura
 
@@ -39,7 +39,7 @@ Variáveis de ambiente: veja `.env.example` (`VITE_SUPABASE_URL`, `VITE_SUPABASE
 - **Sem router**: a navegação é o estado `activeTab` (`'dashboard' | 'rma' | 'catalog' | 'stock' | 'pending' | 'movement'`), com duas barras de abas (`#desktop-navigation` em `xl`+, `#mobile-navigation` abaixo). Ao adicionar uma aba, atualize o tipo em `useState` **e** em `handleSwitchTab`, e as duas barras.
 - Troque de aba com `handleSwitchTab` (limpa unidade selecionada, filtros iniciais e restaura a rolagem da aba). Para ir ao estoque com contexto, use `selectedTriageUnit` / `initialStockFilters` (`platform`, `sector`, `searchTerm`, `pendingSku`).
 - `PhysicalStock` fica **sempre montado** (`display: none` fora da aba) para preservar estado e filtros; as demais abas montam/desmontam.
-- Papéis: `admin | operator | viewer`. `viewer` = modo visitante (`localStorage.stocckrma_guest_mode`), somente leitura. Há um e-mail de admin mestre fixo no código (`App.tsx`, fallback quando não há perfil).
+- Papéis: `admin | operator | viewer`, definidos **no banco** (`public.users.role`) e aplicados por RLS (`supabase_rls_hardening.sql`; reversão em `supabase_rls_rollback.sql`). `viewer` = somente leitura. Não há cadastro público (a tela de login só tem "Entrar"; o signup também deve estar desligado no painel do Supabase): usuários são criados por um admin em Authentication → Users, nascem `viewer` no primeiro login e só um admin promove (`UPDATE public.users SET role = 'operator' WHERE email = '...'`). O cliente nunca grava `role`, nem lê papel de `user_metadata`, e não existe e-mail de admin fixo no código. O modo visitante (sem login) foi removido.
 - **Dados no estado do App**: `products`, `triageUnits`, `dailyInflows`, `pendingItems`. Fluxo: cache local primeiro (`syncCacheService`) → delta sync em segundo plano (throttle 30s, foco da aba, a cada 5 min) → assinaturas realtime (`subscribe*`) + barramento entre abas. Mutações gravam via `dbService` e atualizam o estado local sem reler do banco; salvar uma triagem também reconcilia os vínculos com `pendingItems`.
 - Textos de UI em pt-BR; `id`s dos elementos são usados pelo CSS do tema claro (veja abaixo).
 
@@ -66,6 +66,13 @@ Variáveis de ambiente: veja `.env.example` (`VITE_SUPABASE_URL`, `VITE_SUPABASE
 4. **Colunas específicas** em listas (`select('id, name, sku, image_url')`), não `*`.
 5. **Imagens**: máx. **3MB**; converter para `.webp` via Canvas antes do upload; enviar ao Storage (`product-images`) e salvar só URL/path — **nunca base64 no banco**. Acima de 3MB, bloquear no cliente com alerta amigável.
 6. **Erros**: toda chamada ao Supabase dentro de `try...catch`.
+
+## Backup
+
+- Snapshots do app (`src/lib/backupService.ts`): criar = admin/operator; **restaurar, importar e apagar = só admin com confirmação de senha** (`src/lib/adminReauth.ts` + `<AdminReauthHost />` no `App.tsx`; as funções de serviço já chamam `ensureAdminReauthenticated`). A poda automática só roda para admin (chama `bulkDeleteCloudSnapshotsUnchecked`).
+- A API do Supabase limita **1000 linhas por requisição** (`.limit(20000)` é ignorado): leituras completas devem paginar com `.range()` (ver `fetchAllRowsComplete`) e conferir a contagem.
+- Restauração: confere hash, cria snapshot "Pré-restauração", grava (upsert tolerante a colunas inexistentes) e só então remove o que sobrou (modo substituir). Nunca apagar antes de gravar.
+- Backup externo criptografado: `.github/workflows/backup.yml` (segredos `SUPABASE_DB_URL` e `BACKUP_PASSPHRASE`). Passo a passo e restauração em `docs/BACKUP_RESTORE.md`.
 
 ## Convenções e avisos
 

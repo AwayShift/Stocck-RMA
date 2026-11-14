@@ -11,12 +11,9 @@ export default async function handler(req: any, res: any) {
     const body = req.body || {};
     const query = req.query || {};
 
-    // 1. Identify Token: Passed in request > Vercel Environment Variables
+    // 1. Identify Token: somente variáveis de ambiente do servidor (nunca da requisição)
     let patToken = (
-      body.token ||
-      query.token ||
       process.env.SUPABASE_MANAGEMENT_TOKEN ||
-      process.env.VITE_SUPABASE_MANAGEMENT_TOKEN ||
       process.env.SUPABASE_ACCESS_TOKEN ||
       process.env.SUPABASE_PAT ||
       process.env.SUPABASE_TOKEN ||
@@ -59,7 +56,7 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({
         success: false,
         tokenValid: false,
-        error: 'Nenhum Personal Access Token (PAT) encontrado. Defina a variável SUPABASE_MANAGEMENT_TOKEN no painel da Vercel ou envie o token na requisição.',
+        error: 'Nenhum Personal Access Token (PAT) encontrado. Defina a variável SUPABASE_MANAGEMENT_TOKEN no ambiente do servidor (painel da Vercel).',
         projectRef: ref,
         hasTokenInEnv: false
       });
@@ -72,7 +69,7 @@ export default async function handler(req: any, res: any) {
         tokenValid: false,
         error: 'A chave inserida começa com "eyJ", indicando ser uma chave de API do projeto (anon ou service_role) e não um Personal Access Token. Para métricas oficiais da conta, gere um PAT em supabase.com/dashboard/account/tokens (começa com "sbp_").',
         projectRef: ref,
-        tokenSource: Boolean(body.token || query.token) ? 'manual_input' : 'vercel_environment',
+        tokenSource: 'vercel_environment',
         hasTokenInEnv: true
       });
     }
@@ -95,7 +92,6 @@ export default async function handler(req: any, res: any) {
     // 3. Test token against Supabase Management API
     const projectTestRes = await fetch(`https://api.supabase.com/v1/projects/${ref}`, { headers });
     
-    const isExplicitToken = Boolean(body.token || query.token);
     if (projectTestRes.status === 403) {
       return res.status(403).json({
         success: false,
@@ -103,7 +99,7 @@ export default async function handler(req: any, res: any) {
         error: `O token é autêntico, porém a conta do Supabase não possui permissão de acesso ao projeto '${ref}'. Verifique se o token foi gerado na mesma conta proprietária deste projeto.`,
         httpStatus: 403,
         projectRef: ref,
-        tokenSource: isExplicitToken ? 'manual_input' : 'vercel_environment',
+        tokenSource: 'vercel_environment',
         hasTokenInEnv: true
       });
     }
@@ -112,12 +108,10 @@ export default async function handler(req: any, res: any) {
       return res.status(401).json({
         success: false,
         tokenValid: false,
-        error: isExplicitToken 
-          ? 'O Personal Access Token (PAT) informado não foi aceito pelo Supabase (HTTP 401 Unauthorized). Verifique se foi copiado integralmente (começa com sbp_) ou se expirou no painel do Supabase.'
-          : 'O Token do Supabase configurado na Vercel (SUPABASE_MANAGEMENT_TOKEN) é inválido ou expirou (HTTP 401 Unauthorized). Verifique o Personal Access Token na Vercel ou insira a Chave PAT no botão acima.',
+        error: 'O Token do Supabase configurado no servidor (SUPABASE_MANAGEMENT_TOKEN) é inválido ou expirou (HTTP 401 Unauthorized). Gere um novo Personal Access Token e atualize a variável de ambiente no servidor.',
         httpStatus: 401,
         projectRef: ref,
-        tokenSource: isExplicitToken ? 'manual_input' : 'vercel_environment',
+        tokenSource: 'vercel_environment',
         hasTokenInEnv: true
       });
     }
@@ -315,7 +309,7 @@ export default async function handler(req: any, res: any) {
     return res.json({
       success: true,
       tokenValid: true,
-      tokenSource: body.token ? 'manual_input' : 'vercel_environment',
+      tokenSource: 'vercel_environment',
       projectRef: ref,
       projectName: projectData?.name || `Stocck-RMA (${ref})`,
       projectStatus: projectData?.status || 'ACTIVE_HEALTHY',

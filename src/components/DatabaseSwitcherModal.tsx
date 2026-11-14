@@ -182,11 +182,9 @@ export default function DatabaseSwitcherModal({
         setDbSaveWarning('Conectado ao Supabase! Note que as tabelas ainda não foram criadas neste banco. Use o Script SQL fornecido abaixo no SQL Editor.');
       }
 
-      const currentConfig = getSupabaseConfig();
-      const newConfig: SupabaseConfig = { 
-        url: cleanUrl, 
-        anonKey: cleanAnonKey,
-        personalAccessToken: currentConfig.personalAccessToken
+      const newConfig: SupabaseConfig = {
+        url: cleanUrl,
+        anonKey: cleanAnonKey
       };
       saveSupabaseConfig(newConfig);
       setSupaConfig(newConfig);

@@ -19,3 +19,12 @@ yarn.lock
 *backup*
 *cache*
 !src/lib/backupService.ts
+# Backup externo: workflow e documentação PODEM ir ao repositório...
+!.github/workflows/backup.yml
+!docs/BACKUP_RESTORE.md
+# ...mas dumps do banco (mesmo criptografados) nunca devem ser commitados por engano
+*.dump
+*.dump.gpg
+
+# Banco Supabase local de testes (contem usuarios/senhas ficticios de teste)
+supabase/

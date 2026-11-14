@@ -38,13 +38,8 @@ import {
   mapPendingItemToSupabase,
   mapSupabaseToPendingItem
 } from './supabase';
-import {
-  getCachedBaseProducts,
-  getCachedTriageUnits,
-  getCachedDailyInflows,
-  getCachedPendingItems
-} from './syncCacheService';
 import { getCurrentActiveAuthUser } from './supabaseAuth';
+import { ensureAdminReauthenticated } from './adminReauth';
 
 const BACKUP_SCHEMA_VERSION = '1.2.0';
 const APP_IDENTIFIER = 'stocckrma-pro-flow';
@@ -151,6 +146,39 @@ export const chunkArray = <T>(arr: T[], size: number): T[][] => {
 };
 
 /**
+ * Lê TODAS as linhas de uma tabela em páginas de 1000 (limite da API do Supabase) e confere o total
+ * com a contagem exata. Se não conseguir ler tudo, lança erro em vez de devolver dados incompletos.
+ */
+const fetchAllRowsComplete = async (
+  supabase: NonNullable<ReturnType<typeof getSupabaseClient>>,
+  table: string
+): Promise<any[]> => {
+  const PAGE = 1000;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const rows: any[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`Falha ao ler "${table}" para o backup: ${error.message}`);
+      if (!data || data.length === 0) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+    }
+
+    const { count, error: countError } = await supabase
+      .from(table)
+      .select('id', { count: 'exact', head: true });
+    if (countError || count === null || rows.length >= count) {
+      return rows;
+    }
+  }
+  throw new Error(`Backup abortado: não foi possível ler todos os registros de "${table}". Tente novamente.`);
+};
+
+/**
  * Query current database records to assemble the complete backup payload
  */
 export const fetchCurrentDatabasePayload = async (userInfo?: {
@@ -179,54 +207,34 @@ export const fetchCurrentDatabasePayload = async (userInfo?: {
 
   const supabase = getSupabaseClient();
   if (supabase) {
-    const [pRes, uRes, iRes, cRes, lRes, pendRes] = await Promise.all([
-      supabase.from('products').select('*').limit(20000),
-      supabase.from('triage_units').select('*').limit(20000),
-      supabase.from('daily_inflows').select('*').limit(5000),
-      supabase.from('cases').select('*').limit(5000),
-      supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(200),
-      supabase.from('pending_items').select('*').limit(5000)
+    // A API do Supabase devolve no máximo 1000 linhas por requisição (o .limit() é ignorado acima disso).
+    // Por isso lemos em páginas e conferimos o total com a contagem exata: um backup truncado
+    // seria pior que nenhum (e a restauração no modo "substituir" apagaria o que ficou de fora).
+    const [pRows, uRows, iRows, cRows, pendRows, lRes] = await Promise.all([
+      fetchAllRowsComplete(supabase, 'products'),
+      fetchAllRowsComplete(supabase, 'triage_units'),
+      fetchAllRowsComplete(supabase, 'daily_inflows'),
+      fetchAllRowsComplete(supabase, 'cases'),
+      fetchAllRowsComplete(supabase, 'pending_items'),
+      supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(200)
     ]);
 
-    const cachedProds = getCachedBaseProducts();
-    const cachedUnits = getCachedTriageUnits();
-    const cachedInflows = getCachedDailyInflows();
-    const cachedPending = getCachedPendingItems();
+    products = pRows.map(mapSupabaseToProduct);
+    triageUnits = uRows.map(mapSupabaseToTriageUnit);
+    dailyInflows = iRows.map(mapSupabaseToDailyInflow);
+    cases = cRows.map(r => ({
+      id: r.id,
+      code: r.code,
+      platform: r.platform,
+      createdAt: r.created_at,
+      reason: r.reason,
+      resolution: r.resolution,
+      status: r.status,
+      notes: r.notes,
+      value: r.value
+    }));
+    pendingItems = pendRows.map(mapSupabaseToPendingItem);
 
-    if (pRes.data) {
-      const serverProds = pRes.data.map(mapSupabaseToProduct);
-      products = serverProds.length >= cachedProds.length ? serverProds : cachedProds;
-    } else if (cachedProds.length > 0) {
-      products = cachedProds;
-    }
-
-    if (uRes.data) {
-      const serverUnits = uRes.data.map(mapSupabaseToTriageUnit);
-      triageUnits = serverUnits.length >= cachedUnits.length ? serverUnits : cachedUnits;
-    } else if (cachedUnits.length > 0) {
-      triageUnits = cachedUnits;
-    }
-
-    if (iRes.data) {
-      const serverInflows = iRes.data.map(mapSupabaseToDailyInflow);
-      dailyInflows = serverInflows.length >= cachedInflows.length ? serverInflows : cachedInflows;
-    } else if (cachedInflows.length > 0) {
-      dailyInflows = cachedInflows;
-    }
-
-    if (cRes.data) {
-      cases = cRes.data.map(r => ({
-        id: r.id,
-        code: r.code,
-        platform: r.platform,
-        createdAt: r.created_at,
-        reason: r.reason,
-        resolution: r.resolution,
-        status: r.status,
-        notes: r.notes,
-        value: r.value
-      }));
-    }
     if (lRes.data) {
       logs = lRes.data.map(r => ({
         id: r.id,
@@ -236,12 +244,6 @@ export const fetchCurrentDatabasePayload = async (userInfo?: {
         details: r.details,
         timestamp: r.timestamp
       }));
-    }
-    if (pendRes.data) {
-      const serverPending = pendRes.data.map(mapSupabaseToPendingItem);
-      pendingItems = serverPending.length >= cachedPending.length ? serverPending : cachedPending;
-    } else if (cachedPending.length > 0) {
-      pendingItems = cachedPending;
     }
   }
 
@@ -366,7 +368,9 @@ export const generateAndDownloadBackup = exportDatabaseToJsonFile;
 /**
  * Fetch full reconstructed JSON payload for a cloud snapshot (aggregating chunks if chunked)
  */
-export const fetchCloudSnapshotPayloadJson = async (snapshot: CloudBackupRecord): Promise<string> => {
+export const fetchCloudSnapshotPayload = async (
+  snapshot: CloudBackupRecord
+): Promise<{ json: string; exact: boolean }> => {
   const supabase = getSupabaseClient();
   if (supabase) {
     if (snapshot.chunked || snapshot.totalChunks > 1) {
@@ -386,7 +390,8 @@ export const fetchCloudSnapshotPayloadJson = async (snapshot: CloudBackupRecord)
         });
         const fullJson = parts.join('');
         if (fullJson.length > 0) {
-          return fullJson;
+          // Fragmentos reconstroem o texto EXATO que foi gravado: o hash pode ser conferido.
+          return { json: fullJson, exact: true };
         }
       }
     }
@@ -399,17 +404,46 @@ export const fetchCloudSnapshotPayloadJson = async (snapshot: CloudBackupRecord)
       .maybeSingle();
 
     if (data && data.data) {
-      return typeof data.data === 'string' ? data.data : JSON.stringify(data.data, null, 2);
+      if (typeof data.data === 'string') {
+        return { json: data.data, exact: true };
+      }
+      // JSONB reordena as chaves: o texto não é idêntico ao original, então o hash não é conferível.
+      return { json: JSON.stringify(data.data, null, 2), exact: false };
     }
   }
 
   // Fallback to payloadJson if present
   if (snapshot.payloadJson && snapshot.payloadJson.trim() !== '' && snapshot.payloadJson !== '{}') {
-    return snapshot.payloadJson;
+    return { json: snapshot.payloadJson, exact: false };
   }
 
   throw new Error('O snapshot selecionado não contém conteúdo de dados válido ou seus fragmentos estão inacessíveis.');
 };
+
+export const fetchCloudSnapshotPayloadJson = async (snapshot: CloudBackupRecord): Promise<string> => {
+  return (await fetchCloudSnapshotPayload(snapshot)).json;
+};
+
+/**
+ * Confere o SHA-256 gravado no backup. Detecta corrupção e edições simples do conteúdo.
+ * Atenção: o hash não tem chave secreta; quem controla o arquivo/tabela pode recalculá-lo.
+ * A proteção contra adulteração intencional é a cópia externa criptografada (workflow de backup).
+ */
+export const verifyPayloadIntegrity = async (
+  payload: SystemBackupPayload
+): Promise<{ checked: boolean; ok: boolean }> => {
+  const expected = payload?.metadata?.integrityHash;
+  if (!expected) return { checked: false, ok: true };
+
+  const clone: SystemBackupPayload = JSON.parse(JSON.stringify(payload));
+  clone.metadata.integrityHash = '';
+  clone.metadata.fileSizeBytes = 0;
+  const actual = await calculateSha256(JSON.stringify(clone, null, 2));
+  return { checked: true, ok: actual === expected };
+};
+
+const INTEGRITY_ERROR_MESSAGE =
+  'Falha na verificação de integridade: o conteúdo deste backup não confere com o hash registrado (arquivo corrompido ou alterado). A restauração foi bloqueada. Use outro ponto de restauração ou exporte o backup novamente.';
 
 /**
  * Create a secure online cloud snapshot stored in Supabase `backup_snapshots`
@@ -674,6 +708,7 @@ export const subscribeToCloudBackups = (
  * Delete a specific Cloud Snapshot from Supabase (cascades to all chunk records)
  */
 export const deleteCloudSnapshot = async (snapshotId: string): Promise<boolean> => {
+  await ensureAdminReauthenticated('apagar backups');
   const supabase = getSupabaseClient();
   if (supabase) {
     const { error } = await supabase
@@ -918,7 +953,7 @@ export const fetchPaginatedCloudBackups = async (
 /**
  * Bulk delete cloud snapshots and their corresponding chunks in safe batches
  */
-export const bulkDeleteCloudSnapshots = async (
+const bulkDeleteCloudSnapshotsUnchecked = async (
   snapshotIds: string[],
   onProgress?: (deleted: number, total: number) => void
 ): Promise<{ success: boolean; deletedCount: number }> => {
@@ -962,12 +997,21 @@ export const bulkDeleteCloudSnapshots = async (
   return { success: true, deletedCount };
 };
 
+export const bulkDeleteCloudSnapshots = async (
+  snapshotIds: string[],
+  onProgress?: (deleted: number, total: number) => void
+): Promise<{ success: boolean; deletedCount: number }> => {
+  await ensureAdminReauthenticated('apagar backups');
+  return bulkDeleteCloudSnapshotsUnchecked(snapshotIds, onProgress);
+};
+
 /**
  * Detect and purge orphan chunks that have no corresponding master snapshot
  */
 export const purgeOrphanBackupChunks = async (
   onProgress?: (purged: number, total: number) => void
 ): Promise<{ success: boolean; purgedCount: number }> => {
+  await ensureAdminReauthenticated('apagar fragmentos de backup');
   const supabase = getSupabaseClient();
   if (!supabase) return { success: true, purgedCount: 0 };
 
@@ -1035,6 +1079,7 @@ export const quickCleanupBackups = async (
   policy: QuickCleanupPolicy,
   onProgress?: (processed: number, total: number) => void
 ): Promise<{ success: boolean; deletedCount: number; message: string }> => {
+  await ensureAdminReauthenticated('limpar backups');
   const supabase = getSupabaseClient();
   if (!supabase) return { success: false, deletedCount: 0, message: 'Supabase não conectado' };
 
@@ -1043,7 +1088,7 @@ export const quickCleanupBackups = async (
       const { error } = await supabase
         .from('backup_snapshots')
         .delete()
-        .neq('id', 'config_backup_schedule');
+        .not('id', 'in', '(config_backup_schedule,config_system_integrations)');
 
       if (error) throw error;
       return { success: true, deletedCount: 9999, message: 'Todos os backups e fragmentos foram eliminados do Supabase.' };
@@ -1287,12 +1332,95 @@ export const validateBackupFile = (
 };
 
 /**
- * Restore the database from a validated SystemBackupPayload into Supabase
+ * Upsert tolerante a colunas que não existem no banco (bancos criados em versões antigas do schema).
+ * Se o PostgREST/Postgres reclamar de uma coluna inexistente, ela é removida das linhas e a gravação
+ * é repetida (o mesmo comportamento do salvamento normal do app). Colunas opcionais, como
+ * origin_sector e created_by, também ficam preservadas em tags dentro de "notes".
+ */
+const upsertRowsResilient = async (
+  supabase: NonNullable<ReturnType<typeof getSupabaseClient>>,
+  table: string,
+  rows: any[],
+  knownMissing: Set<string>
+): Promise<void> => {
+  const strip = (list: any[]) =>
+    knownMissing.size === 0
+      ? list
+      : list.map((r) => {
+          const copy = { ...r };
+          knownMissing.forEach((col) => delete copy[col]);
+          return copy;
+        });
+
+  let current = strip(rows);
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const { error } = await supabase.from(table).upsert(current);
+    if (!error) return;
+
+    const message = error.message || '';
+    const missing =
+      /Could not find the '([A-Za-z0-9_]+)' column/.exec(message)?.[1] ||
+      /column "?([A-Za-z0-9_]+)"? of relation "[A-Za-z0-9_]+" does not exist/.exec(message)?.[1];
+
+    if (!missing || missing === 'id' || knownMissing.has(missing)) {
+      throw new Error(message);
+    }
+    knownMissing.add(missing);
+    current = strip(current);
+  }
+  throw new Error(`Colunas inexistentes demais em ${table}; verifique o schema do banco.`);
+};
+
+/**
+ * Remove de `table` as linhas cujo id NÃO está em `keepIds` (usado no modo "substituir").
+ * Só é chamado DEPOIS de todos os dados do backup terem sido gravados com sucesso.
+ */
+const pruneRowsNotInBackup = async (
+  supabase: NonNullable<ReturnType<typeof getSupabaseClient>>,
+  table: string,
+  keepIds: Set<string>
+): Promise<number> => {
+  const PAGE = 1000;
+  const idsToDelete: string[] = [];
+
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('id')
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`Erro ao listar registros de ${table}: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data) {
+      if (!keepIds.has(row.id)) idsToDelete.push(row.id);
+    }
+    if (data.length < PAGE) break;
+  }
+
+  let removed = 0;
+  for (const chunk of chunkArray(idsToDelete, 100)) {
+    const { error } = await supabase.from(table).delete().in('id', chunk);
+    if (error) throw new Error(`Erro ao remover registros antigos de ${table}: ${error.message}`);
+    removed += chunk.length;
+  }
+  return removed;
+};
+
+/**
+ * Restore the database from a validated SystemBackupPayload into Supabase.
+ *
+ * Segurança da restauração:
+ *  1. Só admin, com confirmação de senha.
+ *  2. Confere o hash de integridade do backup (quando existir).
+ *  3. Cria um snapshot "Pré-restauração" do estado atual; se falhar, NADA é alterado.
+ *  4. Grava primeiro os dados do backup (upsert). Qualquer erro interrompe e é informado.
+ *  5. No modo "substituir", só no FINAL remove o que não existe no backup (nunca apaga antes).
  */
 export const restoreDatabaseFromBackup = async (
   payload: SystemBackupPayload,
   mode: 'replace' | 'merge' = 'replace',
-  onProgress?: (stage: string, percent: number) => void
+  onProgress?: (stage: string, percent: number) => void,
+  options?: { skipIntegrityCheck?: boolean }
 ): Promise<{
   success: boolean;
   restoredCounts: {
@@ -1302,6 +1430,16 @@ export const restoreDatabaseFromBackup = async (
     cases: number;
   };
 }> => {
+  await ensureAdminReauthenticated('restaurar o banco a partir de um backup');
+
+  if (!options?.skipIntegrityCheck) {
+    onProgress?.('Verificando a integridade do backup...', 2);
+    const integrity = await verifyPayloadIntegrity(payload);
+    if (integrity.checked && !integrity.ok) {
+      throw new Error(INTEGRITY_ERROR_MESSAGE);
+    }
+  }
+
   const products = payload.data?.products || [];
   const triageUnits = payload.data?.triageUnits || [];
   const dailyInflows = payload.data?.dailyInflows || [];
@@ -1313,49 +1451,73 @@ export const restoreDatabaseFromBackup = async (
     throw new Error('Supabase client não está inicializado.');
   }
 
-  const BATCH_SIZE = 100;
+  const SAFETY_HINT = 'Seus dados atuais foram mantidos; o snapshot "Pré-restauração" permite voltar ao estado anterior.';
 
-  // 1. If REPLACE mode, clear tables first
-  if (mode === 'replace') {
-    onProgress?.('Limpando tabelas atuais no Supabase...', 10);
-    try {
-      await supabase.from('products').delete().neq('id', '___all___');
-      await supabase.from('triage_units').delete().neq('id', '___all___');
-      await supabase.from('daily_inflows').delete().neq('id', '___all___');
-      await supabase.from('cases').delete().neq('id', '___all___');
-      await supabase.from('pending_items').delete().neq('id', '___all___');
-    } catch (clearErr) {
-      console.warn('Clear tables warning in Supabase:', clearErr);
-    }
+  // 1. Snapshot de segurança do estado atual (obrigatório)
+  onProgress?.('Criando snapshot de segurança do estado atual...', 5);
+  try {
+    await createCloudSnapshot('manual', `Pré-restauração (automático) - ${formatFilenameTimestamp(new Date())}`);
+  } catch (snapErr: any) {
+    throw new Error(
+      `Restauração cancelada: não foi possível criar o snapshot de segurança do estado atual (${snapErr?.message || 'erro desconhecido'}). Nenhum dado foi alterado.`
+    );
   }
 
+  const BATCH_SIZE = 100;
+  const missingCols = {
+    products: new Set<string>(),
+    triage_units: new Set<string>(),
+    daily_inflows: new Set<string>(),
+    cases: new Set<string>(),
+    pending_items: new Set<string>()
+  };
+  const keepIds = {
+    products: new Set<string>(),
+    triage_units: new Set<string>(),
+    daily_inflows: new Set<string>(),
+    cases: new Set<string>(),
+    pending_items: new Set<string>()
+  };
+
   // 2. Restore Products
-  onProgress?.(`Restaurando ${products.length} produtos no Catálogo de Base (Supabase)...`, 30);
+  onProgress?.(`Restaurando ${products.length} produtos no Catálogo de Base (Supabase)...`, 20);
   for (const chunk of chunkArray(products, BATCH_SIZE)) {
     const rows = chunk.map(mapProductToSupabase);
-    const { error } = await supabase.from('products').upsert(rows);
-    if (error) throw new Error(`Erro ao restaurar produtos no Supabase: ${error.message}`);
+    try {
+      await upsertRowsResilient(supabase, 'products', rows, missingCols.products);
+    } catch (error: any) {
+      throw new Error(`Erro ao restaurar produtos no Supabase: ${error.message}. ${SAFETY_HINT}`);
+    }
+    rows.forEach((r: any) => keepIds.products.add(r.id));
   }
 
   // 3. Restore Triage Units
-  onProgress?.(`Restaurando ${triageUnits.length} unidades do Estoque Físico & Triagem (Supabase)...`, 60);
+  onProgress?.(`Restaurando ${triageUnits.length} unidades do Estoque Físico & Triagem (Supabase)...`, 40);
   for (const chunk of chunkArray(triageUnits, BATCH_SIZE)) {
     const rows = chunk.map(mapTriageUnitToSupabase);
-    const { error } = await supabase.from('triage_units').upsert(rows);
-    if (error) throw new Error(`Erro ao restaurar unidades no Supabase: ${error.message}`);
+    try {
+      await upsertRowsResilient(supabase, 'triage_units', rows, missingCols.triage_units);
+    } catch (error: any) {
+      throw new Error(`Erro ao restaurar unidades no Supabase: ${error.message}. ${SAFETY_HINT}`);
+    }
+    rows.forEach((r: any) => keepIds.triage_units.add(r.id));
   }
 
   // 4. Restore Daily Inflows
-  onProgress?.(`Restaurando ${dailyInflows.length} registros de fluxo diário (Supabase)...`, 80);
+  onProgress?.(`Restaurando ${dailyInflows.length} registros de fluxo diário (Supabase)...`, 60);
   for (const chunk of chunkArray(dailyInflows, BATCH_SIZE)) {
     const rows = chunk.map(mapDailyInflowToSupabase);
-    const { error } = await supabase.from('daily_inflows').upsert(rows);
-    if (error) throw new Error(`Erro ao restaurar fluxos diários no Supabase: ${error.message}`);
+    try {
+      await upsertRowsResilient(supabase, 'daily_inflows', rows, missingCols.daily_inflows);
+    } catch (error: any) {
+      throw new Error(`Erro ao restaurar fluxos diários no Supabase: ${error.message}. ${SAFETY_HINT}`);
+    }
+    rows.forEach((r: any) => keepIds.daily_inflows.add(r.id));
   }
 
   // 5. Restore Cases
   if (cases.length > 0) {
-    onProgress?.(`Restaurando ${cases.length} casos de garantia (Supabase)...`, 90);
+    onProgress?.(`Restaurando ${cases.length} casos de garantia (Supabase)...`, 70);
     for (const chunk of chunkArray(cases, BATCH_SIZE)) {
       const rows = chunk.map(c => ({
         id: c.id,
@@ -1368,18 +1530,47 @@ export const restoreDatabaseFromBackup = async (
         notes: c.notes,
         value: c.value
       }));
-      const { error } = await supabase.from('cases').upsert(rows);
-      if (error) throw new Error(`Erro ao restaurar casos no Supabase: ${error.message}`);
+      try {
+        await upsertRowsResilient(supabase, 'cases', rows, missingCols.cases);
+      } catch (error: any) {
+        throw new Error(`Erro ao restaurar casos no Supabase: ${error.message}. ${SAFETY_HINT}`);
+      }
+      rows.forEach((r) => keepIds.cases.add(r.id));
     }
   }
 
   // 6. Restore Pending Items
   if (pendingItems.length > 0) {
-    onProgress?.(`Restaurando ${pendingItems.length} itens de pendências (Supabase)...`, 95);
+    onProgress?.(`Restaurando ${pendingItems.length} itens de pendências (Supabase)...`, 80);
     for (const chunk of chunkArray(pendingItems, BATCH_SIZE)) {
       const rows = chunk.map(mapPendingItemToSupabase);
-      const { error } = await supabase.from('pending_items').upsert(rows);
-      if (error) throw new Error(`Erro ao restaurar pendências no Supabase: ${error.message}`);
+      try {
+        await upsertRowsResilient(supabase, 'pending_items', rows, missingCols.pending_items);
+      } catch (error: any) {
+        throw new Error(`Erro ao restaurar pendências no Supabase: ${error.message}. ${SAFETY_HINT}`);
+      }
+      rows.forEach((r: any) => keepIds.pending_items.add(r.id));
+    }
+  }
+
+  // 7. Modo "substituir": só agora remove o que não existe no backup
+  if (mode === 'replace') {
+    onProgress?.('Removendo registros que não existem no backup...', 90);
+    try {
+      await pruneRowsNotInBackup(supabase, 'products', keepIds.products);
+      await pruneRowsNotInBackup(supabase, 'triage_units', keepIds.triage_units);
+      await pruneRowsNotInBackup(supabase, 'daily_inflows', keepIds.daily_inflows);
+      // Coleções ausentes em backups antigos NÃO são tocadas (o backup não as cobre)
+      if (Array.isArray(payload.data?.cases)) {
+        await pruneRowsNotInBackup(supabase, 'cases', keepIds.cases);
+      }
+      if (Array.isArray(payload.data?.pendingItems)) {
+        await pruneRowsNotInBackup(supabase, 'pending_items', keepIds.pending_items);
+      }
+    } catch (pruneErr: any) {
+      throw new Error(
+        `Os dados do backup foram restaurados, mas a limpeza dos registros extras falhou: ${pruneErr?.message || 'erro desconhecido'}. Rode a restauração novamente ou use o snapshot "Pré-restauração".`
+      );
     }
   }
 
@@ -1427,10 +1618,21 @@ export const restoreFromCloudSnapshot = async (
   mode: 'replace' | 'merge' = 'replace',
   onProgress?: (stage: string, percent: number) => void
 ) => {
+  await ensureAdminReauthenticated('restaurar o banco a partir de um backup');
+
   onProgress?.('Carregando e integrando fragmentos do backup da nuvem...', 5);
-  const jsonContent = await fetchCloudSnapshotPayloadJson(snapshot);
-  const parsedPayload = JSON.parse(jsonContent) as SystemBackupPayload;
-  return await restoreDatabaseFromBackup(parsedPayload, mode, onProgress);
+  const { json, exact } = await fetchCloudSnapshotPayload(snapshot);
+
+  // O texto reconstruído dos fragmentos é idêntico ao gravado: confere o SHA-256 registrado.
+  if (exact && snapshot.integrityHash) {
+    const actual = await calculateSha256(json);
+    if (actual !== snapshot.integrityHash) {
+      throw new Error(INTEGRITY_ERROR_MESSAGE);
+    }
+  }
+
+  const parsedPayload = JSON.parse(json) as SystemBackupPayload;
+  return await restoreDatabaseFromBackup(parsedPayload, mode, onProgress, { skipIntegrityCheck: true });
 };
 
 /**
@@ -1477,7 +1679,7 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
       config.lastRun.hourly = now.toISOString();
       config.lastBackupStatus = `Último backup por hora executado em ${formatBrDate(now)}`;
       await saveAutoBackupConfig(config);
-      await triggerAutoPrune(config.retentionKeepCount || 15);
+      await triggerAutoPrune(config.retentionKeepCount || 15, userInfo?.role);
       return { triggered: true, type: 'hourly', snapshotId: res.snapshot.id };
     }
   }
@@ -1498,7 +1700,7 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
       config.lastRun.endOfDay = now.toISOString();
       config.lastBackupStatus = `Backup de fim do expediente executado em ${formatBrDate(now)}`;
       await saveAutoBackupConfig(config);
-      await triggerAutoPrune(config.retentionKeepCount || 15);
+      await triggerAutoPrune(config.retentionKeepCount || 15, userInfo?.role);
       return { triggered: true, type: 'end_of_day', snapshotId: res.snapshot.id };
     }
   }
@@ -1520,7 +1722,7 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
       config.lastRun.weekly = now.toISOString();
       config.lastBackupStatus = `Backup semanal executado em ${formatBrDate(now)}`;
       await saveAutoBackupConfig(config);
-      await triggerAutoPrune(config.retentionKeepCount || 15);
+      await triggerAutoPrune(config.retentionKeepCount || 15, userInfo?.role);
       return { triggered: true, type: 'weekly', snapshotId: res.snapshot.id };
     }
   }
@@ -1543,7 +1745,7 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
       config.lastRun.monthly = now.toISOString();
       config.lastBackupStatus = `Backup mensal executado em ${formatBrDate(now)}`;
       await saveAutoBackupConfig(config);
-      await triggerAutoPrune(config.retentionKeepCount || 15);
+      await triggerAutoPrune(config.retentionKeepCount || 15, userInfo?.role);
       return { triggered: true, type: 'monthly', snapshotId: res.snapshot.id };
     }
   }
@@ -1551,8 +1753,10 @@ export const checkAndRunScheduledBackups = async (userInfo?: {
   return { triggered: false };
 };
 
-const triggerAutoPrune = async (keepCount: number) => {
+const triggerAutoPrune = async (keepCount: number, role?: string) => {
   try {
+    // Apagar backups é exclusivo do admin (RLS). Para os demais papéis a poda seria bloqueada em silêncio.
+    if (role !== 'admin') return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
     const { data: oldAutomated } = await supabase
@@ -1565,7 +1769,7 @@ const triggerAutoPrune = async (keepCount: number) => {
       .range(keepCount, keepCount + 50);
 
     if (oldAutomated && oldAutomated.length > 0) {
-      await bulkDeleteCloudSnapshots(oldAutomated.map((r: any) => r.id));
+      await bulkDeleteCloudSnapshotsUnchecked(oldAutomated.map((r: any) => r.id));
     }
   } catch (err) {
     console.warn('Silent catch during triggerAutoPrune:', err);

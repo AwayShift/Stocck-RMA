@@ -2368,10 +2368,10 @@ export const subscribeToUsers = (callback: (users: UserAccount[]) => void) => {
 
 export const updateUserRoleInDb = async (
   uid: string, 
-  newRole: 'admin' | 'operator',
+  newRole: 'admin' | 'operator' | 'viewer',
   targetEmail?: string
 ): Promise<void> => {
-  const roleLabel = newRole === 'admin' ? 'Administrador (Acesso Total)' : 'Logística / Operador';
+  const roleLabel = newRole === 'admin' ? 'Administrador (Acesso Total)' : newRole === 'viewer' ? 'Somente Leitura' : 'Logística / Operador';
   const supabase = getSupabaseClient();
   if (supabase) {
     await supabase.from('users').update({
@@ -2405,12 +2405,11 @@ export const deleteUserDocumentFromDb = async (uid: string, targetEmail?: string
 
 export const ensureUserProfileExists = async (currentUser: any): Promise<UserAccount | null> => {
   if (!currentUser || !currentUser.uid) return null;
-  const isMasterAdmin = currentUser.email === 'alessandro.away6@gmail.com';
   const initialProfile: UserAccount = {
     uid: currentUser.uid,
     email: currentUser.email || '',
     name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Operador Corporativo',
-    role: isMasterAdmin ? 'admin' : 'operator',
+    role: 'viewer',
     createdAt: new Date().toISOString(),
     lastLogin: new Date().toISOString()
   };
@@ -2432,13 +2431,10 @@ export const ensureUserProfileExists = async (currentUser: any): Promise<UserAcc
         }
         return initialProfile;
       } else {
-        const role = isMasterAdmin ? 'admin' : (data.role || 'operator');
+        const role = data.role || 'viewer';
         try {
-          if (isMasterAdmin && data.role !== 'admin') {
-            await supabase.from('users').update({ role: 'admin', last_login: new Date().toISOString() }).eq('uid', currentUser.uid);
-          } else {
-            await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('uid', currentUser.uid);
-          }
+          // O papel não é gravado pelo cliente: só um admin altera users.role (RLS).
+          await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('uid', currentUser.uid);
           recordDbOperation('write', 1);
         } catch (e) {
           // ignore

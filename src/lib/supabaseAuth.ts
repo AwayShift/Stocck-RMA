@@ -38,13 +38,6 @@ export const getCurrentActiveAuthUser = async (): Promise<{ uid: string; email: 
   if (cachedCurrentSupabaseUser) {
     return cachedCurrentSupabaseUser;
   }
-  if (typeof window !== 'undefined' && localStorage.getItem('stocckrma_guest_mode') === 'true') {
-    return {
-      uid: 'guest',
-      email: 'visitante@stocckrma.local',
-      name: 'Visitante'
-    };
-  }
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
@@ -117,39 +110,7 @@ export const signInWithSupabase = async (
   });
 
   if (error) {
-    // If user not found and it is the master admin or a fresh setup, attempt auto-signup
-    if (
-      error.message.includes('Invalid login credentials') ||
-      error.message.includes('User not found') ||
-      error.message.includes('invalid_grant')
-    ) {
-      // Check if user exists in the custom users table for fallback validation
-      const { data: dbUser } = await supabase
-        .from('users')
-        .select('uid, email, name, role')
-        .eq('email', cleanEmail)
-        .maybeSingle();
-
-      if (!dbUser && cleanEmail === 'alessandro.away6@gmail.com') {
-        // Automatically create master admin account in Supabase
-        const signUpRes = await supabase.auth.signUp({
-          email: cleanEmail,
-          password: password.trim(),
-          options: {
-            data: {
-              name: 'Alessandro (Administrador Master)',
-              role: 'admin'
-            }
-          }
-        });
-
-        if (signUpRes.data.user) {
-          const profile = await syncUserProfileInDb(signUpRes.data.user, 'Alessandro (Administrador Master)', 'admin');
-          return { user: signUpRes.data.user, profile };
-        }
-      }
-    }
-
+    // Contas só são criadas por um administrador no painel do Supabase (sem cadastro público).
     throw new Error(translateAuthError(error));
   }
 
@@ -161,64 +122,6 @@ export const signInWithSupabase = async (
   const profile = await syncUserProfileInDb(data.user);
   setCachedAuthUser({ uid: data.user.id, email: data.user.email || cleanEmail, name: profile.name });
   return { user: data.user, profile };
-};
-
-/**
- * Sign up a new user account in Supabase
- */
-export const signUpWithSupabase = async (
-  email: string,
-  password: string,
-  name: string,
-  role: 'admin' | 'operator' = 'operator'
-): Promise<{ user: User | null; profile: UserAccount }> => {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    throw new Error('Cliente Supabase não configurado.');
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-  const finalRole = cleanEmail === 'alessandro.away6@gmail.com' ? 'admin' : role;
-
-  const { data, error } = await supabase.auth.signUp({
-    email: cleanEmail,
-    password: password.trim(),
-    options: {
-      data: {
-        name: name.trim() || cleanEmail.split('@')[0],
-        role: finalRole
-      }
-    }
-  });
-
-  if (error) {
-    throw new Error(translateAuthError(error));
-  }
-
-  const user = data.user;
-  const uid = user?.id || `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-
-  const profileRecord: UserAccount = {
-    uid,
-    email: cleanEmail,
-    name: name.trim() || (user?.user_metadata?.name as string) || cleanEmail.split('@')[0],
-    role: finalRole,
-    createdAt: new Date().toISOString(),
-    lastLogin: new Date().toISOString()
-  };
-
-  if (user) {
-    setCachedAuthUser({ uid: user.id, email: cleanEmail, name: profileRecord.name });
-  }
-
-  // Upsert into users table
-  try {
-    await supabase.from('users').upsert(mapUserToSupabase(profileRecord));
-  } catch (dbErr) {
-    console.warn('Warning syncing registered user to users table:', dbErr);
-  }
-
-  return { user, profile: profileRecord };
 };
 
 /**
@@ -269,20 +172,20 @@ export const reauthenticateSupabaseUser = async (password: string): Promise<bool
  */
 export const syncUserProfileInDb = async (
   user: User, 
-  fallbackName?: string, 
-  forcedRole?: 'admin' | 'operator'
+  fallbackName?: string
 ): Promise<UserAccount> => {
   const supabase = getSupabaseClient();
-  const isMasterAdmin = user.email === 'alessandro.away6@gmail.com';
   const metadata = user.user_metadata || {};
-  const determinedRole = forcedRole || (isMasterAdmin ? 'admin' : (metadata.role || 'operator'));
+  // O papel NUNCA vem de user_metadata (editável pelo próprio usuário) nem de e-mail fixo no código.
+  // Padrão seguro: viewer. O papel real é lido de public.users (alterado só por um admin).
+  const determinedRole: UserAccount['role'] = 'viewer';
   const determinedName = fallbackName || metadata.name || user.email?.split('@')[0] || 'Operador Corporativo';
 
   const defaultProfile: UserAccount = {
     uid: user.id,
     email: user.email || '',
     name: determinedName,
-    role: (isMasterAdmin ? 'admin' : determinedRole) as 'admin' | 'operator',
+    role: determinedRole,
     createdAt: user.created_at || new Date().toISOString(),
     lastLogin: new Date().toISOString()
   };
@@ -304,19 +207,19 @@ export const syncUserProfileInDb = async (
       return defaultProfile;
     } else {
       // Update last login
-      const currentRole = isMasterAdmin ? 'admin' : (existing.role || 'operator');
+      const currentRole = existing.role || 'viewer';
       const updatedProfile: UserAccount = {
         uid: existing.uid,
         email: existing.email || user.email || '',
         name: existing.name || determinedName,
-        role: currentRole as 'admin' | 'operator',
+        role: currentRole as UserAccount['role'],
         createdAt: existing.created_at || user.created_at || '',
         lastLogin: new Date().toISOString()
       };
 
+      // O papel não é gravado pelo cliente: só um admin altera users.role (RLS).
       await supabase.from('users').update({
         last_login: new Date().toISOString(),
-        role: currentRole,
         updated_at: new Date().toISOString()
       }).eq('uid', user.id);
 
@@ -343,8 +246,58 @@ export const subscribeToSupabaseAuth = (
   let hasEmittedInitialState = false;
   let lastEmittedUserId: string | null = null;
   let cachedProfile: UserAccount | null = null;
+  let resolving: Promise<void> | null = null;
 
-  // 1. Fallback timer: guarantee the loading screen resolves within 2.5 seconds maximum
+  // Perfil provisório (somente leitura). Só é usado se o banco demorar demais ou falhar.
+  const fallbackProfileFor = (u: User): UserAccount => ({
+    uid: u.id,
+    email: u.email || '',
+    name: (u.user_metadata?.name as string) || u.email?.split('@')[0] || 'Operador',
+    role: 'viewer',
+    createdAt: u.created_at || new Date().toISOString()
+  });
+
+  // Só avisa o app depois de ler o papel REAL no banco (evita a tela "Somente leitura" piscar
+  // para quem é operator/admin). Se o banco demorar mais de 4s, usa o perfil provisório e
+  // atualiza assim que o banco responder.
+  const emitResolvedUser = (u: User): Promise<void> => {
+    if (lastEmittedUserId === u.id && cachedProfile) return Promise.resolve();
+    if (resolving) return resolving;
+
+    const fallback = fallbackProfileFor(u);
+    setCachedAuthUser({ uid: u.id, email: u.email || '', name: fallback.name });
+
+    resolving = (async () => {
+      const syncPromise = syncUserProfileInDb(u).catch(() => null);
+      const dbProfile = await Promise.race([
+        syncPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
+      ]);
+
+      const profile = dbProfile || fallback;
+      cachedProfile = profile;
+      lastEmittedUserId = u.id;
+      hasEmittedInitialState = true;
+      setCachedAuthUser({ uid: u.id, email: u.email || '', name: profile.name });
+      onUserChanged(u, profile);
+
+      if (!dbProfile) {
+        syncPromise.then((late) => {
+          if (late && lastEmittedUserId === u.id) {
+            cachedProfile = late;
+            setCachedAuthUser({ uid: u.id, email: u.email || '', name: late.name });
+            onUserChanged(u, late);
+          }
+        });
+      }
+    })().finally(() => {
+      resolving = null;
+    });
+
+    return resolving;
+  };
+
+  // 1. Fallback timer: se o Supabase nem responder a sessão, libera a tela de login em 2.5s
   const authTimeout = setTimeout(() => {
     if (!hasEmittedInitialState) {
       hasEmittedInitialState = true;
@@ -352,34 +305,13 @@ export const subscribeToSupabaseAuth = (
     }
   }, 2500);
 
-  // 2. Direct session probe for immediate 0ms resolution
-  supabase.auth.getSession().then(({ data: { session } }) => {
+  // 2. Sondagem direta da sessão
+  supabase.auth.getSession().then(async ({ data: { session } }) => {
     if (hasEmittedInitialState) return;
     clearTimeout(authTimeout);
-    
-    if (session?.user) {
-      const u = session.user;
-      const quickProfile: UserAccount = {
-        uid: u.id,
-        email: u.email || '',
-        name: (u.user_metadata?.name as string) || u.email?.split('@')[0] || 'Operador',
-        role: (u.email === 'alessandro.away6@gmail.com' ? 'admin' : ((u.user_metadata?.role as any) || 'operator')),
-        createdAt: u.created_at || new Date().toISOString()
-      };
-      lastEmittedUserId = u.id;
-      cachedProfile = quickProfile;
-      setCachedAuthUser({ uid: u.id, email: u.email || '', name: quickProfile.name });
-      hasEmittedInitialState = true;
-      onUserChanged(u, quickProfile);
 
-      // Background profile sync
-      syncUserProfileInDb(u).then((dbProfile) => {
-        if (dbProfile) {
-          cachedProfile = dbProfile;
-          setCachedAuthUser({ uid: u.id, email: u.email || '', name: dbProfile.name });
-          onUserChanged(u, dbProfile);
-        }
-      }).catch(() => {});
+    if (session?.user) {
+      await emitResolvedUser(session.user);
     } else {
       hasEmittedInitialState = true;
       onUserChanged(null, null);
@@ -392,39 +324,23 @@ export const subscribeToSupabaseAuth = (
     }
   });
 
-  // 3. Realtime listener for subsequent auth transitions (sign in, sign out, token refresh)
+  // 3. Listener para transições posteriores (login, logout, renovação de token)
   const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
     clearTimeout(authTimeout);
     const currentUser = session?.user || null;
 
     if (currentUser) {
-      const quickProfile: UserAccount = {
-        uid: currentUser.id,
-        email: currentUser.email || '',
-        name: (currentUser.user_metadata?.name as string) || currentUser.email?.split('@')[0] || 'Operador',
-        role: (currentUser.email === 'alessandro.away6@gmail.com' ? 'admin' : ((currentUser.user_metadata?.role as any) || 'operator')),
-        createdAt: currentUser.created_at || new Date().toISOString()
-      };
-
-      setCachedAuthUser({
-        uid: currentUser.id,
-        email: currentUser.email || '',
-        name: quickProfile.name
-      });
-
-      // Immediate UI update
-      if (!hasEmittedInitialState || lastEmittedUserId !== currentUser.id) {
-        hasEmittedInitialState = true;
-        lastEmittedUserId = currentUser.id;
-        onUserChanged(currentUser, cachedProfile || quickProfile);
-      }
-
-      // If token refreshed and profile is already loaded, skip re-querying
-      if (event === 'TOKEN_REFRESHED' && cachedProfile) {
+      if (lastEmittedUserId !== currentUser.id || !cachedProfile) {
+        await emitResolvedUser(currentUser);
         return;
       }
 
-      // Perform background profile sync from database without blocking UI
+      // Renovação de token com perfil já carregado: não precisa consultar de novo
+      if (event === 'TOKEN_REFRESHED') {
+        return;
+      }
+
+      // Atualiza o perfil em segundo plano, sem bloquear a interface
       try {
         const dbProfile = await syncUserProfileInDb(currentUser);
         if (dbProfile) {

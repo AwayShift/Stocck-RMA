@@ -81,10 +81,11 @@ import { GlobalSearchBar } from './components/GlobalSearchBar';
 import { ScrollToTop } from './components/ScrollToTop';
 import SettingsModal from './components/SettingsModal';
 import BackupModal from './components/BackupModal';
+import AdminReauthHost from './components/AdminReauthHost';
 import DatabaseSwitcherModal from './components/DatabaseSwitcherModal';
 import { checkAndRunScheduledBackups } from './lib/backupService';
 import { getSupabaseClient } from './lib/supabase';
-import { subscribeToSupabaseAuth, signOutSupabase, setCachedAuthUser } from './lib/supabaseAuth';
+import { subscribeToSupabaseAuth, signOutSupabase } from './lib/supabaseAuth';
 import { normalizeStiCode } from './utils/stiFormatter';
 import { areOrdersMatching } from './utils/orderPlatformHelper';
 import { ThemeMode, getSavedTheme, applyTheme } from './lib/theme';
@@ -107,24 +108,14 @@ export default function App() {
   };
   
   // Auth state
-  const [user, setUser] = useState<any>(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('stocckrma_guest_mode') === 'true') {
-      return { id: 'guest', email: 'visitante@stocckrma.local', displayName: 'Visitante' };
-    }
-    return null;
-  });
-  const [userRole, setUserRole] = useState<'admin' | 'operator' | 'viewer' | null>(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('stocckrma_guest_mode') === 'true') {
-      return 'viewer';
-    }
-    return null;
-  });
-  const [userName, setUserName] = useState<string>(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('stocckrma_guest_mode') === 'true') {
-      return 'Visitante';
-    }
-    return '';
-  });
+  // O modo visitante (sem login) foi removido: sem sessão no Supabase não há acesso aos dados (RLS).
+  // Limpa a flag antiga para quem ainda a tinha salva no navegador.
+  if (typeof window !== 'undefined') {
+    try { localStorage.removeItem('stocckrma_guest_mode'); } catch {}
+  }
+  const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'operator' | 'viewer' | null>(null);
+  const [userName, setUserName] = useState<string>('');
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // Database states initialized instantly from local cache (0ms blocking time)
@@ -203,30 +194,21 @@ export default function App() {
 
     const unsubscribeAuth = subscribeToSupabaseAuth(async (currentUser, profile) => {
       if (currentUser) {
-        localStorage.removeItem('stocckrma_guest_mode');
         setUser(currentUser);
 
         if (profile) {
           setUserRole(profile.role);
           setUserName(profile.name);
         } else {
-          const isMasterAdmin = currentUser.email === 'alessandro.away6@gmail.com';
-          setUserRole(isMasterAdmin ? 'admin' : 'operator');
+          // Sem perfil carregado do banco: falha segura (somente leitura). O papel real vem de public.users.
+          setUserRole('viewer');
           setUserName(currentUser.user_metadata?.name || currentUser.email?.split('@')[0] || 'Operador Corporativo');
         }
         setIsAuthLoading(false);
       } else {
-        if (localStorage.getItem('stocckrma_guest_mode') === 'true') {
-          const guestUser = { id: 'guest', email: 'visitante@stocckrma.local', displayName: 'Visitante' };
-          setUser(guestUser);
-          setUserRole('viewer');
-          setUserName('Visitante');
-          setCachedAuthUser({ uid: 'guest', email: 'visitante@stocckrma.local', name: 'Visitante' });
-        } else {
-          setUser(null);
-          setUserRole(null);
-          setUserName('');
-        }
+        setUser(null);
+        setUserRole(null);
+        setUserName('');
         setIsAuthLoading(false);
       }
     });
@@ -605,15 +587,17 @@ export default function App() {
 
   // Initialize Cross-Device System Integrations & Metrics Sync (Supabase PAT, Cloudinary, Saved Metrics)
   useEffect(() => {
-    if (!user?.email) return;
+    // Contas somente leitura não gravam configuração (o RLS bloquearia com 403).
+    if (!user?.email || !userRole || userRole === 'viewer') return;
     initSystemIntegrationsSync(user.email).catch((err) => {
       console.warn('System integrations background sync note:', err);
     });
-  }, [user?.email]);
+  }, [user?.email, userRole]);
 
   // Auto-backup scheduler background runner
   useEffect(() => {
-    if (!user) return;
+    // Backups só rodam para admin/operator (viewer não grava em backup_snapshots).
+    if (!user || !userRole || userRole === 'viewer') return;
 
     const checkSchedule = async () => {
       try {
@@ -843,20 +827,8 @@ export default function App() {
     }) : u));
   };
 
-  const handleGuestAccess = () => {
-    localStorage.setItem('stocckrma_guest_mode', 'true');
-    const guestUser = { id: 'guest', email: 'visitante@stocckrma.local', displayName: 'Visitante' };
-    setUser(guestUser);
-    setUserRole('viewer');
-    setUserName('Visitante');
-    setCachedAuthUser({ uid: 'guest', email: 'visitante@stocckrma.local', name: 'Visitante' });
-    setActiveTab('dashboard');
-    loadInitialData();
-  };
-
   const handleLogout = async () => {
     try {
-      localStorage.removeItem('stocckrma_guest_mode');
       await signOutSupabase();
       setUser(null);
       setUserRole(null);
@@ -997,9 +969,8 @@ export default function App() {
   // Render Login screen if not authenticated
   if (!user) {
     return (
-      <Login 
-        onLoginSuccess={() => setActiveTab('dashboard')} 
-        onGuestAccess={handleGuestAccess} 
+      <Login
+        onLoginSuccess={() => setActiveTab('dashboard')}
       />
     );
   }
@@ -1045,7 +1016,7 @@ export default function App() {
               />
 
               {/* Desktop Navigation Tabs (Sleek Segmented Pill) */}
-              <nav className="hidden xl:flex items-center gap-0.5 sm:gap-1 bg-slate-950/80 p-0.5 sm:p-1 rounded-2xl border border-slate-800 shadow-inner relative z-10" id="desktop-navigation">
+              <nav className="hidden min-[1700px]:flex items-center gap-0.5 sm:gap-1 bg-slate-950/80 p-0.5 sm:p-1 rounded-2xl border border-slate-800 shadow-inner relative z-10 min-w-0 shrink" id="desktop-navigation">
                 <button
                   onClick={() => handleSwitchTab('dashboard')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
@@ -1143,16 +1114,7 @@ export default function App() {
               {userRole === 'viewer' && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-semibold" id="header-guest-badge">
                   <Eye className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="hidden md:inline text-[11px] font-bold">Visitante (Leitura)</span>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="ml-1 px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer shadow-xs"
-                    title="Encerrar visualização e entrar com login corporativo"
-                    id="btn-guest-header-login"
-                  >
-                    Fazer Login
-                  </button>
+                  <span className="hidden 2xl:inline text-[11px] font-bold">Somente leitura</span>
                 </div>
               )}
               <button
@@ -1178,7 +1140,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <Eye className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
-                <strong>Modo Visitante:</strong> Você está navegando em modo protegido de apenas visualização. Gravação, edição e exclusão estão desabilitadas.
+                <strong>Modo Somente Leitura:</strong> Sua conta tem permissão apenas de visualização. Gravação, edição e exclusão estão desabilitadas. Peça a um administrador para liberar o acesso de operador, se necessário.
               </span>
             </div>
             <button
@@ -1186,14 +1148,14 @@ export default function App() {
               onClick={handleLogout}
               className="text-xs font-bold text-amber-300 hover:text-white underline cursor-pointer shrink-0"
             >
-              Fazer Login com Conta Corporativa
+              Trocar de Conta
             </button>
           </div>
         </div>
       )}
 
       {/* Secondary Navigation Tabs (for screens under XL) */}
-      <div className="xl:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-3 sm:px-4 flex gap-1.5 shadow-inner items-center" id="mobile-navigation">
+      <div className="min-[1700px]:hidden bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-3 sm:px-4 flex gap-1.5 shadow-inner items-center" id="mobile-navigation">
         <button
           onClick={() => handleSwitchTab('dashboard')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
@@ -1594,6 +1556,9 @@ export default function App() {
           setActiveTab('dashboard');
         }}
       />
+
+      {/* Confirmação de senha do admin para ações sensíveis de backup (restaurar/importar/apagar) */}
+      <AdminReauthHost />
 
       {/* Synchronization Feedback Toast */}
       {syncSuccessToast && (

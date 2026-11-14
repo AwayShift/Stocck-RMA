@@ -18,11 +18,9 @@ async function startServer() {
       const body = req.body || {};
       const query = req.query || {};
 
+      // Segurança: o token só pode vir de variáveis de ambiente do servidor (nunca da requisição).
       let patToken = (
-        body.token ||
-        query.token ||
         process.env.SUPABASE_MANAGEMENT_TOKEN ||
-        process.env.VITE_SUPABASE_MANAGEMENT_TOKEN ||
         process.env.SUPABASE_ACCESS_TOKEN ||
         process.env.SUPABASE_PAT ||
         process.env.SUPABASE_TOKEN ||
@@ -63,7 +61,7 @@ async function startServer() {
         return res.status(400).json({
           success: false,
           tokenValid: false,
-          error: "Nenhum Personal Access Token (PAT) encontrado. Defina a variável SUPABASE_MANAGEMENT_TOKEN no painel da Vercel ou passe o token na requisição.",
+          error: "Nenhum Personal Access Token (PAT) encontrado. Defina a variável SUPABASE_MANAGEMENT_TOKEN no ambiente do servidor (arquivo .env local ou painel da Vercel).",
           projectRef: ref,
           hasTokenInEnv: false
         });
@@ -305,7 +303,7 @@ async function startServer() {
       return res.json({
         success: true,
         tokenValid: true,
-        tokenSource: body.token ? 'manual_input' : 'server_environment',
+        tokenSource: 'server_environment',
         projectRef: ref,
         projectName: projectData?.name || `Stocck-RMA (${ref})`,
         projectStatus: projectData?.status || 'ACTIVE_HEALTHY',

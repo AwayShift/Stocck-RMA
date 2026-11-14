@@ -5,7 +5,7 @@
  * Centralized System Integrations & Metrics Persistence Service
  * 
  * Ensures that:
- * 1. Supabase Personal Access Token (PAT) is saved to the central database and synchronized across all devices/browsers.
+ * 1. (Removido por segurança) O Supabase Personal Access Token (PAT) NÃO é mais salvo no banco nem no navegador.
  * 2. Cloudinary configuration (Cloud Name, Upload Preset, Status) is saved to the central database and available everywhere.
  * 3. Latest captured metrics for both Supabase (Egress, DB Size, Storage, MAU) and Cloudinary (CDN images, Saved Storage/Bandwidth)
  *    are cached in the cloud so any browser/device displays the saved metrics immediately upon opening.
@@ -40,6 +40,7 @@ export interface SupabaseCalibration {
 }
 
 export interface RemoteIntegrationsPayload {
+  /** Legado: nunca mais gravado. Mantido apenas para detectar e apagar o valor antigo no banco. */
   supabasePat?: string;
   cloudinaryConfig?: CloudinaryConfig;
   cachedSupabaseMetrics?: any;
@@ -256,16 +257,7 @@ export const fetchRemoteSystemIntegrations = async (): Promise<RemoteIntegration
     if (data && data.data) {
       const payload = data.data as RemoteIntegrationsPayload;
 
-      // 1. Sync Supabase PAT if remote exists
-      if (payload.supabasePat && typeof payload.supabasePat === 'string' && payload.supabasePat.trim()) {
-        const remotePat = payload.supabasePat.trim();
-        const localPat = (localStorage.getItem('stocckrma_supabase_pat') || '').trim();
-        if (!localPat || localPat !== remotePat) {
-          localStorage.setItem('stocckrma_supabase_pat', remotePat);
-          try { sessionStorage.setItem('stocckrma_supabase_pat', remotePat); } catch {}
-          window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: remotePat } }));
-        }
-      }
+      // 1. (PAT removido por segurança: nunca é copiado do banco para o navegador)
 
       // 2. Sync Cloudinary config if remote exists
       if (payload.cloudinaryConfig && typeof payload.cloudinaryConfig === 'object') {
@@ -304,7 +296,6 @@ export const fetchRemoteSystemIntegrations = async (): Promise<RemoteIntegration
  */
 const executePersistToCloud = async (
   updates: {
-    supabasePat?: string;
     cloudinaryConfig?: Partial<CloudinaryConfig>;
     cachedSupabaseMetrics?: any;
     cachedCloudinaryMetrics?: CloudinaryMetricsSummary;
@@ -335,17 +326,7 @@ const executePersistToCloud = async (
       // Continue with empty payload if query fails
     }
 
-    const currentLocalPat = (localStorage.getItem('stocckrma_supabase_pat') || '').trim();
     const currentLocalCloudinary = getCloudinaryConfig();
-
-    // Safe merge: Never erase an existing valid PAT with an empty or whitespace string
-    let mergedPat = (currentPayload.supabasePat || currentLocalPat || '').trim();
-    if (updates.supabasePat !== undefined) {
-      const cleanInput = updates.supabasePat.trim();
-      if (cleanInput) {
-        mergedPat = cleanInput;
-      }
-    }
 
     const mergedCloudinary: CloudinaryConfig = {
       cloudName: (updates.cloudinaryConfig?.cloudName !== undefined ? updates.cloudinaryConfig.cloudName : (currentPayload.cloudinaryConfig?.cloudName || currentLocalCloudinary.cloudName || '')).trim(),
@@ -366,8 +347,8 @@ const executePersistToCloud = async (
       ? updates.supabaseCalibration
       : (currentPayload.supabaseCalibration ?? getLocalSupabaseCalibration());
 
+    // O upsert substitui o JSON inteiro: ao não incluir supabasePat aqui, o valor antigo é apagado do banco.
     const updatedPayload: RemoteIntegrationsPayload = {
-      supabasePat: mergedPat,
       cloudinaryConfig: mergedCloudinary,
       cachedSupabaseMetrics: mergedSupabaseMetrics,
       cachedCloudinaryMetrics: mergedCloudinaryMetrics,
@@ -413,7 +394,6 @@ const executePersistToCloud = async (
  */
 export const persistSystemIntegrationsToCloud = async (
   updates: {
-    supabasePat?: string;
     cloudinaryConfig?: Partial<CloudinaryConfig>;
     cachedSupabaseMetrics?: any;
     cachedCloudinaryMetrics?: CloudinaryMetricsSummary;
@@ -422,14 +402,6 @@ export const persistSystemIntegrationsToCloud = async (
   }
 ): Promise<boolean> => {
   // 1. Immediately save to LocalStorage so current device is 100% instant
-  if (updates.supabasePat !== undefined) {
-    const cleanPat = updates.supabasePat.trim();
-    if (cleanPat) {
-      localStorage.setItem('stocckrma_supabase_pat', cleanPat);
-      try { sessionStorage.setItem('stocckrma_supabase_pat', cleanPat); } catch {}
-      window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: cleanPat } }));
-    }
-  }
   if (updates.cloudinaryConfig) {
     saveCloudinaryConfig(updates.cloudinaryConfig);
   }
@@ -475,21 +447,16 @@ export const initSystemIntegrationsSync = async (userEmail?: string): Promise<vo
       // 1. Initial fetch from cloud
       const remote = await fetchRemoteSystemIntegrations();
 
-      // 2. If cloud didn't have PAT or Cloudinary yet, but local does, auto-seed the cloud
-      const localPat = (localStorage.getItem('stocckrma_supabase_pat') || '').trim();
+      // 2. If cloud didn't have Cloudinary yet, but local does, auto-seed the cloud
       const localCloud = getCloudinaryConfig();
 
       const seedPayload: {
-        supabasePat?: string;
         cloudinaryConfig?: Partial<CloudinaryConfig>;
         userEmail?: string;
       } = { userEmail };
 
-      let hasSeeding = false;
-      if (localPat && (!remote || !remote.supabasePat)) {
-        seedPayload.supabasePat = localPat;
-        hasSeeding = true;
-      }
+      // Se o banco ainda guarda um PAT antigo, força uma regravação (sem o PAT) para apagá-lo.
+      let hasSeeding = Boolean(remote && 'supabasePat' in remote);
       if (localCloud.cloudName && (!remote || !remote.cloudinaryConfig?.cloudName)) {
         seedPayload.cloudinaryConfig = localCloud;
         hasSeeding = true;
@@ -512,15 +479,6 @@ export const initSystemIntegrationsSync = async (userEmail?: string): Promise<vo
             }, (payload: any) => {
               if (payload.new && payload.new.data) {
                 const data = payload.new.data as RemoteIntegrationsPayload;
-                if (data.supabasePat && typeof data.supabasePat === 'string' && data.supabasePat.trim()) {
-                  const remotePat = data.supabasePat.trim();
-                  const current = (localStorage.getItem('stocckrma_supabase_pat') || '').trim();
-                  if (!current || current !== remotePat) {
-                    localStorage.setItem('stocckrma_supabase_pat', remotePat);
-                    try { sessionStorage.setItem('stocckrma_supabase_pat', remotePat); } catch {}
-                    window.dispatchEvent(new CustomEvent('supabase-pat-changed', { detail: { token: remotePat } }));
-                  }
-                }
                 if (data.cloudinaryConfig?.cloudName) {
                   saveCloudinaryConfig(data.cloudinaryConfig);
                 }

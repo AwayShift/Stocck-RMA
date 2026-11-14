@@ -4,81 +4,45 @@
  */
 
 import React, { useState } from 'react';
-import { 
-  signInWithSupabase, 
-  signUpWithSupabase 
-} from '../lib/supabaseAuth';
-import { 
-  Boxes, 
-  Lock, 
-  Mail, 
-  User as UserIcon,
-  AlertCircle, 
+import { signInWithSupabase } from '../lib/supabaseAuth';
+import {
+  Boxes,
+  Lock,
+  Mail,
+  AlertCircle,
   ArrowRight,
-  Eye, 
-  EyeOff, 
-  CheckCircle2,
+  Eye,
+  EyeOff,
   Database
 } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: () => void;
-  onGuestAccess?: () => void;
 }
 
-export default function Login({ onLoginSuccess, onGuestAccess }: LoginProps) {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+export default function Login({ onLoginSuccess }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  
+
   // Visual states
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    setSuccessMessage('');
-    
+
     if (!email.trim() || !password.trim()) {
       setErrorMessage('Por favor, preencha todos os campos obrigatórios.');
-      return;
-    }
-
-    if (mode === 'signup' && !name.trim()) {
-      setErrorMessage('Por favor, informe seu nome completo para o cadastro.');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      if (mode === 'signup') {
-        const { user } = await signUpWithSupabase(
-          email.trim(), 
-          password.trim(), 
-          name.trim(),
-          email.trim().toLowerCase() === 'alessandro.away6@gmail.com' ? 'admin' : 'operator'
-        );
-        
-        if (user) {
-          setSuccessMessage('Conta criada com sucesso no Supabase! Redirecionando...');
-          setTimeout(() => {
-            onLoginSuccess();
-          }, 800);
-        } else {
-          setSuccessMessage('Cadastro realizado! Se o e-mail de confirmação estiver ativo, verifique sua caixa de entrada.');
-          setTimeout(() => {
-            setMode('login');
-          }, 1500);
-        }
-      } else {
-        await signInWithSupabase(email.trim(), password.trim());
-        onLoginSuccess();
-      }
+      await signInWithSupabase(email.trim(), password.trim());
+      onLoginSuccess();
     } catch (err: any) {
       console.error('Supabase Authentication Error:', err);
       const msg = err?.message || 'Falha ao autenticar no Supabase. Verifique suas credenciais.';
@@ -112,51 +76,13 @@ export default function Login({ onLoginSuccess, onGuestAccess }: LoginProps) {
           </div>
         </div>
 
-        {/* Mode Selector Tabs */}
-        <div className="grid grid-cols-2 p-1 bg-slate-950/80 border border-slate-800 rounded-xl mb-6">
-          <button
-            type="button"
-            onClick={() => { setMode('login'); setErrorMessage(''); setSuccessMessage(''); }}
-            className={`py-2 text-xs font-bold rounded-lg transition-all ${
-              mode === 'login' 
-                ? 'bg-emerald-500 text-white shadow-md' 
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Entrar
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('signup'); setErrorMessage(''); setSuccessMessage(''); }}
-            className={`py-2 text-xs font-bold rounded-lg transition-all ${
-              mode === 'signup' 
-                ? 'bg-emerald-500 text-white shadow-md' 
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Criar Conta
-          </button>
-        </div>
-
         {/* Header */}
         <div className="mb-5">
-          <h2 className="text-lg font-bold text-white">
-            {mode === 'login' ? 'Acesse o Sistema' : 'Novo Cadastro Corporativo'}
-          </h2>
+          <h2 className="text-lg font-bold text-white">Acesse o Sistema</h2>
           <p className="text-xs text-slate-400 mt-1">
-            {mode === 'login' 
-              ? 'Insira suas credenciais corporativas do Supabase' 
-              : 'Cadastre seu usuário para acesso ao StocckRMA'}
+            Insira suas credenciais corporativas. Para obter acesso, solicite o cadastro a um administrador.
           </p>
         </div>
-
-        {/* Success state */}
-        {successMessage && (
-          <div className="flex items-start gap-2.5 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold mb-5">
-            <CheckCircle2 className="w-4.5 h-4.5 flex-shrink-0 mt-0.5" />
-            <span>{successMessage}</span>
-          </div>
-        )}
 
         {/* Error state */}
         {errorMessage && (
@@ -168,31 +94,12 @@ export default function Login({ onLoginSuccess, onGuestAccess }: LoginProps) {
 
         {/* Main form */}
         <form onSubmit={handleSubmit} className="space-y-4" id="login-form">
-          {/* Name Field (Only on Sign Up) */}
-          {mode === 'signup' && (
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Nome Completo</label>
-              <div className="relative">
-                <UserIcon className="absolute left-3.5 top-3.5 w-4.5 h-4.5 text-slate-500" />
-                <input 
-                  type="text"
-                  placeholder="Seu nome completo"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-sans"
-                  id="input-signup-name"
-                  required
-                />
-              </div>
-            </div>
-          )}
-
           {/* Email Field */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">E-mail Corporativo</label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-3.5 w-4.5 h-4.5 text-slate-500" />
-              <input 
+              <input
                 type="email"
                 placeholder="nome@empresa.com"
                 value={email}
@@ -210,16 +117,16 @@ export default function Login({ onLoginSuccess, onGuestAccess }: LoginProps) {
             <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Senha de Acesso</label>
             <div className="relative">
               <Lock className="absolute left-3.5 top-3.5 w-4.5 h-4.5 text-slate-500" />
-              <input 
+              <input
                 type={showPassword ? "text" : "password"}
-                placeholder={mode === 'signup' ? "Mínimo 6 caracteres" : "Sua senha"}
+                placeholder="Sua senha"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-11 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-sans"
                 id="input-login-password"
                 required
               />
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3.5 top-3.5 text-slate-500 hover:text-white transition-colors cursor-pointer"
@@ -243,32 +150,13 @@ export default function Login({ onLoginSuccess, onGuestAccess }: LoginProps) {
               </svg>
             ) : (
               <>
-                {mode === 'login' ? 'Entrar no Sistema' : 'Cadastrar Usuário'}
+                Entrar no Sistema
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
 
-        {/* Guest Access Divider & Button */}
-        {onGuestAccess && (
-          <div className="mt-6 pt-4 border-t border-slate-800/80 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-px bg-slate-800" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Ou continue como visitante</span>
-              <div className="flex-1 h-px bg-slate-800" />
-            </div>
-            <button
-              type="button"
-              onClick={onGuestAccess}
-              className="w-full py-3 px-4 bg-slate-950 hover:bg-slate-850 hover:bg-slate-800/90 border border-slate-700/80 hover:border-sky-500/60 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer group"
-              id="btn-guest-login"
-            >
-              <Eye className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
-              <span>Entrar sem login (Apenas Visualização)</span>
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
