@@ -143,11 +143,16 @@ export const fetchOfficialSupabaseUsage = async (
 
   // 1. Query proxy API route (/api/supabase-usage on Vercel or local Express server)
   try {
+    // A rota exige login de admin: envia o token da sessão (o projeto é definido só pelo servidor).
+    const { data: sessionData } = (await getSupabaseClient()?.auth.getSession()) || { data: { session: null } };
+    const sessionToken = sessionData?.session?.access_token;
     const proxyRes = await fetch('/api/supabase-usage', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        projectRef: projectRef || undefined,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {})
+      },
+      body: JSON.stringify({
         calibration: activeCalibration || undefined,
         calibratedEgressGb: activeCalibration?.egressGb
       })
@@ -809,14 +814,14 @@ CREATE TABLE IF NOT EXISTS users (
   uid TEXT PRIMARY KEY,
   email TEXT NOT NULL,
   name TEXT,
-  role TEXT DEFAULT 'operator',
+  role TEXT DEFAULT 'viewer',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   last_login TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'operator';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'viewer';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
@@ -869,52 +874,159 @@ BEGIN
 END;
 $$;
 
--- Desativar ou configurar políticas de acesso aberto para a chave Anon Key
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE triage_units ENABLE ROW LEVEL SECURITY;
-ALTER TABLE daily_inflows ENABLE ROW LEVEL SECURITY;
-ALTER TABLE pending_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cases ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE backup_snapshots ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+-- ========================================================
+-- SEGURANÇA: RLS por papel (admin / operator / viewer)
+-- O papel vem da tabela public.users (coluna role), nunca do navegador.
+-- Contas novas nascem 'viewer'. Para liberar alguém (rode manualmente):
+--   UPDATE public.users SET role = 'operator' WHERE email = 'pessoa@empresa.com';
+-- Primeiro admin de um banco novo (depois do primeiro login dele):
+--   UPDATE public.users SET role = 'admin' WHERE email = 'voce@empresa.com';
+-- Este bloco é seguro para rodar mais de uma vez. NUNCA recrie políticas "Public access".
+-- ========================================================
 
-DROP POLICY IF EXISTS "Public access products" ON products;
-CREATE POLICY "Public access products" ON products FOR ALL USING (true) WITH CHECK (true);
+-- 1. Função auxiliar: papel do usuário logado, lido do BANCO (nunca do navegador)
+CREATE OR REPLACE FUNCTION public.app_role()
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT role FROM public.users WHERE uid = auth.uid()::text LIMIT 1
+$$;
 
-DROP POLICY IF EXISTS "Public access triage_units" ON triage_units;
-CREATE POLICY "Public access triage_units" ON triage_units FOR ALL USING (true) WITH CHECK (true);
+REVOKE ALL ON FUNCTION public.app_role() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.app_role() TO authenticated;
 
-DROP POLICY IF EXISTS "Public access daily_inflows" ON daily_inflows;
-CREATE POLICY "Public access daily_inflows" ON daily_inflows FOR ALL USING (true) WITH CHECK (true);
+-- 2. Remove a chave anon de qualquer acesso direto às tabelas (defesa em profundidade)
+REVOKE ALL ON TABLE
+  public.products, public.triage_units, public.pending_items, public.daily_inflows,
+  public.cases, public.audit_logs, public.users, public.backup_snapshots
+FROM anon;
 
-DROP POLICY IF EXISTS "Public access pending_items" ON pending_items;
-CREATE POLICY "Public access pending_items" ON pending_items FOR ALL USING (true) WITH CHECK (true);
+-- 3. Tabelas operacionais: leitura (admin/operator/viewer), escrita e exclusão (admin/operator)
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['products','triage_units','pending_items','daily_inflows','cases']
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS "Public access %s" ON public.%I', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS rls_select ON public.%I', t);
+    EXECUTE format('DROP POLICY IF EXISTS rls_insert ON public.%I', t);
+    EXECUTE format('DROP POLICY IF EXISTS rls_update ON public.%I', t);
+    EXECUTE format('DROP POLICY IF EXISTS rls_delete ON public.%I', t);
 
-DROP POLICY IF EXISTS "Public access cases" ON cases;
-CREATE POLICY "Public access cases" ON cases FOR ALL USING (true) WITH CHECK (true);
+    EXECUTE format($f$CREATE POLICY rls_select ON public.%I FOR SELECT TO authenticated
+      USING (public.app_role() IN ('admin','operator','viewer'))$f$, t);
+    EXECUTE format($f$CREATE POLICY rls_insert ON public.%I FOR INSERT TO authenticated
+      WITH CHECK (public.app_role() IN ('admin','operator'))$f$, t);
+    EXECUTE format($f$CREATE POLICY rls_update ON public.%I FOR UPDATE TO authenticated
+      USING (public.app_role() IN ('admin','operator'))
+      WITH CHECK (public.app_role() IN ('admin','operator'))$f$, t);
+    EXECUTE format($f$CREATE POLICY rls_delete ON public.%I FOR DELETE TO authenticated
+      USING (public.app_role() IN ('admin','operator'))$f$, t);
+  END LOOP;
+END $$;
 
-DROP POLICY IF EXISTS "Public access audit_logs" ON audit_logs;
-CREATE POLICY "Public access audit_logs" ON audit_logs FOR ALL USING (true) WITH CHECK (true);
+-- 4. users: cada um vê a própria linha; só admin lista, promove e remove
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access users" ON public.users;
+DROP POLICY IF EXISTS rls_select ON public.users;
+DROP POLICY IF EXISTS rls_insert ON public.users;
+DROP POLICY IF EXISTS rls_update ON public.users;
+DROP POLICY IF EXISTS rls_delete ON public.users;
 
-DROP POLICY IF EXISTS "Public access backup_snapshots" ON backup_snapshots;
-CREATE POLICY "Public access backup_snapshots" ON backup_snapshots FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY rls_select ON public.users FOR SELECT TO authenticated
+  USING (uid = auth.uid()::text OR public.app_role() = 'admin');
 
-DROP POLICY IF EXISTS "Public access users" ON users;
-CREATE POLICY "Public access users" ON users FOR ALL USING (true) WITH CHECK (true);
+-- Autocadastro SEMPRE como viewer, com o próprio uid e o próprio e-mail
+CREATE POLICY rls_insert ON public.users FOR INSERT TO authenticated
+  WITH CHECK (
+    public.app_role() = 'admin'
+    OR (
+      uid = auth.uid()::text
+      AND role = 'viewer'
+      AND lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    )
+  );
 
--- Políticas para o Storage Bucket product-images
+-- Cada um atualiza a própria linha SEM mudar o papel; admin muda qualquer um
+CREATE POLICY rls_update ON public.users FOR UPDATE TO authenticated
+  USING (uid = auth.uid()::text OR public.app_role() = 'admin')
+  WITH CHECK (
+    public.app_role() = 'admin'
+    OR (uid = auth.uid()::text AND role = public.app_role())
+  );
+
+CREATE POLICY rls_delete ON public.users FOR DELETE TO authenticated
+  USING (public.app_role() = 'admin');
+
+-- 5. audit_logs: imutável (sem update/delete); leitura admin/operator; escrita admin/operator
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access audit_logs" ON public.audit_logs;
+DROP POLICY IF EXISTS rls_select ON public.audit_logs;
+DROP POLICY IF EXISTS rls_insert ON public.audit_logs;
+
+CREATE POLICY rls_select ON public.audit_logs FOR SELECT TO authenticated
+  USING (public.app_role() IN ('admin','operator'));
+CREATE POLICY rls_insert ON public.audit_logs FOR INSERT TO authenticated
+  WITH CHECK (
+    public.app_role() IN ('admin','operator')
+    AND (user_id IS NULL OR user_id = auth.uid()::text)
+  );
+
+-- 6. backup_snapshots: operator só INSERE snapshots novos e edita as 2 linhas de configuração;
+--    apagar/sobrescrever snapshots é exclusivo do admin
+ALTER TABLE public.backup_snapshots ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access backup_snapshots" ON public.backup_snapshots;
+DROP POLICY IF EXISTS rls_select ON public.backup_snapshots;
+DROP POLICY IF EXISTS rls_insert ON public.backup_snapshots;
+DROP POLICY IF EXISTS rls_update ON public.backup_snapshots;
+DROP POLICY IF EXISTS rls_delete ON public.backup_snapshots;
+
+CREATE POLICY rls_select ON public.backup_snapshots FOR SELECT TO authenticated
+  USING (public.app_role() IN ('admin','operator'));
+CREATE POLICY rls_insert ON public.backup_snapshots FOR INSERT TO authenticated
+  WITH CHECK (public.app_role() IN ('admin','operator'));
+CREATE POLICY rls_update ON public.backup_snapshots FOR UPDATE TO authenticated
+  USING (
+    public.app_role() = 'admin'
+    OR (public.app_role() = 'operator' AND id IN ('config_system_integrations','config_backup_schedule'))
+  )
+  WITH CHECK (
+    public.app_role() = 'admin'
+    OR (public.app_role() = 'operator' AND id IN ('config_system_integrations','config_backup_schedule'))
+  );
+CREATE POLICY rls_delete ON public.backup_snapshots FOR DELETE TO authenticated
+  USING (public.app_role() = 'admin');
+
+-- 7. Storage (bucket product-images): leitura pública (bucket público); escrita só admin/operator logados
 DROP POLICY IF EXISTS "Public storage select product-images" ON storage.objects;
-CREATE POLICY "Public storage select product-images" ON storage.objects FOR SELECT USING (bucket_id = 'product-images');
-
 DROP POLICY IF EXISTS "Public storage insert product-images" ON storage.objects;
-CREATE POLICY "Public storage insert product-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'product-images');
-
 DROP POLICY IF EXISTS "Public storage update product-images" ON storage.objects;
-CREATE POLICY "Public storage update product-images" ON storage.objects FOR UPDATE USING (bucket_id = 'product-images');
-
 DROP POLICY IF EXISTS "Public storage delete product-images" ON storage.objects;
-CREATE POLICY "Public storage delete product-images" ON storage.objects FOR DELETE USING (bucket_id = 'product-images');
+DROP POLICY IF EXISTS rls_pi_select ON storage.objects;
+DROP POLICY IF EXISTS rls_pi_insert ON storage.objects;
+DROP POLICY IF EXISTS rls_pi_update ON storage.objects;
+DROP POLICY IF EXISTS rls_pi_delete ON storage.objects;
+
+CREATE POLICY rls_pi_select ON storage.objects FOR SELECT
+  USING (bucket_id = 'product-images');
+CREATE POLICY rls_pi_insert ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'product-images' AND public.app_role() IN ('admin','operator'));
+CREATE POLICY rls_pi_update ON storage.objects FOR UPDATE TO authenticated
+  USING (bucket_id = 'product-images' AND public.app_role() IN ('admin','operator'))
+  WITH CHECK (bucket_id = 'product-images' AND public.app_role() IN ('admin','operator'));
+CREATE POLICY rls_pi_delete ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'product-images' AND public.app_role() IN ('admin','operator'));
+
+-- 8. RPC de métricas: só usuário logado e com search_path fixo
+ALTER FUNCTION public.get_stock_metrics() SET search_path = public;
+REVOKE EXECUTE ON FUNCTION public.get_stock_metrics() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_stock_metrics() TO authenticated;
+
 
 -- 11. Habilitação de Realtime Instantâneo (WebSocket broadcast entre abas e dispositivos)
 DO $$

@@ -78,6 +78,8 @@ Variáveis de ambiente: veja `.env.example` (`VITE_SUPABASE_URL`, `VITE_SUPABASE
 
 - Mantenha textos de UI e mensagens de erro em português.
 - Alterações de schema devem refletir em `supabase_schema.sql` e `src/types.ts`.
+- O script que o app mostra para bancos novos (`SUPABASE_SQL_SCHEMA` em `src/lib/supabase.ts`) deve manter as políticas de RLS **por papel** (iguais a `supabase_rls_hardening.sql`); nunca recriar políticas "Public access". Modelo de segurança em `security_spec.md`.
+- `/api/supabase-usage` exige login de admin (token da sessão no `Authorization`); o projeto vem só das variáveis do servidor. A função `requireAdmin` está duplicada em `api/supabase-usage.ts` e `server.ts` — mantenha as duas iguais.
 - `public/PRD_RMA_FLOW.md` descreve uma versão antiga baseada em Firebase/Firestore; a arquitetura atual é Supabase — em caso de conflito, prevalece AGENTS.md e o código.
 - `DAILY_CHANGES.md` e `daily_changes.json` são gerados por `npm run track-changes`; não editar à mão.
 - Deploy: workflow `.github/workflows/deploy.yml` (GitHub Pages, no push para `main`) e `vercel.json`.

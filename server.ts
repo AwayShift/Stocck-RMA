@@ -1,6 +1,36 @@
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+dotenv.config();
+
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
+
+// Segurança: só admin autenticado pode consultar as métricas (a rota usa o token de gerenciamento do servidor).
+async function requireAdmin(req: any): Promise<{ ok: boolean; status?: number; error?: string }> {
+  const authHeader = String(req.headers?.authorization || '');
+  const userToken = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!userToken) return { ok: false, status: 401, error: 'Faça login para consultar as métricas do Supabase.' };
+
+  const supaUrl = String(process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  const anonKey = String(process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+  if (!supaUrl || !anonKey) {
+    return { ok: false, status: 500, error: 'Servidor sem VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY: não foi possível validar o login.' };
+  }
+
+  const authHeaders = { apikey: anonKey, Authorization: `Bearer ${userToken}`, 'Content-Type': 'application/json' };
+  try {
+    const userRes = await fetch(`${supaUrl}/auth/v1/user`, { headers: authHeaders });
+    if (!userRes.ok) return { ok: false, status: 401, error: 'Sessão inválida ou expirada. Entre novamente.' };
+
+    const roleRes = await fetch(`${supaUrl}/rest/v1/rpc/app_role`, { method: 'POST', headers: authHeaders, body: '{}' });
+    const role = roleRes.ok ? await roleRes.json() : null;
+    if (role !== 'admin') return { ok: false, status: 403, error: 'Apenas administradores podem consultar as métricas do Supabase.' };
+    return { ok: true };
+  } catch {
+    return { ok: false, status: 502, error: 'Não foi possível validar o login no Supabase.' };
+  }
+}
 
 async function startServer() {
   const app = express();
@@ -15,8 +45,10 @@ async function startServer() {
     }
 
     try {
+      const gate = await requireAdmin(req);
+      if (!gate.ok) return res.status(gate.status || 403).json({ success: false, tokenValid: false, error: gate.error });
+
       const body = req.body || {};
-      const query = req.query || {};
 
       // Segurança: o token só pode vir de variáveis de ambiente do servidor (nunca da requisição).
       let patToken = (
@@ -30,8 +62,6 @@ async function startServer() {
       patToken = patToken.replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, '').trim();
 
       let ref = (
-        body.projectRef ||
-        query.projectRef ||
         process.env.SUPABASE_PROJECT_ID ||
         process.env.VITE_SUPABASE_PROJECT_ID ||
         ""

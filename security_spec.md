@@ -1,51 +1,67 @@
-# Especificação de Segurança Firestore - RMA Flow & Triagem de Estoque
+# Especificação de Segurança — Stocck-RMA (Supabase)
 
-## 1. Princípios de Segurança e Menor Privilégio
-O objetivo desta atualização é remover o acesso indiscriminado (`allow read, write: if isAuthenticated()`) e aplicar uma política rígida de controle de acesso baseada em funções (RBAC - Role-Based Access Control) e Custom Claims, combinada com verificação em documentos de usuário.
+Esta especificação descreve o modelo **atual** (Supabase: PostgreSQL + Auth + Storage). A versão anterior era baseada em Firestore e está obsoleta.
 
-### Invariantes de Dados
-1. **Coleção `/users/{userId}`**:
-   - Um usuário comum só pode ler e atualizar seu próprio perfil (`auth.uid == userId`).
-   - Usuários não-administradores não podem alterar seu próprio campo de função (`role`) ou privilégios de administração.
-   - Administradores (`isAdmin()`) possuem acesso total de leitura e escrita a qualquer perfil de usuário.
+## 1. Princípios
 
-2. **Coleções `/products/{productId}`, `/triage_units/{unitId}` e `/cases/{caseId}`**:
-   - Qualquer usuário autenticado tem permissão apenas de **leitura** (`allow read: if isSignedIn()`).
-   - Apenas Administradores e Gerentes (`isManagerOrAdmin()`) podem **criar, atualizar ou excluir** produtos, unidades em triagem ou casos de RMA.
+1. **O banco é a autoridade.** Quem pode ler/gravar é decidido por RLS no PostgreSQL, nunca pelo navegador. Esconder um botão na interface não é segurança.
+2. **Papel vem de `public.users.role`**, lido pela função `public.app_role()` (SECURITY DEFINER). Nunca de `user_metadata` nem de e-mail fixo no código.
+3. **Menor privilégio.** A chave `anon` não acessa nenhuma tabela. Sem login e sem linha em `public.users` = nenhum acesso.
+4. **Segredos só no servidor.** O token de gerenciamento do Supabase (`SUPABASE_MANAGEMENT_TOKEN`) existe apenas como variável de ambiente do servidor (Vercel/`.env`); nunca com prefixo `VITE_`, nunca no navegador nem no banco.
 
-3. **Coleção `/logs/{logId}`**:
-   - **Ninguém pode apagar** logs (`allow delete: if false`).
-   - **Ninguém pode alterar** logs existentes (`allow update: if false`).
-   - Qualquer usuário autenticado pode **criar** registros de auditoria/log do sistema (`allow create: if isSignedIn()`).
-   - Apenas Administradores podem **ler** os logs (`allow read: if isAdmin()`).
+## 2. Papéis
 
----
+| Papel | Pode |
+|---|---|
+| `admin` | Tudo: dados operacionais, usuários e papéis, apagar/restaurar/importar backups (com confirmação de senha), painel de uso do Supabase. |
+| `operator` | Ler e gravar dados operacionais; criar snapshots de backup e editar as 2 linhas de configuração do backup. **Não** apaga/restaura backups nem gerencia usuários. |
+| `viewer` | Somente leitura dos dados operacionais. |
 
-## 2. Cenários de Teste da "Dirty Dozen" (Payloads de Ataque & Resolução)
+- Não há cadastro público (signup desligado no painel do Supabase) nem modo visitante.
+- Usuários são criados por um admin em Authentication → Users, nascem `viewer` e só um admin promove:
+  `UPDATE public.users SET role = 'operator' WHERE email = '...';`
+- O cliente nunca grava `role`: a política de INSERT só aceita `viewer` para o próprio uid, e a de UPDATE impede mudar o próprio papel.
 
-| # | Cenário de Ataque | Ação Maliciosa | Resultado Esperado |
-|---|-------------------|----------------|-------------------|
-| 1 | Modificação de Função | Usuário comum tenta atualizar `users/UID` definindo `role: "admin"`. | `PERMISSION_DENIED` |
-| 2 | Leitura de Perfil Alheio | Usuário A tenta ler `users/UID_B`. | `PERMISSION_DENIED` |
-| 3 | Escrita em Produtos por Usuário Comum | Usuário comum tenta criar/editar um produto em `products/PROD1`. | `PERMISSION_DENIED` |
-| 4 | Alteração de Status de RMA por Operador Comum | Usuário comum tenta alterar `destinationSector` em `triage_units/UNIT1`. | `PERMISSION_DENIED` |
-| 5 | Exclusão de Log por Ator Malicioso | Usuário (mesmo Admin) tenta executar `delete` em `logs/LOG1`. | `PERMISSION_DENIED` |
-| 6 | Edição/Adulteração de Log | Usuário tenta alterar mensagem ou timestamp de um log existente em `logs/LOG1`. | `PERMISSION_DENIED` |
-| 7 | Leitura de Logs por Usuário Não-Admin | Usuário comum tenta listar ou ler `logs/LOG1`. | `PERMISSION_DENIED` |
-| 8 | Injeção de Shadow Fields | Usuário tenta enviar campos extras não autorizados em atualizações. | `PERMISSION_DENIED` |
-| 9 | Leitura Não Autenticada | Requisição sem token de autenticação (`auth == null`) em qualquer coleção. | `PERMISSION_DENIED` |
-| 10 | Leitura Geral de Usuários por Não-Admin | Usuário comum executa query `getDocs(collection(db, 'users'))`. | `PERMISSION_DENIED` |
-| 11 | Criação de Casos RMA por Não-Gerente | Operador comum tenta cadastrar novo caso em `cases/CASE1`. | `PERMISSION_DENIED` |
-| 12 | Remoção de Unidade de Estoque | Operador comum tenta deletar documento em `triage_units/UNIT1`. | `PERMISSION_DENIED` |
+## 3. Regras de RLS (resumo)
 
----
+| Tabela | SELECT | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `products`, `triage_units`, `pending_items`, `daily_inflows`, `cases` | admin, operator, viewer | admin, operator | admin, operator | admin, operator |
+| `users` | própria linha ou admin | admin, ou o próprio uid como `viewer` | própria linha sem mudar o papel, ou admin | admin |
+| `audit_logs` | admin, operator | admin, operator (com `user_id` próprio) | ninguém | ninguém |
+| `backup_snapshots` | admin, operator | admin, operator | admin; operator só em `config_system_integrations` e `config_backup_schedule` | admin |
+| Storage `product-images` | público (bucket público) | admin, operator | admin, operator | admin, operator |
 
-## 3. Matriz de Permissões das Regras
+- `get_stock_metrics()` (RPC): só usuários logados, com `search_path` fixo.
+- Fonte dos scripts: `supabase_rls_hardening.sql` (aplicar), `supabase_rls_rollback.sql` (reverter) e o bloco de segurança do `SUPABASE_SQL_SCHEMA` (`src/lib/supabase.ts`, para bancos novos). **Nunca recriar políticas "Public access".**
 
-| Coleção | Leitura (Get/List) | Criação (Create) | Atualização (Update) | Exclusão (Delete) |
-|---------|-------------------|------------------|----------------------|-------------------|
-| `users/{userId}` | Próprio Usuário ou Admin | Próprio Usuário (sem role admin) ou Admin | Próprio Usuário (sem alterar role) ou Admin | Apenas Admin |
-| `products/{productId}` | Qualquer Usuário Autenticado | Admin / Gerente | Admin / Gerente | Admin / Gerente |
-| `triage_units/{unitId}` | Qualquer Usuário Autenticado | Admin / Gerente | Admin / Gerente | Admin / Gerente |
-| `cases/{caseId}` | Qualquer Usuário Autenticado | Admin / Gerente | Admin / Gerente | Admin / Gerente |
-| `logs/{logId}` | Apenas Admin | Qualquer Usuário Autenticado | Ninguém | Ninguém |
+## 4. API do servidor
+
+- `/api/supabase-usage` (Vercel `api/` e `server.ts`): exige `Authorization: Bearer <sessão>`; valida no Supabase Auth e confere `app_role() = 'admin'`. Sem login → 401; outro papel → 403.
+- O `projectRef` é definido só pelo servidor (variáveis de ambiente); a requisição não escolhe o projeto.
+
+## 5. Backup
+
+- Snapshots do app: criar = admin/operator; **restaurar, importar e apagar = só admin, com confirmação de senha** (`adminReauth.ts`).
+- Restauração: confere hash, cria snapshot "Pré-restauração", grava (upsert) e só depois remove o que sobrou (modo substituir).
+- Leituras completas paginam com `.range()` (a API limita 1000 linhas por requisição) e conferem a contagem.
+- Backup externo criptografado (GitHub Actions, `pg_dump` + AES-256, 30 dias): ver `docs/BACKUP_RESTORE.md`.
+
+## 6. Cenários de verificação
+
+| # | Cenário | Resultado esperado |
+|---|---|---|
+| 1 | Requisição com chave `anon`, sem login, lendo qualquer tabela | Negado (sem permissão) |
+| 2 | `viewer` tenta inserir/alterar/apagar em qualquer tabela operacional | Violação de RLS |
+| 3 | Usuário tenta `UPDATE users SET role = 'admin'` na própria linha | Violação de RLS |
+| 4 | Usuário tenta criar a própria linha em `users` com `role = 'admin'` | Violação de RLS |
+| 5 | `operator` tenta apagar um snapshot de backup | Violação de RLS |
+| 6 | Alguém tenta alterar ou apagar um registro de `audit_logs` | Violação de RLS |
+| 7 | `viewer` tenta ler `audit_logs` ou `backup_snapshots` | Nenhuma linha / negado |
+| 8 | `/api/supabase-usage` sem token ou com token inválido | 401 |
+| 9 | `/api/supabase-usage` com `operator` ou `viewer` | 403 |
+| 10 | `/api/supabase-usage` com `projectRef` de outro projeto no corpo | Ignorado (usa o projeto do servidor) |
+| 11 | Restaurar backup sem confirmar a senha de admin | Bloqueado |
+| 12 | Upload de imagem acima de 3MB | Bloqueado no cliente e pelo limite do bucket |
+
+Os cenários 1–7 e 8–10 foram verificados em um banco Supabase local de testes.

@@ -1,3 +1,5 @@
+-- ATENÇÃO: versão reduzida (só tabelas). O script completo e seguro (RLS por papel, storage, RPC e backup) é o que o app
+-- mostra em Configurações > Banco de dados (SUPABASE_SQL_SCHEMA em src/lib/supabase.ts); prefira-o para bancos novos.
 -- Copie e cole este script na aba "SQL Editor" do seu novo projeto do Supabase e clique em "Run".
 
 CREATE TABLE IF NOT EXISTS products (
@@ -122,7 +124,7 @@ CREATE TABLE IF NOT EXISTS users (
   uid TEXT PRIMARY KEY,
   email TEXT NOT NULL,
   name TEXT,
-  role TEXT DEFAULT 'operator',
+  role TEXT DEFAULT 'viewer',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   last_login TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
