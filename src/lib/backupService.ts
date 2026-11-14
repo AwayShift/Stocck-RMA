@@ -730,6 +730,7 @@ export const deleteCloudSnapshot = async (snapshotId: string): Promise<boolean> 
       console.warn('Silent catch deleting chunk prefix:', e);
     }
 
+    await createAuditLog('BACKUP_DELETE', `Apagou o snapshot de backup ${snapshotId}.`);
     return true;
   }
   return false;
@@ -1002,7 +1003,9 @@ export const bulkDeleteCloudSnapshots = async (
   onProgress?: (deleted: number, total: number) => void
 ): Promise<{ success: boolean; deletedCount: number }> => {
   await ensureAdminReauthenticated('apagar backups');
-  return bulkDeleteCloudSnapshotsUnchecked(snapshotIds, onProgress);
+  const result = await bulkDeleteCloudSnapshotsUnchecked(snapshotIds, onProgress);
+  await createAuditLog('BACKUP_DELETE_BULK', `Apagou ${result.deletedCount} registros de backup em lote (${snapshotIds.length} selecionados).`);
+  return result;
 };
 
 /**
@@ -1056,6 +1059,7 @@ export const purgeOrphanBackupChunks = async (
       onProgress?.(purgedCount, orphanIds.length);
     }
 
+    await createAuditLog('BACKUP_PURGE_ORPHANS', `Removeu ${purgedCount} fragmentos órfãos de backup.`);
     return { success: true, purgedCount };
   } catch (err) {
     console.error('Error purging orphan chunks:', err);
@@ -1076,6 +1080,17 @@ export type QuickCleanupPolicy =
  * Execute 1-click quick cleanup rules to free database space instantly
  */
 export const quickCleanupBackups = async (
+  policy: QuickCleanupPolicy,
+  onProgress?: (processed: number, total: number) => void
+): Promise<{ success: boolean; deletedCount: number; message: string }> => {
+  const result = await quickCleanupBackupsInner(policy, onProgress);
+  if (result.success) {
+    await createAuditLog('BACKUP_CLEANUP', `Limpeza rápida de backups (política: ${policy}). ${result.message}`);
+  }
+  return result;
+};
+
+const quickCleanupBackupsInner = async (
   policy: QuickCleanupPolicy,
   onProgress?: (processed: number, total: number) => void
 ): Promise<{ success: boolean; deletedCount: number; message: string }> => {

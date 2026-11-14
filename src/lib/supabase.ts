@@ -1002,6 +1002,46 @@ CREATE POLICY rls_update ON public.backup_snapshots FOR UPDATE TO authenticated
 CREATE POLICY rls_delete ON public.backup_snapshots FOR DELETE TO authenticated
   USING (public.app_role() = 'admin');
 
+-- 6b. Auditoria automática de criação/mudança/exclusão de papéis em users
+CREATE OR REPLACE FUNCTION public.audit_user_roles()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_actor text := auth.uid()::text;                       -- NULL quando rodado no SQL Editor
+  v_actor_email text := auth.jwt() ->> 'email';
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO public.audit_logs (user_id, user_email, action, details)
+    VALUES (v_actor, v_actor_email, 'USER_CREATED',
+            'Perfil criado: ' || NEW.email || ' com papel ' || coalesce(NEW.role, 'NULL'));
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF NEW.role IS DISTINCT FROM OLD.role THEN
+      INSERT INTO public.audit_logs (user_id, user_email, action, details)
+      VALUES (v_actor, v_actor_email, 'USER_ROLE_CHANGED',
+              'Papel de ' || NEW.email || ': ' || coalesce(OLD.role, 'NULL') || ' -> ' || coalesce(NEW.role, 'NULL')
+              || CASE WHEN v_actor IS NULL THEN ' (via SQL/painel)' ELSE '' END);
+    END IF;
+    RETURN NEW;
+  ELSE
+    INSERT INTO public.audit_logs (user_id, user_email, action, details)
+    VALUES (v_actor, v_actor_email, 'USER_DELETED',
+            'Perfil removido: ' || OLD.email || ' (papel ' || coalesce(OLD.role, 'NULL') || ')');
+    RETURN OLD;
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.audit_user_roles() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_audit_user_roles ON public.users;
+CREATE TRIGGER trg_audit_user_roles
+  AFTER INSERT OR UPDATE OF role OR DELETE ON public.users
+  FOR EACH ROW EXECUTE FUNCTION public.audit_user_roles();
+
 -- 7. Storage (bucket product-images): leitura pública (bucket público); escrita só admin/operator logados
 DROP POLICY IF EXISTS "Public storage select product-images" ON storage.objects;
 DROP POLICY IF EXISTS "Public storage insert product-images" ON storage.objects;

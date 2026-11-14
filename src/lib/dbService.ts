@@ -171,20 +171,93 @@ const DEFAULT_TRIAGE_UNITS: TriageUnit[] = [
   }
 ];
 
-// Corporate Audit Logging helper
+// Trilha de auditoria: grava SÓ ações sensíveis (para não encher o banco). Melhor esforço: nunca lança erro.
+// A tabela audit_logs é imutável (RLS: sem update/delete); só admin/operator inserem, sempre com o próprio user_id.
+const SENSITIVE_AUDIT_ACTIONS = new Set<string>([
+  'UPDATE_USER_ROLE', 'DELETE_USER',
+  'RESET_CATALOG', 'RESET_STOCK', 'RESET_INFLOWS', 'RESET_DATABASE',
+  'BACKUP_RESTORED', 'BACKUP_EXPORT_FILE', 'BACKUP_DELETE', 'BACKUP_DELETE_BULK', 'BACKUP_CLEANUP', 'BACKUP_PURGE_ORPHANS'
+]);
+
 export const createAuditLog = async (
-  _action: string, 
-  _details: string,
-  _overrideEmail?: string,
-  _overrideUid?: string
+  action: string,
+  details: string,
+  overrideEmail?: string,
+  overrideUid?: string
 ) => {
-  // Silent mode for database hygiene & performance
-  return;
+  try {
+    if (!SENSITIVE_AUDIT_ACTIONS.has(action)) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id || overrideUid;
+    if (!uid) return; // sem sessão não há quem registrar (e o RLS recusaria)
+    await supabase.from('audit_logs').insert({
+      user_id: session?.user?.id || uid,
+      user_email: session?.user?.email || overrideEmail || null,
+      action,
+      details: String(details || '').slice(0, 500)
+    });
+  } catch (err) {
+    console.warn('Audit log não gravado:', err);
+  }
 };
 
 // Purge legacy audit logs (no-op to prevent unnecessary database queries and log ingestion)
 export const purgeExistingAuditLogs = async (): Promise<void> => {
   return;
+};
+
+export interface AuditLogRecord {
+  id: string;
+  userId: string | null;
+  userEmail: string | null;
+  action: string;
+  details: string | null;
+  timestamp: string;
+}
+
+export type AuditLogCategory = 'all' | 'users' | 'backups' | 'resets';
+
+const AUDIT_CATEGORY_ACTIONS: Record<Exclude<AuditLogCategory, 'all'>, string[]> = {
+  users: ['UPDATE_USER_ROLE', 'DELETE_USER', 'USER_CREATED', 'USER_ROLE_CHANGED', 'USER_DELETED'],
+  backups: ['BACKUP_RESTORED', 'BACKUP_EXPORT_FILE', 'BACKUP_DELETE', 'BACKUP_DELETE_BULK', 'BACKUP_CLEANUP', 'BACKUP_PURGE_ORPHANS'],
+  resets: ['RESET_CATALOG', 'RESET_STOCK', 'RESET_INFLOWS', 'RESET_DATABASE']
+};
+
+// Leitura paginada (somente leitura) da trilha de auditoria para o painel de segurança do admin.
+export const fetchAuditLogsPage = async (
+  page: number = 0,
+  pageSize: number = 25,
+  category: AuditLogCategory = 'all'
+): Promise<{ logs: AuditLogRecord[]; total: number }> => {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Banco de dados não conectado.');
+  try {
+    const from = Math.max(0, page) * pageSize;
+    let query = supabase
+      .from('audit_logs')
+      .select('id, user_id, user_email, action, details, timestamp', { count: 'exact' });
+    if (category !== 'all') query = query.in('action', AUDIT_CATEGORY_ACTIONS[category]);
+    const { data, error, count } = await query
+      .order('timestamp', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    return {
+      logs: (data || []).map((r: any) => ({
+        id: r.id,
+        userId: r.user_id,
+        userEmail: r.user_email,
+        action: r.action,
+        details: r.details,
+        timestamp: r.timestamp
+      })),
+      total: count || 0
+    };
+  } catch (err: any) {
+    console.warn('Erro ao ler registros de auditoria:', err);
+    throw new Error(err?.message || 'Não foi possível ler os registros de auditoria.');
+  }
 };
 
 // Image Upload with 3MB limit, WebP conversion, security validation and Supabase/Cloudinary Storage integration
@@ -2272,17 +2345,8 @@ export const resetDailyInflowsRecords = async (): Promise<number> => {
   return 0;
 };
 
+// Os logs de auditoria são imutáveis (RLS impede apagar): esta ação foi desativada de propósito.
 export const resetAuditLogsRecords = async (): Promise<number> => {
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    const { count } = await supabase.from('audit_logs').delete({ count: 'exact' }).neq('id', '___all___');
-    try {
-      await createAuditLog('RESET_LOGS', `Executou limpeza do histórico de logs no Supabase (${count || 0} logs anteriores apagados).`);
-    } catch (err) {
-      console.warn('Audit log error:', err);
-    }
-    return count || 0;
-  }
   return 0;
 };
 
@@ -2295,7 +2359,6 @@ export const resetDatabaseToDefaults = async (): Promise<void> => {
     await supabase.from('cases').delete().neq('id', '___all___');
     await supabase.from('daily_inflows').delete().neq('id', '___all___');
     await supabase.from('pending_items').delete().neq('id', '___all___');
-    await supabase.from('audit_logs').delete().neq('id', '___all___');
 
     localStorage.setItem('base_products_seeded', 'true');
     localStorage.setItem('triage_units_seeded', 'true');

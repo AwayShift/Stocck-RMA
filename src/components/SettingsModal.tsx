@@ -29,8 +29,10 @@ import {
   Download,
   LogOut,
   Code,
-  Copy
+  Copy,
+  ShieldAlert
 } from 'lucide-react';
+import SecurityAuditPanel from './SecurityAuditPanel';
 import { ThemeMode } from '../lib/theme';
 import { SUPABASE_SQL_SCHEMA } from '../lib/supabase';
 import { 
@@ -63,7 +65,7 @@ interface SettingsModalProps {
   userEmail?: string;
 }
 
-type SettingsTab = 'general' | 'cloudinary' | 'database' | 'session';
+type SettingsTab = 'general' | 'cloudinary' | 'database' | 'security' | 'session';
 
 export default function SettingsModal({
   isOpen,
@@ -128,6 +130,9 @@ export default function SettingsModal({
   // Ensure visitor cannot stay on restricted tabs
   useEffect(() => {
     if (userRole === 'viewer' && (activeTab === 'cloudinary' || activeTab === 'database')) {
+      setActiveTab('general');
+    }
+    if (userRole !== 'admin' && activeTab === 'security') {
       setActiveTab('general');
     }
   }, [userRole, activeTab]);
@@ -200,7 +205,7 @@ export default function SettingsModal({
       }}
     >
       <div 
-        className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border ${
+        className={`w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border ${
           isLight ? 'bg-white border-slate-200 text-slate-900 shadow-xl' : 'bg-slate-900 border-slate-800 text-white'
         }`}
         id="settings-modal"
@@ -291,6 +296,22 @@ export default function SettingsModal({
             >
               <Database className="w-3.5 h-3.5" />
               <span>Banco & Backup</span>
+            </button>
+          )}
+
+          {userRole === 'admin' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('security')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg transition-all cursor-pointer border-b-2 whitespace-nowrap ${
+                activeTab === 'security'
+                  ? isLight ? 'text-sky-700 border-sky-600 bg-white font-bold' : 'text-sky-400 border-sky-400 bg-slate-900 font-bold'
+                  : isLight ? 'text-slate-600 border-transparent hover:text-slate-950 hover:bg-white/60' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40'
+              }`}
+              id="tab-btn-security"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>Segurança</span>
             </button>
           )}
 
@@ -761,6 +782,9 @@ export default function SettingsModal({
               </div>
             </div>
           )}
+
+          {/* TAB: SEGURANÇA (somente admin) */}
+          {activeTab === 'security' && userRole === 'admin' && <SecurityAuditPanel />}
 
           {/* TAB 4: SESSÃO & CONTA */}
           {activeTab === 'session' && (

@@ -40,14 +40,23 @@ Esta especificação descreve o modelo **atual** (Supabase: PostgreSQL + Auth + 
 - `/api/supabase-usage` (Vercel `api/` e `server.ts`): exige `Authorization: Bearer <sessão>`; valida no Supabase Auth e confere `app_role() = 'admin'`. Sem login → 401; outro papel → 403.
 - O `projectRef` é definido só pelo servidor (variáveis de ambiente); a requisição não escolhe o projeto.
 
-## 5. Backup
+## 5. Trilha de auditoria
+
+- `createAuditLog` (`src/lib/dbService.ts`) grava em `audit_logs` **apenas ações sensíveis** (lista `SENSITIVE_AUDIT_ACTIONS`): mudança/exclusão de usuário e papel, limpezas totais (`RESET_*`) e operações de backup (restaurar, exportar, apagar, apagar em lote, limpeza rápida, limpeza de órfãos). É melhor esforço: nunca lança erro nem bloqueia a ação.
+- Cada registro leva o `user_id` e o e-mail da sessão (o RLS só aceita o próprio `user_id`). Não grava senhas nem tokens.
+- `audit_logs` é **imutável**: sem UPDATE/DELETE para ninguém (nem admin). A ação "limpar logs" foi desativada.
+- Gatilho `trg_audit_user_roles` (`supabase_audit_triggers.sql`, também no `SUPABASE_SQL_SCHEMA`): registra criação, mudança de papel e exclusão em `public.users`, inclusive promoções feitas direto por SQL (marcadas "via SQL/painel").
+- **Painel de segurança:** Configurações → aba **Segurança** (só admin; `SecurityAuditPanel.tsx`, leitura paginada via `fetchAuditLogsPage`), com filtro por tipo, paginação e botão Atualizar (sem Realtime). Somente leitura.
+- Consulta direta: `select timestamp, user_email, action, details from audit_logs order by timestamp desc limit 50;`
+
+## 6. Backup
 
 - Snapshots do app: criar = admin/operator; **restaurar, importar e apagar = só admin, com confirmação de senha** (`adminReauth.ts`).
 - Restauração: confere hash, cria snapshot "Pré-restauração", grava (upsert) e só depois remove o que sobrou (modo substituir).
 - Leituras completas paginam com `.range()` (a API limita 1000 linhas por requisição) e conferem a contagem.
 - Backup externo criptografado (GitHub Actions, `pg_dump` + AES-256, 30 dias): ver `docs/BACKUP_RESTORE.md`.
 
-## 6. Cenários de verificação
+## 7. Cenários de verificação
 
 | # | Cenário | Resultado esperado |
 |---|---|---|
@@ -63,5 +72,8 @@ Esta especificação descreve o modelo **atual** (Supabase: PostgreSQL + Auth + 
 | 10 | `/api/supabase-usage` com `projectRef` de outro projeto no corpo | Ignorado (usa o projeto do servidor) |
 | 11 | Restaurar backup sem confirmar a senha de admin | Bloqueado |
 | 12 | Upload de imagem acima de 3MB | Bloqueado no cliente e pelo limite do bucket |
+| 13 | Admin tenta apagar registros de `audit_logs` | 0 linhas afetadas (imutável) |
+| 14 | Usuário grava log com `user_id` de outra pessoa | Violação de RLS |
+| 15 | Promover alguém por SQL | Gatilho registra `USER_ROLE_CHANGED` |
 
-Os cenários 1–7 e 8–10 foram verificados em um banco Supabase local de testes.
+Os cenários 1–10 e 13–15 foram verificados em um banco Supabase local de testes.
