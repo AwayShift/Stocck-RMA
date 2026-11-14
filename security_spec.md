@@ -46,7 +46,7 @@ Esta especificação descreve o modelo **atual** (Supabase: PostgreSQL + Auth + 
 - **Cabeçalhos** (`vercel.json`, todas as rotas): `Content-Security-Policy` (scripts só `'self'`; conexões só `'self'`, `*.supabase.co` e `api.cloudinary.com`; imagens `https:`; `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` (câmera/microfone/localização desligados) e `Strict-Transport-Security`.
 - O único script inline do app foi movido para `public/compat.js` (a CSP não permite script inline). Para usar outro domínio de Supabase ou outro serviço externo, inclua-o em `connect-src`/`img-src` no `vercel.json`.
 - Navegar com texto malicioso gera avisos de CSP no console durante a análise do DOMPurify; são bloqueios inofensivos (nada é executado).
-- GitHub Pages não aplica esses cabeçalhos; a proteção completa vale no deploy da Vercel.
+- O deploy é só na Vercel (o GitHub Pages foi desativado; ele não aplicaria esses cabeçalhos).
 
 ## 4c. Cadeia de suprimentos
 

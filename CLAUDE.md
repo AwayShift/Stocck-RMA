@@ -85,4 +85,4 @@ Variáveis de ambiente: ficam no `.env` local (não versionado; não há mais `.
 - `/api/supabase-usage` exige login de admin (token da sessão no `Authorization`); o projeto vem só das variáveis do servidor. A função `requireAdmin` está duplicada em `api/supabase-usage.ts` e `server.ts` — mantenha as duas iguais.
 - `public/PRD_RMA_FLOW.md` descreve uma versão antiga baseada em Firebase/Firestore; a arquitetura atual é Supabase — em caso de conflito, prevalece AGENTS.md e o código.
 - `DAILY_CHANGES.md` e `daily_changes.json` são gerados por `npm run track-changes`; não editar à mão.
-- Deploy: workflow `.github/workflows/deploy.yml` (GitHub Pages, no push para `main`) e `vercel.json`.
+- Deploy: Vercel, que publica a cada push no `main` pela integração com o GitHub (config e cabeçalhos em `vercel.json`). O deploy no GitHub Pages foi desativado (não há mais `deploy.yml`).
