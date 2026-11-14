@@ -1465,6 +1465,10 @@ export default function PendingItems({
     }
   };
 
+  // Destaca em âmbar só estados que indicam problema (Danificada, Avariada...); o resto fica neutro.
+  const conditionTone = (value?: string) =>
+    /danific|avari|quebrad|defeit|violad|amassad|faltand|incomplet/i.test(value || '') ? 'text-amber-400' : 'text-white';
+
   const getPriorityBadge = (priority?: PendingPriorityType | string) => {
     switch (priority) {
       case 'Urgente':
@@ -1473,8 +1477,8 @@ export default function PendingItems({
           icon: '',
           className: 'bg-rose-500/20 text-rose-300 border-rose-500/50 font-bold',
           dotColor: 'bg-rose-500',
-          cardBorder: 'border-l-4 border-l-rose-500 shadow-rose-950/20',
-          cardBg: 'bg-rose-950/15'
+          cardBorder: 'border-l-4 border-l-rose-500',
+          cardBg: ''
         };
       case 'Alta':
         return {
@@ -1482,8 +1486,8 @@ export default function PendingItems({
           icon: '',
           className: 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold',
           dotColor: 'bg-amber-500',
-          cardBorder: 'border-l-4 border-l-amber-500 shadow-amber-950/20',
-          cardBg: 'bg-amber-950/15'
+          cardBorder: 'border-l-4 border-l-amber-500',
+          cardBg: ''
         };
       case 'Média':
         return {
@@ -1578,7 +1582,7 @@ export default function PendingItems({
               title="Sincronizar pendências imediatamente com o banco de dados e outras abas"
               id="btn-sync-pendencias"
             >
-              <RefreshCw className={`w-4 h-4 text-sky-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`} />
               <span>{isRefreshing ? 'Sincronizando...' : 'Sincronizar'}</span>
             </button>
 
@@ -1589,7 +1593,7 @@ export default function PendingItems({
                 title="Exportar registros filtrados para planilha Excel"
                 id="btn-export-pendencias"
               >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <FileSpreadsheet className="w-4 h-4 text-slate-400" />
                 <span>Exportar Excel</span>
               </button>
             )}
@@ -1614,40 +1618,38 @@ export default function PendingItems({
           </div>
         </div>
 
-        {/* Metric Cards Banner */}
+        {/* Metric Cards Banner: fundo neutro; a cor aparece só no pontinho e em "Urgentes" quando houver */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-5 pt-5 border-t border-slate-800/80">
           <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total em Aberto</div>
-            <div className="text-xl font-extrabold text-white mt-1">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block shrink-0" /><span>Total em Aberto</span></div>
+            <div className="text-2xl font-extrabold text-white mt-1">
               {stats.pendentes + stats.analise + stats.aguardandoPecaOuNf}
             </div>
-            <div className="text-[10px] text-sky-400 font-medium mt-0.5">Aguardando resolução</div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Aguardando resolução</div>
           </div>
 
-          <div className="bg-slate-950/60 border border-rose-500/30 p-3 rounded-xl">
-            <div className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Urgentes / Alta</span>
-            </div>
-            <div className="text-xl font-extrabold text-rose-300 mt-1">{stats.urgentes}</div>
-            <div className="text-[10px] text-rose-400/80 font-medium mt-0.5">Foco prioritário</div>
+          <div className={`bg-slate-950/60 border p-3 rounded-xl ${stats.urgentes > 0 ? 'border-rose-500/50' : 'border-slate-800'}`}>
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block shrink-0" /><span>Urgentes / Alta</span></div>
+            <div className={`text-2xl font-extrabold mt-1 ${stats.urgentes > 0 ? 'text-rose-300' : 'text-white'}`}>{stats.urgentes}</div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Foco prioritário</div>
           </div>
 
-          <div className="bg-slate-950/60 border border-amber-500/20 p-3 rounded-xl">
-            <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Pendentes</div>
-            <div className="text-xl font-extrabold text-amber-300 mt-1">{stats.pendentes}</div>
-            <div className="text-[10px] text-slate-400 font-medium mt-0.5">Sem triagem inicial</div>
+          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block shrink-0" /><span>Pendentes</span></div>
+            <div className="text-2xl font-extrabold text-white mt-1">{stats.pendentes}</div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Sem triagem inicial</div>
           </div>
 
-          <div className="bg-slate-950/60 border border-sky-500/20 p-3 rounded-xl">
-            <div className="text-[11px] font-semibold text-sky-400 uppercase tracking-wider">Em Análise</div>
-            <div className="text-xl font-extrabold text-sky-300 mt-1">{stats.analise}</div>
-            <div className="text-[10px] text-slate-400 font-medium mt-0.5">Diagnóstico em curso</div>
+          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block shrink-0" /><span>Em Análise</span></div>
+            <div className="text-2xl font-extrabold text-white mt-1">{stats.analise}</div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Diagnóstico em curso</div>
           </div>
 
-          <div className="bg-slate-950/60 border border-purple-500/20 p-3 rounded-xl">
-            <div className="text-[11px] font-semibold text-purple-400 uppercase tracking-wider">Peças / NF</div>
-            <div className="text-xl font-extrabold text-purple-300 mt-1">{stats.aguardandoPecaOuNf}</div>
-            <div className="text-[10px] text-slate-400 font-medium mt-0.5">Falta componente/NF</div>
+          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block shrink-0" /><span>Peças / NF</span></div>
+            <div className="text-2xl font-extrabold text-white mt-1">{stats.aguardandoPecaOuNf}</div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Falta componente/NF</div>
           </div>
 
           <div 
@@ -1661,20 +1663,20 @@ export default function PendingItems({
             }}
             className={`bg-slate-950/60 border p-3 rounded-xl cursor-pointer transition-all ${
               statusFilter === 'Resolvido'
-                ? 'border-emerald-500 bg-emerald-950/20 ring-1 ring-emerald-500/50'
-                : 'border-emerald-500/20 hover:border-emerald-500/40'
+                ? 'border-slate-500 bg-slate-900 ring-1 ring-slate-500/50'
+                : 'border-slate-800 hover:border-slate-600'
             }`}
             title="Clique para filtrar apenas pendências resolvidas"
             id="card-metric-resolvidos"
           >
-            <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Resolvidos / Cancelados</span>
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block shrink-0" /><span>Resolvidos / Cancelados</span></span>
               {hideResolved && (
-                <span className="text-[9px] text-slate-400 lowercase font-normal">(ocultos)</span>
+                <span className="text-[9px] text-slate-500 lowercase font-normal">(ocultos)</span>
               )}
             </div>
-            <div className="text-xl font-extrabold text-emerald-300 mt-1">{stats.resolvidos}</div>
-            <div className="text-[10px] text-slate-400 font-medium mt-0.5">Finalizados / Ocultos</div>
+            <div className="text-2xl font-extrabold text-white mt-1">{stats.resolvidos}</div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">Finalizados / Ocultos</div>
           </div>
         </div>
       </div>
@@ -1769,7 +1771,7 @@ export default function PendingItems({
             data-hidden={hideResolved ? 'true' : 'false'}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0 ${
               hideResolved
-                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 shadow-sm'
+                ? 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 shadow-sm'
                 : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
             }`}
             title={
@@ -1781,10 +1783,10 @@ export default function PendingItems({
           >
             {hideResolved ? (
               <>
-                <EyeOff className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <EyeOff className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                 <span>Ocultando Resolvidas</span>
                 {stats.resolvidos > 0 && (
-                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-slate-700 text-slate-200 border border-slate-600">
                     {stats.resolvidos}
                   </span>
                 )}
@@ -1830,9 +1832,9 @@ export default function PendingItems({
 
       {/* Alert banner if resolved or cancelled items are hidden */}
       {hideResolved && stats.resolvidos > 0 && statusFilter !== 'Resolvido' && statusFilter !== 'Cancelado' && (
-        <div className="pending-hidden-resolved-banner flex items-center justify-between px-4 py-2.5 bg-emerald-950/20 border border-emerald-500/25 rounded-xl text-xs text-emerald-300 shadow-sm animate-in fade-in" id="banner-hidden-resolved">
+        <div className="pending-hidden-resolved-banner flex items-center justify-between px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 shadow-sm animate-in fade-in" id="banner-hidden-resolved">
           <div className="flex items-center gap-2">
-            <EyeOff className="w-4 h-4 text-emerald-400 shrink-0" />
+            <EyeOff className="w-4 h-4 text-slate-400 shrink-0" />
             <span>
               <strong>{stats.resolvidos}</strong> {stats.resolvidos === 1 ? 'pendência resolvida/cancelada está oculta' : 'pendências resolvidas/canceladas estão ocultas'} da lista atual.
             </span>
@@ -1840,7 +1842,7 @@ export default function PendingItems({
           <button
             type="button"
             onClick={() => setHideResolved(false)}
-            className="text-xs text-emerald-400 hover:text-emerald-200 font-bold underline cursor-pointer shrink-0 ml-2"
+            className="text-xs text-sky-400 hover:text-sky-300 font-bold underline cursor-pointer shrink-0 ml-2"
             id="btn-show-resolved-inline"
           >
             Exibir todas
@@ -1917,22 +1919,16 @@ export default function PendingItems({
                   {/* Card Header: Badges & Actions */}
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="pend-prio" data-priority={prioInfo.label} title={`Prioridade ${prioInfo.label}`}>
+                        <span className="pend-prio-dot" />
+                        {prioInfo.label}
+                      </span>
                       <span className={`pending-status-badge text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadge(item.status)}`}>
                         {item.status}
                       </span>
-                      <span className={`pending-priority-badge text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 ${prioInfo.className}`}>
-                        <span>{prioInfo.icon}</span>
-                        <span>{prioInfo.label}</span>
-                      </span>
                       <span 
                         data-platform={item.platform || 'Mercado Livre'}
-                        className={`pending-platform-badge text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                          (item.platform || 'Mercado Livre') === 'Mercado Livre'
-                            ? 'bg-yellow-400/15 text-yellow-800 dark:text-yellow-300 dark:bg-yellow-400/20 border-yellow-400/60 dark:border-yellow-400/70 shadow-sm shadow-yellow-500/10'
-                            : (item.platform || 'Mercado Livre') === 'Shopee'
-                            ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 dark:bg-orange-500/20 border-orange-500/60 dark:border-orange-500/70'
-                            : 'bg-slate-950 text-slate-400 border-slate-800'
-                        }`}
+                        className="pending-platform-badge text-[10px] font-semibold px-2 py-0.5 rounded-md border bg-slate-950 text-slate-300 border-slate-700"
                       >
                         {item.platform || 'Mercado Livre'}
                       </span>
@@ -1978,16 +1974,16 @@ export default function PendingItems({
                           : '';
                         const effectiveReg = directReg || linkedReg || healPendingItemRegistrationNumber(item, items, units || []);
                         return (
-                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded border text-sky-400 bg-sky-500/10 border-sky-500/30 flex items-center gap-1" title="Número de Registro da Pendência">
-                            <Hash className="w-3 h-3 text-sky-400" />
+                          <span className="pending-reg-badge font-mono text-xs font-bold px-2 py-0.5 rounded border text-slate-100 bg-slate-800/70 border-slate-700 flex items-center gap-1" title="Número de Registro da Pendência">
+                            <Hash className="w-3 h-3 text-slate-400" />
                             {effectiveReg || 'REG-S/N'}
                           </span>
                         );
                       })()}
                       <span className={`pending-sku-badge font-mono text-xs font-bold px-2 py-0.5 rounded border ${
                         isResolved 
-                          ? 'text-slate-400 bg-slate-800/60 border-slate-700/50' 
-                          : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                          ? 'text-slate-500 bg-transparent border-slate-800' 
+                          : 'text-slate-300 bg-transparent border-slate-700'
                       }`}>
                         {item.sku || 'SEM SKU'}
                       </span>
@@ -2036,7 +2032,7 @@ export default function PendingItems({
                         </button>
                       ) : null}
                     </div>
-                    <h4 className={`pending-card-title text-sm mt-1.5 line-clamp-2 leading-snug ${
+                    <h4 className={`pending-card-title text-[15px] mt-2 line-clamp-2 leading-snug ${
                       isResolved ? 'text-slate-300 font-semibold' : 'text-white font-bold'
                     }`}>
                       {item.productName || 'Produto sem título informado'}
@@ -2103,15 +2099,15 @@ export default function PendingItems({
 
                   {/* Pending Reason Banner or Resolution Reason */}
                   {isResolved ? (
-                    <div className="pending-reason-banner-resolved bg-emerald-950/40 border border-emerald-500/40 p-3 rounded-xl mb-3 shadow-sm">
-                      <div className="text-[10px] font-bold uppercase text-emerald-400 flex items-center justify-between gap-1 mb-1">
+                    <div className="pending-reason-banner-resolved bg-slate-950/50 border border-slate-800 border-l-4 border-l-emerald-500 px-3 py-2.5 rounded-r-xl rounded-l-sm mb-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 flex items-center justify-between gap-1 mb-1">
                         <span className="flex items-center gap-1.5">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                           <span>Motivo da Resolução</span>
                         </span>
                         <div className="flex items-center gap-1.5">
                           {item.resolvedAt && (
-                            <span className="text-[9.5px] font-mono text-emerald-300/80 font-normal">
+                            <span className="text-[9.5px] font-mono text-slate-500 font-normal">
                               {new Date(item.resolvedAt).toLocaleDateString('pt-BR')}
                             </span>
                           )}
@@ -2121,28 +2117,28 @@ export default function PendingItems({
                               e.stopPropagation();
                               handleInitiateResolve(item);
                             }}
-                            className="p-1 text-emerald-400 hover:text-emerald-200 hover:bg-emerald-500/20 rounded transition-colors cursor-pointer"
+                            className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
                             title="Editar motivo da resolução"
                           >
                             <Pencil className="w-3 h-3" />
                           </button>
                         </div>
                       </div>
-                      <p className="text-xs text-emerald-200 font-semibold leading-relaxed">
+                      <p className="text-sm text-slate-100 font-semibold leading-snug">
                         {item.resolutionReason || 'Pendência sinalizada como resolvida.'}
                       </p>
-                      <div className="mt-2 pt-2 border-t border-emerald-500/20 text-[10.5px] text-slate-400 flex items-start gap-1">
+                      <div className="mt-2 pt-2 border-t border-slate-800 text-[10.5px] text-slate-400 flex items-start gap-1">
                         <span className="text-slate-500 font-medium shrink-0">Motivo inicial:</span>
                         <span className="text-slate-300">{item.pendingReason}</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="pending-reason-banner bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl mb-3">
-                      <div className="pending-reason-header text-[10px] font-bold uppercase text-amber-400 flex items-center gap-1 mb-0.5">
-                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                    <div className="pending-reason-banner bg-amber-500/10 border border-amber-500/20 border-l-4 border-l-amber-500 px-3 py-2.5 rounded-r-xl rounded-l-sm mb-3">
+                      <div className="pending-reason-header text-[10px] font-semibold uppercase tracking-wide text-slate-400 flex items-center gap-1 mb-0.5">
+                        <AlertTriangle className="w-3 h-3 text-slate-400" />
                         <span>Motivo da Pendência</span>
                       </div>
-                      <p className="pending-reason-text text-xs text-amber-200/90 font-medium leading-relaxed">
+                      <p className="pending-reason-text text-sm text-slate-100 font-semibold leading-snug">
                         {item.pendingReason}
                       </p>
                     </div>
@@ -2150,9 +2146,9 @@ export default function PendingItems({
 
                   {/* Customer Reason / Reclamação */}
                   {item.customerReason && (
-                    <div className="bg-sky-500/10 border border-sky-500/20 p-2 rounded-xl mb-3 text-[11px] text-sky-200">
-                      <div className="text-[10px] font-bold uppercase text-sky-400 flex items-center gap-1 mb-0.5">
-                        <FileText className="w-3 h-3 text-sky-400" />
+                    <div className="pending-customer-box bg-slate-950/50 border border-slate-800 p-2 rounded-xl mb-3 text-[11px] text-slate-300">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-0.5">
+                        <FileText className="w-3 h-3 text-slate-500" />
                         <span>Motivo Devolução (Cliente)</span>
                       </div>
                       <p className="leading-snug">{item.customerReason}</p>
@@ -2164,14 +2160,14 @@ export default function PendingItems({
                     <div className="flex flex-wrap items-center gap-1.5 mb-3 text-[10.5px]">
                       {item.deviceStatus && (
                         <span className="px-2 py-0.5 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 font-medium inline-flex items-center gap-1">
-                          <Tag className="w-3 h-3 text-amber-400" />
-                          <span>Prod: <strong className="text-white font-semibold">{item.deviceStatus}</strong></span>
+                          <Tag className="w-3 h-3 text-slate-400" />
+                          <span>Prod: <strong className={`${conditionTone(item.deviceStatus)} font-semibold`}>{item.deviceStatus}</strong></span>
                         </span>
                       )}
                       {item.packageStatus && (
                         <span className="px-2 py-0.5 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 font-medium inline-flex items-center gap-1">
-                          <Package className="w-3 h-3 text-amber-400" />
-                          <span>Emb: <strong className="text-white font-semibold">{item.packageStatus}</strong></span>
+                          <Package className="w-3 h-3 text-slate-400" />
+                          <span>Emb: <strong className={`${conditionTone(item.packageStatus)} font-semibold`}>{item.packageStatus}</strong></span>
                         </span>
                       )}
                     </div>
@@ -2294,7 +2290,7 @@ export default function PendingItems({
                         ) : (
                           <button
                             onClick={() => handleOpenTransferModal(item)}
-                            className="pending-transfer-btn flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-900/20 hover:scale-[1.02]"
+                            className="pending-transfer-btn flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer"
                             title="Liberar item e enviar para o estoque físico"
                             id={`btn-transfer-${item.id}`}
                           >
@@ -2342,9 +2338,9 @@ export default function PendingItems({
                         isResolved 
                           ? 'bg-slate-950/40 opacity-70 hover:opacity-100 hover:bg-slate-800/30 is-resolved-row' 
                           : item.priority === 'Urgente'
-                          ? 'bg-rose-950/15 hover:bg-rose-950/25 border-l-2 border-l-rose-500 is-urgent-row'
+                          ? 'hover:bg-slate-800/40 border-l-4 border-l-rose-500 is-urgent-row'
                           : item.priority === 'Alta'
-                          ? 'bg-amber-950/10 hover:bg-amber-950/20 border-l-2 border-l-amber-500 is-high-row'
+                          ? 'hover:bg-slate-800/40 border-l-4 border-l-amber-500 is-high-row'
                           : 'hover:bg-slate-800/40'
                       }`}
                     >
@@ -2359,8 +2355,8 @@ export default function PendingItems({
                             : '';
                           const effectiveReg = directReg || linkedReg || healPendingItemRegistrationNumber(item, items, units || []);
                           return (
-                            <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 border border-sky-500/25 px-2 py-0.5 rounded flex items-center gap-1 w-fit">
-                              <Hash className="w-3 h-3 text-sky-400" />
+                            <span className="pending-reg-badge font-mono text-xs font-bold text-slate-100 bg-slate-800/70 border border-slate-700 px-2 py-0.5 rounded flex items-center gap-1 w-fit">
+                              <Hash className="w-3 h-3 text-slate-400" />
                               <span>{effectiveReg || '-'}</span>
                             </span>
                           );
@@ -2409,15 +2405,15 @@ export default function PendingItems({
 
                       {/* Prioridade */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-md border inline-flex items-center gap-1 ${prioInfo.className}`}>
-                          <span>{prioInfo.icon}</span>
-                          <span>{prioInfo.label}</span>
+                        <span className="pend-prio" data-priority={prioInfo.label} title={`Prioridade ${prioInfo.label}`}>
+                          <span className="pend-prio-dot" />
+                          {prioInfo.label}
                         </span>
                       </td>
 
                       {/* SKU & Name */}
                       <td className="py-3.5 px-4 max-w-[280px]">
-                        <div className={`font-mono text-xs ${isResolved ? 'text-slate-400 font-semibold' : 'font-bold text-amber-400'}`}>
+                        <div className={`font-mono text-xs ${isResolved ? 'text-slate-400 font-semibold' : 'font-bold text-slate-100'}`}>
                           {item.sku || 'SEM SKU'}
                         </div>
                         <div className={`truncate mt-0.5 ${isResolved ? 'text-slate-300 font-normal' : 'text-white font-medium'}`} title={item.productName}>
@@ -2482,13 +2478,7 @@ export default function PendingItems({
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <span 
                           data-platform={item.platform || 'Mercado Livre'}
-                          className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded border ${
-                            (item.platform || 'Mercado Livre') === 'Mercado Livre'
-                              ? 'bg-yellow-400/15 text-yellow-800 dark:text-yellow-300 dark:bg-yellow-400/20 border-yellow-400/50 dark:border-yellow-400/60 font-bold'
-                              : (item.platform || 'Mercado Livre') === 'Shopee'
-                              ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 dark:bg-orange-500/20 border-orange-500/50 dark:border-orange-500/60 font-bold'
-                              : 'text-slate-300 border-transparent'
-                          }`}
+                          className="pending-platform-badge text-xs font-semibold px-2 py-0.5 rounded border border-slate-700 text-slate-300"
                         >
                           {item.platform || 'Mercado Livre'}
                         </span>
@@ -2497,8 +2487,8 @@ export default function PendingItems({
                       {/* Pending Reason & Resolution Info */}
                       <td className="py-3.5 px-4 max-w-[280px]">
                         {isResolved && item.resolutionReason ? (
-                          <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-lg p-1.5 mb-1.5">
-                            <div className="text-[9.5px] uppercase font-bold text-emerald-400 flex items-center justify-between gap-1">
+                          <div className="bg-slate-950/50 border border-slate-800 border-l-2 border-l-emerald-500 rounded-r-lg rounded-l-sm p-1.5 mb-1.5">
+                            <div className="text-[9.5px] uppercase font-semibold text-slate-400 flex items-center justify-between gap-1">
                               <span className="flex items-center gap-1">
                                 <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
                                 <span>Resolução:</span>
@@ -2509,13 +2499,13 @@ export default function PendingItems({
                                   e.stopPropagation();
                                   handleInitiateResolve(item);
                                 }}
-                                className="text-emerald-400 hover:text-emerald-200 p-0.5 rounded cursor-pointer"
+                                className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
                                 title="Editar motivo da resolução"
                               >
                                 <Pencil className="w-2.5 h-2.5" />
                               </button>
                             </div>
-                            <div className="text-xs text-emerald-200 font-semibold line-clamp-2 mt-0.5" title={item.resolutionReason}>
+                            <div className="text-xs text-slate-100 font-semibold line-clamp-2 mt-0.5" title={item.resolutionReason}>
                               {item.resolutionReason}
                             </div>
                           </div>
@@ -2525,7 +2515,7 @@ export default function PendingItems({
                           className={`text-xs truncate font-bold pendencias-reason-title ${
                             isResolved 
                               ? 'text-slate-500 dark:text-slate-400 font-normal' 
-                              : 'text-amber-800 dark:text-amber-300 font-bold'
+                              : 'text-slate-900 dark:text-slate-100 font-bold'
                           }`} 
                           title={item.pendingReason}
                         >
@@ -2534,7 +2524,7 @@ export default function PendingItems({
                         </div>
                         {item.customerReason && (
                           <div 
-                            className="text-[10.5px] text-sky-400 font-semibold truncate mt-0.5 flex items-center gap-1"
+                            className="text-[10.5px] text-slate-400 font-medium truncate mt-0.5 flex items-center gap-1"
                             title={`Motivo Devolução: ${item.customerReason}`}
                           >
                             <FileText className="w-2.5 h-2.5 shrink-0" />
