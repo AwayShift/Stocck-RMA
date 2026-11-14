@@ -48,6 +48,12 @@ Esta especificação descreve o modelo **atual** (Supabase: PostgreSQL + Auth + 
 - Navegar com texto malicioso gera avisos de CSP no console durante a análise do DOMPurify; são bloqueios inofensivos (nada é executado).
 - GitHub Pages não aplica esses cabeçalhos; a proteção completa vale no deploy da Vercel.
 
+## 4c. Cadeia de suprimentos
+
+- `package-lock.json` versionado e instalação com `npm ci`: a Vercel e o GitHub instalam exatamente as versões testadas.
+- CI (`ci.yml`): lint, build e `npm audit` (crítica bloqueia; alta avisa). Dependabot abre PRs semanais (npm e GitHub Actions); nada entra sozinho.
+- `xlsx` 0.20.3 vem do site do fabricante (SheetJS), com hash de integridade no lock. A versão do npm (0.18.5) tinha poluição de protótipo e ReDoS ao abrir planilhas maliciosas.
+
 ## 5. Trilha de auditoria
 
 - `createAuditLog` (`src/lib/dbService.ts`) grava em `audit_logs` **apenas ações sensíveis** (lista `SENSITIVE_AUDIT_ACTIONS`): mudança/exclusão de usuário e papel, limpezas totais (`RESET_*`) e operações de backup (restaurar, exportar, apagar, apagar em lote, limpeza rápida, limpeza de órfãos). É melhor esforço: nunca lança erro nem bloqueia a ação.

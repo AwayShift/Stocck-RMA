@@ -8,7 +8,6 @@ coverage/
 !.env.example
 
 # Locks
-package-lock.json
 bun.lock
 yarn.lock
 
