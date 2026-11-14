@@ -23,7 +23,7 @@ npm run lint           # tsc --noEmit (único "lint"; não há suíte de testes)
 npm run track-changes  # atualiza DAILY_CHANGES.md / daily_changes.json
 ```
 
-Variáveis de ambiente: veja `.env.example` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_CLOUDINARY_*`, `GEMINI_API_KEY`). Nunca commitar `.env`. O PAT do Supabase (`SUPABASE_MANAGEMENT_TOKEN`) existe **apenas como variável de servidor** (usada por `/api/supabase-usage`): nunca usar prefixo `VITE_`, nunca salvar no navegador nem no banco.
+Variáveis de ambiente: ficam no `.env` local (não versionado; não há mais `.env.example`): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_CLOUDINARY_*`, `GEMINI_API_KEY`. Nunca commitar `.env`. O PAT do Supabase (`SUPABASE_MANAGEMENT_TOKEN`) existe **apenas como variável de servidor** (usada por `/api/supabase-usage`): nunca usar prefixo `VITE_`, nunca salvar no navegador nem no banco.
 
 ## Estrutura
 
